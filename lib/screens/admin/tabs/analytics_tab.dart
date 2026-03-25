@@ -1,0 +1,440 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import '../../../services/auth_service.dart';
+import 'package:provider/provider.dart';
+
+class AnalyticsTab extends StatefulWidget {
+  const AnalyticsTab({super.key});
+
+  @override
+  State<AnalyticsTab> createState() => _AnalyticsTabState();
+}
+
+class _AnalyticsTabState extends State<AnalyticsTab> {
+  @override
+  Widget build(BuildContext context) {
+    final firestore = FirebaseFirestore.instance;
+    final today = DateTime.now();
+    final startOfThisMonth = DateTime(today.year, today.month, 1);
+    final startOfLastMonth = DateTime(today.year, today.month - 1, 1);
+    final startOfYear = DateTime(today.year, 1, 1);
+
+    final auth = context.read<AuthService>();
+    final restaurantId = auth.restaurantId;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("Analytics & Reports", style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 24),
+
+          // ── MONTHLY PERFORMANCE ──────────────────────────────────────────
+          _buildSectionHeader("Monthly Performance", Icons.bar_chart, const Color(0xFF800000)),
+          const SizedBox(height: 16),
+          StreamBuilder<QuerySnapshot>(
+            stream: firestore.collection('orders')
+                .where('restaurantId', isEqualTo: restaurantId)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 12)));
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+              double thisMonthRevenue = 0;
+              double lastMonthRevenue = 0;
+              int thisMonthOrders = 0;
+
+              if (snapshot.hasData) {
+                for (var doc in snapshot.data!.docs) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  if (data['status'] == 'cancelled') continue;
+                  if (data['createdAt'] == null) continue;
+                  
+                  final createdAt = (data['createdAt'] as Timestamp).toDate();
+                  // In-memory filter for Last Month onwards
+                  if (createdAt.isBefore(startOfLastMonth)) continue;
+                  
+                  final amount = (data['totalAmount'] ?? 0).toDouble();
+
+                  if (createdAt.isAfter(startOfThisMonth)) {
+                    thisMonthRevenue += amount;
+                    thisMonthOrders++;
+                  } else if (createdAt.isAfter(startOfLastMonth) && createdAt.isBefore(startOfThisMonth)) {
+                    lastMonthRevenue += amount;
+                  }
+                }
+              }
+
+              String monthTrend = "";
+              Color trendColor = Colors.grey;
+              if (lastMonthRevenue > 0) {
+                final growth = ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+                monthTrend = "${growth >= 0 ? '▲' : '▼'} ${growth.abs().toStringAsFixed(1)}% vs last month";
+                trendColor = growth >= 0 ? Colors.green : Colors.red;
+              }
+
+              final width = MediaQuery.of(context).size.width;
+              int crossAxis = width > 600 ? 3 : 2;
+
+              return Column(
+                children: [
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: crossAxis,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: width > 1200 ? 1.8 : (width > 600 ? 1.3 : 1.4),
+                    children: [
+                      _buildStatCard(
+                        "This Month (${DateFormat('MMMM').format(today)})",
+                        "₹${thisMonthRevenue.toStringAsFixed(0)}",
+                        Icons.calendar_month,
+                        const Color(0xFF800000),
+                        subtitle: monthTrend,
+                        subtitleColor: trendColor,
+                      ),
+                      _buildStatCard(
+                        "Last Month (${DateFormat('MMMM').format(startOfLastMonth)})",
+                        "₹${lastMonthRevenue.toStringAsFixed(0)}",
+                        Icons.calendar_today,
+                        Colors.indigo,
+                      ),
+                      _buildStatCard(
+                        "Monthly Orders",
+                        thisMonthOrders.toString(),
+                        Icons.receipt,
+                        Colors.teal,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _buildMonthlyBarChart(firestore, startOfYear, restaurantId),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 40),
+
+          // ── REVENUE ANALYTICS ─────────────────────────────────────────────
+          _buildSectionHeader("Distribution & Trends", Icons.analytics, Colors.blue),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 24,
+            runSpacing: 24,
+            children: [
+              SizedBox(
+                width: MediaQuery.of(context).size.width > 1200 ? (MediaQuery.of(context).size.width - 100) / 2 : double.infinity,
+                child: _buildCategoryPieChart(firestore, restaurantId),
+              ),
+              SizedBox(
+                width: MediaQuery.of(context).size.width > 1200 ? (MediaQuery.of(context).size.width - 100) / 2 : double.infinity,
+                child: _buildWeeklyLineChart(firestore, restaurantId),
+              ),
+            ],
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthlyBarChart(FirebaseFirestore firestore, DateTime startOfYear, String? restaurantId) {
+    final now = DateTime.now();
+    final monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: firestore.collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 10, color: Colors.red)));
+        }
+        
+        final Map<int, double> monthlyRevenue = { for (int i = 0; i < 12; i++) i: 0 };
+
+        if (snapshot.hasData) {
+          for (var doc in snapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            if (data['status'] == 'cancelled') continue;
+            if (data['createdAt'] == null) continue;
+            
+            final createdAt = (data['createdAt'] as Timestamp).toDate();
+            // In-memory filter for this year
+            if (createdAt.year == now.year) {
+              final m = createdAt.month - 1;
+              monthlyRevenue[m] = (monthlyRevenue[m] ?? 0) + (data['totalAmount'] ?? 0).toDouble();
+            }
+          }
+        }
+
+        final maxRevenue = monthlyRevenue.values.fold<double>(0, (a, b) => a > b ? a : b);
+
+        return Container(
+          height: 300,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[100]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.bar_chart, color: Colors.deepPurple, size: 20),
+                  const SizedBox(width: 8),
+                  Text("${now.year} Revenue Column Chart", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: BarChart(
+                        BarChartData(
+                          maxY: maxRevenue > 0 ? maxRevenue * 1.2 : 100,
+                          barGroups: List.generate(12, (i) {
+                            final isCurrent = i == now.month - 1;
+                            final isPast = i < now.month - 1;
+                            return BarChartGroupData(
+                              x: i,
+                              barRods: [
+                                BarChartRodData(
+                                  toY: monthlyRevenue[i] ?? 0,
+                                  width: 14,
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                  color: isCurrent ? Colors.deepPurple : (isPast ? Colors.deepPurple.withOpacity(0.4) : Colors.grey[200]),
+                                ),
+                              ],
+                            );
+                          }),
+                          titlesData: FlTitlesData(
+                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 40,
+                                getTitlesWidget: (v, meta) {
+                                  if (v == meta.max) return const SizedBox.shrink();
+                                  if (v >= 1000) return Text('₹${(v / 1000).toStringAsFixed(0)}k', style: const TextStyle(fontSize: 9, color: Colors.grey));
+                                  return Text('₹${v.toStringAsFixed(0)}', style: const TextStyle(fontSize: 9, color: Colors.grey));
+                                },
+                              ),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                getTitlesWidget: (v, meta) {
+                                  final i = v.toInt();
+                                  if (i < 0 || i >= 12) return const SizedBox.shrink();
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Text(monthNames[i], style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxRevenue > 0 ? maxRevenue / 4 : 25),
+                          borderData: FlBorderData(show: false),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCategoryPieChart(FirebaseFirestore firestore, String? restaurantId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: firestore.collection('orders').where('restaurantId', isEqualTo: restaurantId).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return SizedBox(height: MediaQuery.of(context).size.width < 600 ? 280 : 350, child: const Center(child: CircularProgressIndicator()));
+        Map<String, double> catRevenue = {};
+        for (var doc in snapshot.data!.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          if (data['status'] == 'cancelled') continue;
+          final items = data['items'] as List? ?? [];
+          for (var it in items) {
+             final cat = it['category'] ?? 'General';
+             catRevenue[cat] = (catRevenue[cat] ?? 0) + ((it['price'] ?? 0) * (it['quantity'] ?? 1));
+          }
+        }
+        double total = catRevenue.values.fold(0, (sum, v) => sum + v);
+        if (total == 0) return const Center(child: Text("No data available"));
+
+        return Container(
+          height: MediaQuery.of(context).size.width < 600 ? 280 : 350,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[100]!)),
+          child: Column(
+            children: [
+              const Text("Category Distribution (%)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: PieChart(
+                  PieChartData(
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 40,
+                    sections: catRevenue.entries.map((e) {
+                      final percentage = (e.value / total) * 100;
+                      final index = catRevenue.keys.toList().indexOf(e.key);
+                      return PieChartSectionData(
+                        value: e.value, 
+                        title: "${percentage.toStringAsFixed(0)}%", 
+                        radius: 60, 
+                        color: Colors.primaries[index % Colors.primaries.length],
+                        titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                      );
+                    }).toList()
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                children: catRevenue.keys.map((cat) {
+                  final index = catRevenue.keys.toList().indexOf(cat);
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, color: Colors.primaries[index % Colors.primaries.length]),
+                      const SizedBox(width: 4),
+                      Text(cat, style: const TextStyle(fontSize: 10)),
+                    ],
+                  );
+                }).toList(),
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWeeklyLineChart(FirebaseFirestore firestore, String? restaurantId) {
+    final twelveWeeksAgo = DateTime.now().subtract(const Duration(days: 84));
+    return StreamBuilder<QuerySnapshot>(
+      stream: firestore.collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return SizedBox(height: MediaQuery.of(context).size.width < 600 ? 280 : 350, child: const Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 10, color: Colors.red)));
+        }
+        
+        Map<int, double> weeklyRevenue = { for (int i = 0; i < 12; i++) i: 0 };
+        if (snapshot.hasData) {
+          for (var doc in snapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            if (data['status'] == 'cancelled') continue;
+            if (data['createdAt'] == null) continue;
+            
+            final date = (data['createdAt'] as Timestamp).toDate();
+            // In-memory filter for twelve weeks ago
+            if (date.isBefore(twelveWeeksAgo)) continue;
+            
+            final daysDiff = DateTime.now().difference(date).inDays;
+            final weekIndex = 11 - (daysDiff / 7).floor();
+            if (weekIndex >= 0 && weekIndex < 12) {
+              weeklyRevenue[weekIndex] = (weeklyRevenue[weekIndex] ?? 0) + (data['totalAmount'] ?? 0);
+            }
+          }
+        }
+        return Container(
+          height: MediaQuery.of(context).size.width < 600 ? 280 : 350,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[100]!)),
+          child: Column(
+            children: [
+              const Text("Weekly Revenue Trend", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 24),
+              Expanded(
+                child: LineChart(
+                  LineChartData(
+                    gridData: const FlGridData(show: false),
+                    titlesData: const FlTitlesData(
+                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22)),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: weeklyRevenue.entries.map((e) => FlSpot(e.key.toDouble(), e.value)).toList(),
+                        isCurved: true,
+                        color: Colors.blue,
+                        barWidth: 3,
+                        belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.1)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800])),
+        const SizedBox(width: 12),
+        Expanded(child: Divider(color: color.withOpacity(0.2), thickness: 1.5)),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, {String? subtitle, Color? subtitleColor}) {
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 600;
+
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 8 : 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.1)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center, // Center vertically
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: isMobile ? 20 : 24),
+          const SizedBox(height: 4),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(title, style: TextStyle(color: color, fontSize: isMobile ? 9 : 10, fontWeight: FontWeight.bold))),
+          const SizedBox(height: 2),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: TextStyle(fontSize: isMobile ? 16 : 18, fontWeight: FontWeight.bold))),
+          if (subtitle != null) ...[
+            const SizedBox(height: 1),
+            FittedBox(fit: BoxFit.scaleDown, child: Text(subtitle, style: TextStyle(color: subtitleColor ?? Colors.grey, fontSize: isMobile ? 9 : 10))),
+          ]
+        ],
+      ),
+    );
+  }
+}

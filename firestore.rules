@@ -1,0 +1,103 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function getRestaurantId() {
+      return getUserData().get('restaurantId', 'NO_RESTAURANT');
+    }
+
+    // Role helpers
+    function isAdmin() {
+      return getUserData().role == 'admin';
+    }
+    function isCashier() {
+      return getUserData().role == 'cashier';
+    }
+    function isWaiter() {
+      return getUserData().role == 'waiter';
+    }
+
+    // Multi-tenant rule: User must belong to the restaurant owning the data
+    // During transition: Allow if restaurantId is missing (legacy) OR matches
+    function belongsToRestaurant(resourceData) {
+      return resourceData == null || !('restaurantId' in resourceData) || resourceData.restaurantId == getRestaurantId();
+    }
+
+    function isForMyRestaurant(id) {
+       return id.get('restaurantId', 'NO') == getRestaurantId();
+    }
+
+    // User collection: Users can only see/edit their own data, Admins can see/create staff in their restaurant
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || (isAdmin() && resource.data.restaurantId == getRestaurantId()));
+      allow create: if isSignedIn(); 
+      allow update: if isSignedIn() && (request.auth.uid == userId || (isAdmin() && resource.data.restaurantId == getRestaurantId()));
+    }
+
+    // Restaurants collection: Allow creation by any signed-in user, updates only by Admin
+    match /restaurants/{resId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && isAdmin() && resId == getRestaurantId();
+    }
+
+    // Menu: Read access for everyone in the restaurant, Write for Admin
+    match /menu_categories/{catId} {
+      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow write: if isSignedIn() && isAdmin() && request.resource.data.restaurantId == getRestaurantId();
+    }
+    match /menu_items/{itemId} {
+      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow write: if isSignedIn() && isAdmin() && request.resource.data.restaurantId == getRestaurantId();
+    }
+
+    // Tables & Sections
+    match /sections/{secId} {
+      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow write: if isSignedIn() && isAdmin() && request.resource.data.restaurantId == getRestaurantId();
+    }
+    match /tables/{tableId} {
+      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow write: if isSignedIn() && (isAdmin() || isCashier() || isWaiter()) && request.resource.data.restaurantId == getRestaurantId();
+    }
+
+    // Orders & Items
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow create: if isSignedIn() && request.resource.data.restaurantId == getRestaurantId();
+      allow update: if isSignedIn() && belongsToRestaurant(resource.data);
+      
+      match /items/{itemId} {
+        allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+        allow create: if isSignedIn() && request.resource.data.restaurantId == getRestaurantId();
+        allow update: if isSignedIn() && belongsToRestaurant(resource.data);
+      }
+    }
+
+    // KOTs
+    match /kots/{kotId} {
+      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow create: if isSignedIn() && request.resource.data.restaurantId == getRestaurantId();
+      allow update, delete: if isSignedIn() && belongsToRestaurant(resource.data);
+    }
+
+    // Daily Collections & Receipt Counters
+    match /daily_collections/{docId} {
+      allow read: if isSignedIn() && (belongsToRestaurant(resource.data) || docId.startsWith(getRestaurantId() + "_"));
+      allow write: if isSignedIn() && (isAdmin() || isCashier()) && (request.resource.data.restaurantId == getRestaurantId() || docId.startsWith(getRestaurantId() + "_"));
+    }
+    match /receipt_counters/{resId} {
+      allow read, write: if isSignedIn() && resId == getRestaurantId();
+    }
+  }
+}
