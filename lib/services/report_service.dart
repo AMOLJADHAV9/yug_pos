@@ -3,21 +3,49 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 
 class ReportService {
-  // ── Shared thermal page format: 80 mm wide, auto height ──────────────────
-  static const _thermalFormat = PdfPageFormat(
-    226.77, // 80 mm in points (1 pt = 0.352 mm)
-    100 * PdfPageFormat.cm, // 1 meter max height per page (standard for rolls)
-    marginAll: 6,
-  );
+  static Future<pw.ImageProvider> _loadLogo() async {
+    final logoData = await rootBundle.load('lib/assets/img/yug_pos_logo.png');
+    return pw.MemoryImage(logoData.buffer.asUint8List());
+  }
+  // ── Standard thermal widths in PDF points (72 points per inch) ───────────
+  static const double _width58mm = 155.91; // approx 155.91 pts
+  static const double _width75mm = 212.77; // approx 212.77 pts
+
+  // Standard thermal page format: defaults to 58mm but builds dynamically
+  static PdfPageFormat _getThermalFormat(double width) => PdfPageFormat(
+        width,
+        100 * PdfPageFormat.cm, // 1 meter max height per page
+        marginAll: 6,
+      );
+
+  // Dynamic content wrapper: Centering 58mm design on wider paper
+  static pw.Widget _receiptWrapper(double pageWidth, List<pw.Widget> children) {
+    if (pageWidth > 200) { // If printing on 80mm (226pt)
+      final sidePadding = (pageWidth - _width58mm) / 2 - 6; // substracting margin
+      return pw.Padding(
+        padding: pw.EdgeInsets.symmetric(horizontal: sidePadding > 0 ? sidePadding : 0),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: children,
+        ),
+      );
+    }
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: children,
+    );
+  }
 
   // Light dashed separator
   static pw.Widget _dash() => pw.Padding(
         padding: const pw.EdgeInsets.symmetric(vertical: 2),
         child: pw.Text(
-          '- ' * 24,
+          '- ' * 48,
           style: pw.TextStyle(fontSize: 6, letterSpacing: 0),
+          textAlign: pw.TextAlign.center,
         ),
       );
 
@@ -25,74 +53,154 @@ class ReportService {
   static pw.Widget _thickDash() => pw.Padding(
         padding: const pw.EdgeInsets.symmetric(vertical: 2),
         child: pw.Text(
-          '= ' * 24,
-          style: pw.TextStyle(fontSize: 6, letterSpacing: 0),
+          '= ' * 28
+          ,
+          style: pw.TextStyle(fontSize: 7, letterSpacing: 0),
+          textAlign: pw.TextAlign.center,
         ),
       );
 
   // ── DAILY COLLECTION REPORT (A4) ─────────────────────────────────────────
   static Future<void> generateDailyCollectionReport(
-      DateTime date, List<QueryDocumentSnapshot> orders, {String restaurantName = "LDMA POS"}) async {
+      DateTime date, List<QueryDocumentSnapshot> orders, {String restaurantName = "YUG POS"}) async {
     final dateStr = DateFormat('dd MMM yyyy').format(date);
     await generatePeriodReport("Daily Collection Report", "Date: $dateStr", orders, restaurantName: restaurantName);
   }
 
   // ── GENERAL PERIOD REPORT (A4) ───────────────────────────────────────────
   static Future<void> generatePeriodReport(
-      String title, String periodInfo, List<QueryDocumentSnapshot> orders, {String restaurantName = "LDMA POS"}) async {
+      String title, String periodInfo, List<QueryDocumentSnapshot> orders, {String restaurantName = "YUG POS"}) async {
     final pdf = pw.Document();
     final total =
         orders.fold<double>(0, (sum, doc) => sum + (doc['totalAmount'] ?? 0));
 
     final roboto = await PdfGoogleFonts.robotoRegular();
     final robotoBold = await PdfGoogleFonts.robotoBold();
-    final theme = pw.ThemeData.withFont(base: roboto, bold: robotoBold);
+    final robotoItalic = await PdfGoogleFonts.robotoItalic();
+    
+    final theme = pw.ThemeData.withFont(
+      base: roboto,
+      bold: robotoBold,
+      italic: robotoItalic,
+    );
+
+    final logo = await _loadLogo();
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         theme: theme,
+        header: (pw.Context context) => pw.Column(
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(restaurantName.toUpperCase(),
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 22,
+                            color: PdfColors.black)),
+                    pw.Text(title,
+                        style: const pw.TextStyle(
+                            fontSize: 16, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Image(logo, width: 60, height: 60),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.SizedBox(height: 10),
+          ],
+        ),
+        footer: (pw.Context context) => pw.Column(
+          children: [
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text("Generated by YUG POS",
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
+                pw.Text("Page ${context.pageNumber} of ${context.pagesCount}",
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
+              ],
+            ),
+          ],
+        ),
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Header(
-                  level: 0,
-                  child: pw.Text("$restaurantName - $title")),
-              pw.SizedBox(height: 10),
-              pw.Text(periodInfo),
-              pw.Text("Total Orders: ${orders.length}"),
-              pw.Text(
-                  "Total Net Revenue: INR ${total.toStringAsFixed(2)}",
-                  style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 18)),
-              pw.SizedBox(height: 20),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                data: <List<String>>[
-                  <String>['Order ID', 'Date', 'Table', 'Waiter', 'Amount', 'Status'],
-                  ...orders.map((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-                    return [
-                      doc.id.substring(0, 8),
-                      DateFormat('dd-MM-yy').format(createdAt),
-                      data['tableName'].toString(),
-                      data['waiterName'].toString(),
-                      data['totalAmount'].toString(),
-                      data['status'].toString().toUpperCase(),
-                    ];
-                  })
-                ],
-              ),
-            ],
-          );
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(periodInfo, style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text("Total Orders: ${orders.length}", 
+                        style: const pw.TextStyle(fontSize: 12)),
+                  ],
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey100,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text("TOTAL NET REVENUE", 
+                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text("INR ${total.toStringAsFixed(2)}",
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 20)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 30),
+            pw.TableHelper.fromTextArray(
+              context: context,
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.black),
+              rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey200, width: 0.5))),
+              cellHeight: 30,
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerLeft,
+                3: pw.Alignment.centerLeft,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.center,
+              },
+              data: <List<String>>[
+                <String>['Order ID', 'Date', 'Table', 'Waiter', 'Amount', 'Status'],
+                ...orders.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+                  return [
+                    doc.id.substring(0, 8).toUpperCase(),
+                    DateFormat('dd-MM-yy HH:mm').format(createdAt),
+                    data['orderType'] == 'takeaway' ? 'TAKEAWAY' : data['tableName'].toString(),
+                    data['waiterName'].toString(),
+                    "INR ${((data['totalAmount'] ?? 0) as num).toStringAsFixed(2)}",
+                    data['status'].toString().toUpperCase(),
+                  ];
+                })
+              ],
+            ),
+          ];
         },
       ),
     );
 
     await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save());
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: '${title.replaceAll(' ', '_')}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf');
   }
 
   // ── KOT RECEIPT ─────────────────────────────────────────────────────────
@@ -103,139 +211,146 @@ class ReportService {
 
     final roboto = await PdfGoogleFonts.robotoRegular();
     final robotoBold = await PdfGoogleFonts.robotoBold();
-    final theme = pw.ThemeData.withFont(base: roboto, bold: robotoBold);
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: _thermalFormat,
-        margin: const pw.EdgeInsets.all(6),
-        theme: theme,
-        build: (pw.Context context) => [
-          pw.Center(
-            child: pw.Text("KOT",
-                style: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold, fontSize: 22)),
-          ),
-          _thickDash(),
-          pw.Text("TABLE: ${data['tableName']}",
-              style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold, fontSize: 16)),
-          pw.Text("Order #: ${orderId.substring(0, 8)}",
-              style: const pw.TextStyle(fontSize: 8)),
-          _thickDash(),
-          ...items.map((item) {
-            final quantity = (item['quantity'] ?? 0).toInt();
-            return pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(vertical: 3),
-              child: pw.Text("${quantity}x  ${item['name']}",
-                  style: pw.TextStyle(
-                      fontSize: 14, fontWeight: pw.FontWeight.bold)),
-            );
-          }),
-          _thickDash(),
-          pw.Center(
-            child: pw.Text(
-                DateFormat('dd MMM yyyy  hh:mm a').format(DateTime.now()),
-                style: const pw.TextStyle(fontSize: 7)),
-          ),
-          pw.SizedBox(height: 8),
-        ],
-      ),
+    final robotoItalic = await PdfGoogleFonts.robotoItalic();
+    final theme = pw.ThemeData.withFont(
+      base: roboto,
+      bold: robotoBold,
+      italic: robotoItalic,
     );
 
+    final logo = await _loadLogo();
+
     await Printing.layoutPdf(
-      onLayout: (_) async => pdf.save(),
-      format: _thermalFormat,
+      onLayout: (PdfPageFormat format) async {
+        pdf.addPage(
+          pw.Page(
+            pageFormat: _getThermalFormat(format.width),
+            theme: theme,
+            build: (pw.Context context) => _receiptWrapper(format.width, [
+              pw.Center(child: pw.Image(logo, width: 45, height: 45)),
+              pw.SizedBox(height: 5),
+              pw.Center(
+                child: pw.Text("KOT", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+              ),
+              _thickDash(),
+              pw.Center(
+                child: pw.Text(data['tableName'].toString().toUpperCase(),
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18)),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                   pw.Text("Token: ${data['kotNumber']}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                   pw.Text(DateFormat('hh:mm a').format(data['createdAt'] ?? DateTime.now()), style: const pw.TextStyle(fontSize: 8)),
+                ],
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text("Customer: ${data['customerName']}", style: const pw.TextStyle(fontSize: 9)),
+              if (data['customerPhone'] != null && data['customerPhone'].toString().isNotEmpty)
+                pw.Text("Contact: ${data['customerPhone']}", style: const pw.TextStyle(fontSize: 9)),
+              pw.Text("Cashier: ${data['cashierName']}", style: const pw.TextStyle(fontSize: 8)),
+              pw.Text("Waiter: ${data['waiterName']}", style: const pw.TextStyle(fontSize: 8)),
+              _thickDash(),
+              ...items.map((item) {
+                final quantity = (item['quantity'] ?? 0).toInt();
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                  child: pw.Text("${quantity}x  ${item['name']}",
+                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                );
+              }),
+              _dash(),
+              pw.SizedBox(height: 10),
+            ]),
+          ),
+        );
+        return pdf.save();
+      },
     );
   }
 
   // ── ORDER RECEIPT (waiter copy) ──────────────────────────────────────────
   static Future<void> printOrderReceipt(
-      Map<String, dynamic> data, String orderId, {String restaurantName = "LDMA POS"}) async {
+      Map<String, dynamic> data, String orderId, {String restaurantName = "YUG POS"}) async {
     final pdf = pw.Document();
     final items = data['items'] as List;
-    final date =
-        (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(date);
+    final date = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 
     final roboto = await PdfGoogleFonts.robotoRegular();
     final robotoBold = await PdfGoogleFonts.robotoBold();
-    final theme = pw.ThemeData.withFont(base: roboto, bold: robotoBold);
+    final robotoItalic = await PdfGoogleFonts.robotoItalic();
+    final theme = pw.ThemeData.withFont(base: roboto, bold: robotoBold, italic: robotoItalic);
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: _thermalFormat,
-        margin: const pw.EdgeInsets.all(6),
-        theme: theme,
-        build: (pw.Context context) => [
-          pw.Center(
-              child: pw.Text(restaurantName,
-                  style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 14))),
-          pw.Center(
-              child: pw.Text("RESTAURANT RECEIPT",
-                  style: const pw.TextStyle(fontSize: 8))),
-          _thickDash(),
-          pw.Text("Order #: ${orderId.substring(0, 8)}",
-              style: const pw.TextStyle(fontSize: 8)),
-          pw.Text("Table: ${data['tableName']}",
-              style:
-                  pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-          pw.Text("Waiter: ${data['waiterName']}",
-              style: const pw.TextStyle(fontSize: 8)),
-          pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 8)),
-          _dash(),
-          pw.Row(children: [
-            pw.Expanded(
-                child: pw.Text("Item",
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 8))),
-            pw.Text("Amt",
-                style: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold, fontSize: 8)),
-          ]),
-          _dash(),
-          ...items.map((item) => pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Expanded(
-                        child: pw.Text(
-                            "${item['quantity']}x ${item['name']}",
-                            style: const pw.TextStyle(fontSize: 8))),
-                    pw.Text(
-                        "₹${(item['price'] * item['quantity']).toStringAsFixed(2)}",
-                        style: const pw.TextStyle(fontSize: 8)),
-                  ],
-                ),
-              )),
-          _thickDash(),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text("GRAND TOTAL",
-                  style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 11)),
-              pw.Text("₹${data['totalAmount']}",
-                  style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 11)),
-            ],
-          ),
-          _thickDash(),
-          pw.SizedBox(height: 4),
-          pw.Center(
-              child: pw.Text("Thank you for dining with us!",
-                  style: pw.TextStyle(
-                      fontStyle: pw.FontStyle.italic, fontSize: 7))),
-          pw.SizedBox(height: 8),
-        ],
-      ),
-    );
+    final logo = await _loadLogo();
 
     await Printing.layoutPdf(
-      onLayout: (_) async => pdf.save(),
-      format: _thermalFormat,
+      onLayout: (PdfPageFormat format) async {
+        pdf.addPage(
+          pw.Page(
+            pageFormat: _getThermalFormat(format.width),
+            theme: theme,
+            build: (pw.Context context) => _receiptWrapper(format.width, [
+              pw.Center(child: pw.Image(logo, width: 45, height: 45)),
+              pw.SizedBox(height: 4),
+              pw.Center(child: pw.Text(restaurantName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+              pw.Center(child: pw.Text("GSTIN: 27POSYUG1234Z", style: const pw.TextStyle(fontSize: 7))),
+              pw.Center(child: pw.Text("ORDER SLIP", style: const pw.TextStyle(fontSize: 8))),
+              _thickDash(),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Order: ${orderId.substring(0, 8)}", style: const pw.TextStyle(fontSize: 7)),
+                  pw.Text(DateFormat('dd/MM/yy hh:mm a').format(date), style: const pw.TextStyle(fontSize: 7)),
+                ],
+              ),
+              pw.Text(data['orderType'] == 'takeaway' ? "TAKEAWAY" : "TABLE: ${data['tableName']}", 
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+              pw.Text("Customer: ${data['customerName'] ?? 'Walk-in'}", style: const pw.TextStyle(fontSize: 8)),
+              if (data['customerPhone'] != null && data['customerPhone'].toString().isNotEmpty)
+                pw.Text("Contact: ${data['customerPhone']}", style: const pw.TextStyle(fontSize: 8)),
+              pw.Text("Waiter: ${data['waiterName']}", style: const pw.TextStyle(fontSize: 8)),
+              _dash(),
+              pw.Row(children: [
+                pw.Expanded(child: pw.Text("Item", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.SizedBox(width: 30, child: pw.Text("Qty", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                pw.SizedBox(width: 40, child: pw.Text("Amt", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+              ]),
+              _dash(),
+              ...items.map((item) {
+                final qty = item['quantity'] ?? 1;
+                final price = item['price'] ?? 0;
+                return pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Expanded(child: pw.Text("${item['name']}", style: const pw.TextStyle(fontSize: 8))),
+                        pw.SizedBox(width: 30, child: pw.Text("$qty", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                        pw.SizedBox(width: 40, child: pw.Text("₹${(price * qty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                      ],
+                    ),
+                  );
+              }).toList(),
+              _dash(),
+              _amountRow("Subtotal", "₹${(data['totalAmount'] as num).toDouble().toStringAsFixed(2)}"),
+              _amountRow("CGST (2.5%)", "₹${((data['totalAmount'] as num).toDouble() * 0.025).toStringAsFixed(2)}"),
+              _amountRow("SGST (2.5%)", "₹${((data['totalAmount'] as num).toDouble() * 0.025).toStringAsFixed(2)}"),
+              _thickDash(),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                  pw.Text("₹${((data['totalAmount'] as num).toDouble() * 1.05).toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              _thickDash(),
+              pw.SizedBox(height: 10),
+            ]),
+          ),
+        );
+        return pdf.save();
+      },
     );
   }
 
@@ -248,9 +363,9 @@ class ReportService {
     required double sgst,
     required double total,
     required String paymentMode,
-    String hotelName = "LDMA RESTAURANT",
-    String address = "123 Food Street, City",
-    String gstin = "GSTIN: 27AAAAA0000A1Z5",
+    String hotelName = "YUG POS",
+    String address = "Market Road, City",
+    String gstin = "GSTIN: 27POSYUG1234Z",
   }) async {
     final pdf = pw.Document();
     final items = orderData['items'] as List;
@@ -259,138 +374,90 @@ class ReportService {
 
     final roboto = await PdfGoogleFonts.robotoRegular();
     final robotoBold = await PdfGoogleFonts.robotoBold();
-    final theme = pw.ThemeData.withFont(base: roboto, bold: robotoBold);
+    final robotoItalic = await PdfGoogleFonts.robotoItalic();
+    final theme = pw.ThemeData.withFont(base: roboto, bold: robotoBold, italic: robotoItalic);
 
-    final receiptNum =
-        orderData['receiptNumber'] ?? orderId.substring(0, 6);
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: _thermalFormat,
-        margin: const pw.EdgeInsets.all(6),
-        theme: theme,
-        build: (pw.Context context) => [
-          // ── Header ─────────────────────────────────────────
-          pw.Center(
-              child: pw.Text(hotelName,
-                  style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 13))),
-          pw.Center(
-              child: pw.Text(address,
-                  style: const pw.TextStyle(fontSize: 7))),
-          pw.Center(
-              child:
-                  pw.Text(gstin, style: const pw.TextStyle(fontSize: 7))),
-          _thickDash(),
-          pw.Center(
-              child: pw.Text("TAX INVOICE",
-                  style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 9))),
-          _dash(),
-          pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text("Bill #: $receiptNum",
-                    style: const pw.TextStyle(fontSize: 8)),
-                pw.Text("Table: ${orderData['tableName']}",
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 9)),
-              ]),
-          pw.Text("Date: $dateStr",
-              style: const pw.TextStyle(fontSize: 7)),
-          pw.Text("Waiter: ${orderData['waiterName']}",
-              style: const pw.TextStyle(fontSize: 7)),
-          _dash(),
-
-          // ── Column headers ──────────────────────────────────
-          pw.Row(children: [
-            pw.Expanded(
-                child: pw.Text("Item",
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 8))),
-            pw.SizedBox(
-                width: 14,
-                child: pw.Text("Qty",
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 8))),
-            pw.SizedBox(
-                width: 28,
-                child: pw.Text("Rate",
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 8),
-                    textAlign: pw.TextAlign.right)),
-            pw.SizedBox(
-                width: 34,
-                child: pw.Text("Amt",
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 8),
-                    textAlign: pw.TextAlign.right)),
-          ]),
-          _dash(),
-
-          // ── Items ───────────────────────────────────────────
-          ...items.map((item) => pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-                child: pw.Row(children: [
-                  pw.Expanded(
-                      child: pw.Text(item['name'],
-                          style: const pw.TextStyle(fontSize: 8))),
-                  pw.SizedBox(
-                      width: 14,
-                      child: pw.Text("${item['quantity']}",
-                          style: const pw.TextStyle(fontSize: 8))),
-                  pw.SizedBox(
-                      width: 28,
-                      child: pw.Text("${item['price']}",
-                          style: const pw.TextStyle(fontSize: 8),
-                          textAlign: pw.TextAlign.right)),
-                  pw.SizedBox(
-                      width: 34,
-                      child: pw.Text(
-                          "₹${(item['price'] * item['quantity']).toStringAsFixed(2)}",
-                          style: const pw.TextStyle(fontSize: 8),
-                          textAlign: pw.TextAlign.right)),
-                ]),
-              )),
-          _dash(),
-
-          // ── Totals ──────────────────────────────────────────
-          _amountRow("Subtotal", "₹${subtotal.toStringAsFixed(2)}"),
-          _amountRow("CGST (2.5%)", "₹${cgst.toStringAsFixed(2)}"),
-          _amountRow("SGST (2.5%)", "₹${sgst.toStringAsFixed(2)}"),
-          _thickDash(),
-          pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text("GRAND TOTAL",
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 12)),
-                pw.Text("₹${total.toStringAsFixed(2)}",
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 12)),
-              ]),
-          _thickDash(),
-
-          // ── Footer ──────────────────────────────────────────
-          pw.Text("Payment: $paymentMode",
-              style:
-                  pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-          pw.SizedBox(height: 6),
-          pw.Center(
-              child: pw.Text("Thank you! Visit Again",
-                  style: pw.TextStyle(
-                      fontStyle: pw.FontStyle.italic, fontSize: 7))),
-          pw.Center(
-              child: pw.Text("LDMA POS Softwares",
-                  style: const pw.TextStyle(fontSize: 6))),
-          pw.SizedBox(height: 10),
-        ],
-      ),
-    );
+    final receiptNum = orderData['receiptNumber'] ?? orderId.substring(0, 6);
+    final logo = await _loadLogo();
 
     await Printing.layoutPdf(
-      onLayout: (_) async => pdf.save(),
-      format: _thermalFormat,
+      onLayout: (PdfPageFormat format) async {
+        pdf.addPage(
+          pw.Page(
+            pageFormat: _getThermalFormat(format.width),
+            theme: theme,
+            build: (pw.Context context) => _receiptWrapper(format.width, [
+              // ── Header ─────────────────────────────────────────
+              pw.Center(child: pw.Image(logo, width: 45, height: 45)),
+              pw.SizedBox(height: 4),
+              pw.Center(child: pw.Text(hotelName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+              pw.Center(child: pw.Text(address, style: const pw.TextStyle(fontSize: 7))),
+              pw.Center(child: pw.Text(gstin, style: const pw.TextStyle(fontSize: 7))),
+              _thickDash(),
+              pw.Center(child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+              _dash(),
+              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                pw.Text("Bill #: $receiptNum", style: const pw.TextStyle(fontSize: 8)),
+                pw.Text(orderData['orderType'] == 'takeaway' ? "Type: TAKEAWAY" : "Table: ${orderData['tableName']}", 
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              ]),
+              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 7)),
+                pw.Text("Token: ${orderData['kotNumber'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+              ]),
+              pw.Text("Customer: ${orderData['customerName'] ?? 'Walk-in'}", style: const pw.TextStyle(fontSize: 7)),
+              if (orderData['customerPhone'] != null && orderData['customerPhone'].toString().isNotEmpty)
+                pw.Text("Contact: ${orderData['customerPhone']}", style: const pw.TextStyle(fontSize: 7)),
+              if (orderData['orderType'] == 'takeaway' && orderData['deliveryAddress'] != null)
+                pw.Text("Address: ${orderData['deliveryAddress']}", style: const pw.TextStyle(fontSize: 7)),
+              pw.Text("Cashier: ${orderData['cashierName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 7)),
+              pw.Text("Waiter: ${orderData['waiterName'] ?? 'Waiter'}", style: const pw.TextStyle(fontSize: 7)),
+              _dash(),
+
+              // ── Column headers ──────────────────────────────────
+              pw.Row(children: [
+                pw.Expanded(child: pw.Text("Item", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.SizedBox(width: 20, child: pw.Text("Qty", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                pw.SizedBox(width: 35, child: pw.Text("Rate", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                pw.SizedBox(width: 40, child: pw.Text("Amt", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+              ]),
+              _dash(),
+
+              // ── Items ───────────────────────────────────────────
+              ...items.map((item) => pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+                    child: pw.Row(children: [
+                      pw.Expanded(child: pw.Text(item['name'].toString().toUpperCase(), style: const pw.TextStyle(fontSize: 8))),
+                      pw.SizedBox(width: 20, child: pw.Text("${item['quantity']}", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                      pw.SizedBox(width: 35, child: pw.Text("${item['price']}", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                      pw.SizedBox(width: 40, child: pw.Text("₹${(item['price'] * item['quantity']).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                    ]),
+                  )),
+              _dash(),
+
+              // ── Totals ──────────────────────────────────────────
+              _amountRow("Subtotal", "₹${subtotal.toStringAsFixed(2)}"),
+              _amountRow("CGST (2.5%)", "₹${cgst.toStringAsFixed(2)}"),
+              _amountRow("SGST (2.5%)", "₹${sgst.toStringAsFixed(2)}"),
+              _thickDash(),
+              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                pw.Text("GRAND TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                pw.Text("₹${total.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+              ]),
+              _thickDash(),
+
+              // ── Footer ──────────────────────────────────────────
+              pw.Text("Payment: $paymentMode", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+              pw.SizedBox(height: 6),
+              pw.Center(child: pw.Text("Thank you! Visit Again", style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 8))),
+              pw.SizedBox(height: 5),
+              pw.Center(child: pw.Text("YUG POS", style: const pw.TextStyle(fontSize: 6))),
+              pw.SizedBox(height: 15),
+            ]),
+          ),
+        );
+        return pdf.save();
+      },
     );
   }
 

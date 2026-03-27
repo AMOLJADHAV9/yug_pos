@@ -9,6 +9,8 @@ import '../../models/menu_item.dart';
 import '../../providers/cart_provider.dart';
 import '../../utils/debouncer.dart';
 import '../../widgets/order_dialog.dart';
+import '../order/takeaway_list_screen.dart';
+import '../order/online_orders_screen.dart'; // New import
 
 class CashierDashboard extends StatefulWidget {
   const CashierDashboard({super.key});
@@ -28,11 +30,11 @@ class _CashierDashboardState extends State<CashierDashboard> {
   Widget build(BuildContext context) {
     final auth = context.read<AuthService>();
     final restaurantId = auth.restaurantId;
-    final restaurantName = auth.restaurantName ?? "LDMA POS";
+    final restaurantName = auth.restaurantName ?? "YUG POS";
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -68,6 +70,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
               IconButton(icon: const Icon(Icons.receipt_long), onPressed: () => _showOrderOversightDialog(), tooltip: "Recent Bills / Reprint"),
               IconButton(icon: const Icon(Icons.history), onPressed: () => _showSessionHistory(), tooltip: "Session History"),
               IconButton(icon: const Icon(Icons.settings), onPressed: () => _showManagementMenu(), tooltip: "Menu/Table Setup"),
+              IconButton(icon: const Icon(Icons.cloud_download, color: Colors.blueAccent), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OnlineOrdersScreen())), tooltip: "Online Orders (Z/S)"), // New action button
               IconButton(icon: const Icon(Icons.refresh), onPressed: () => setState(() {}), tooltip: "Refresh Data"),
               const SizedBox(width: 8),
               IconButton(icon: const Icon(Icons.logout), onPressed: () => context.read<AuthService>().logout(), tooltip: "Logout"),
@@ -78,14 +81,14 @@ class _CashierDashboardState extends State<CashierDashboard> {
         child: Column(
           children: [
             DrawerHeader(
-              decoration: BoxDecoration(color: const Color(0xFF800000)),
+              decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.1)),
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.point_of_sale, size: 48, color: Colors.white),
+                    const Icon(Icons.point_of_sale, size: 48, color: Color(0xFFE7FF12)),
                     const SizedBox(height: 10),
-                    Text(restaurantName.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                    Text("YUG POS", style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 18)),
                     const Text("CASHIER PANEL", style: TextStyle(color: Colors.white70, fontSize: 12)),
                   ],
                 ),
@@ -115,6 +118,22 @@ class _CashierDashboardState extends State<CashierDashboard> {
                 _showManagementMenu();
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.shopping_bag, color: Color(0xFFE7FF12)),
+              title: const Text('Takeaway'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const TakeawayListScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_download, color: Colors.blueAccent),
+              title: const Text('Online Orders (Z/S)'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const OnlineOrdersScreen()));
+              },
+            ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
@@ -131,11 +150,24 @@ class _CashierDashboardState extends State<CashierDashboard> {
           // Sub-header stats bar (shown in all layouts)
           final statsBar = Container(
             width: double.infinity,
-            color: Colors.white,
+            color: const Color(0xFF1A1A1A),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: _buildCollectionCounter(),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      _buildCollectionCounter(),
+                      const SizedBox(width: 8),
+                      _buildOnlineOrderBadge(), // New Badge
+                    ],
+                  ),
+                  // This stat chip seems out of place here, removing it based on typical UI patterns
+                  // _buildStatChip("Online Order Oversight", Colors.white70),
+                ],
+              ),
             ),
           );
 
@@ -156,8 +188,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
                 Container(
                   width: 400,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border(left: BorderSide(color: Colors.grey[200]!)),
+                    color: const Color(0xFF1E1E1E),
+                    border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
                   ),
                   child: _buildLiveKotFeed(restaurantId),
                 ),
@@ -172,11 +204,11 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   statsBar,
                   _buildMidnightResetBanner(restaurantId),
                   Container(
-                    color: Colors.white,
-                    child: TabBar(
-                      labelColor: const Color(0xFF800000),
+                    color: const Color(0xFF1A1A1A),
+                    child: const TabBar(
+                      labelColor: Color(0xFFE7FF12),
                       unselectedLabelColor: Colors.grey,
-                      indicatorColor: const Color(0xFF800000),
+                      indicatorColor: Color(0xFFE7FF12),
                       tabs: const [
                         Tab(icon: Icon(Icons.table_bar), text: "Tables"),
                         Tab(icon: Icon(Icons.kitchen), text: "KOT Feed"),
@@ -213,6 +245,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
         double gross = 0;
         double refunds = 0;
         int bills = 0;
+        double takeaway = 0;
+        int tkCount = 0;
 
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
@@ -220,18 +254,54 @@ class _CashierDashboardState extends State<CashierDashboard> {
           gross = (data['grossCollection'] ?? 0).toDouble();
           refunds = (data['refundTotal'] ?? 0).toDouble();
           bills = data['billCount'] ?? 0;
+          takeaway = (data['takeawayCollection'] ?? 0).toDouble();
+          tkCount = data['takeawayCount'] ?? 0;
         }
 
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildStatChip("Net: ₹${net.toStringAsFixed(0)}", Colors.green),
-              _buildStatChip("Gross: ₹${gross.toStringAsFixed(0)}", Colors.blue),
-              _buildStatChip("Refunds: ₹${refunds.toStringAsFixed(0)}", Colors.red),
-              _buildStatChip("Bills: $bills", Colors.orange),
-            ],
+        return Row( // Changed from SingleChildScrollView to Row as it's now part of a larger Row
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildStatChip("Net: ₹${net.toStringAsFixed(0)}", Colors.green),
+            _buildStatChip("Tk: ₹${takeaway.toStringAsFixed(0)}", Colors.purple),
+            _buildStatChip("Gross: ₹${gross.toStringAsFixed(0)}", Colors.blue),
+            _buildStatChip("Bills: $bills ($tkCount Tk)", Colors.orange),
+            if (refunds > 0) _buildStatChip("Refunds: ₹${refunds.toStringAsFixed(0)}", Colors.red),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildOnlineOrderBadge() {
+    final auth = context.read<AuthService>();
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('orders')
+          .where('restaurantId', isEqualTo: auth.restaurantId)
+          .where('orderSource', isEqualTo: 'urbanpiper')
+          .where('status', isEqualTo: 'pending')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs.length ?? 0;
+        if (count == 0) return const SizedBox();
+        return GestureDetector(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OnlineOrdersScreen())),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(color: Colors.red.withOpacity(0.5), blurRadius: 4, spreadRadius: 1)
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_download, color: Colors.white, size: 14),
+                const SizedBox(width: 4),
+                Text("$count New Online", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+              ],
+            ),
           ),
         );
       },
@@ -299,9 +369,9 @@ class _CashierDashboardState extends State<CashierDashboard> {
 
     return Container(
       decoration: BoxDecoration(
-        color: isOccupied ? Colors.orange[50] : Colors.green[50]?.withOpacity(0.5),
+        color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: isOccupied ? Colors.orange[200]! : Colors.green[200]!, width: 0.8),
+        border: Border.all(color: isOccupied ? const Color(0xFFE7FF12) : Colors.white10, width: 0.8),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2)),
         ],
@@ -352,7 +422,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                        }
                     }),
                   
-                  _buildUltraCompactButton(isOccupied ? "KOT" : "ORDER", isOccupied ? Icons.restaurant_menu : Icons.add_shopping_cart, isOccupied ? Colors.orange : const Color(0xFF800000), () {
+                  _buildUltraCompactButton(isOccupied ? "KOT" : "ORDER", isOccupied ? Icons.restaurant_menu : Icons.add_shopping_cart, isOccupied ? const Color(0xFFE7FF12) : const Color(0xFFE7FF12), () {
                     if (isOccupied && table.currentOrderId != null) {
                       _showOrderDetailPanel(table);
                     } else {
@@ -434,7 +504,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
               // Filter and Sort in memory to avoid needing a complex composite index
               final kots = snapshot.data!.docs.where((doc) {
                 final status = (doc.data() as Map<String, dynamic>)['status'] ?? 'Pending';
-                return status != 'Served';
+                return status != 'Served' && status != 'Done'; // Hide Completed items
               }).toList();
 
               // Sort by createdAt descending
@@ -517,6 +587,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                         String nextStatus = status;
                         if (status == 'Pending') nextStatus = 'Preparing';
                         else if (status == 'Preparing') nextStatus = 'Done';
+                        else if (status == 'Done') nextStatus = 'Served';
                         
                         if (nextStatus != status) {
                           FirebaseFirestore.instance.collection('kots').doc(id).update({'status': nextStatus});
@@ -758,18 +829,42 @@ class _CashierDashboardState extends State<CashierDashboard> {
           child: StreamBuilder<QuerySnapshot>(
             stream: _firestore.collection('orders')
                 .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
-                .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day)))
-                .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-              if (snapshot.data!.docs.isEmpty) return const Center(child: Text("No orders found today"));
+              
+              final todayDate = DateTime.now();
+              bool isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+              
+              final orders = snapshot.data!.docs.where((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final billedAt = data['billedAt'] as Timestamp?;
+                final createdAt = data['createdAt'] as Timestamp?;
+                if (billedAt == null && createdAt == null) return false;
+                
+                final relevantDate = (billedAt ?? createdAt!).toDate();
+                return isSameDay(relevantDate, todayDate);
+              }).toList();
+
+              // Sort in memory by billedAt desc (preferred) or createdAt desc
+              orders.sort((a, b) {
+                final aData = a.data() as Map<String, dynamic>;
+                final bData = b.data() as Map<String, dynamic>;
+                final aTime = aData['billedAt'] as Timestamp? ?? aData['createdAt'] as Timestamp?;
+                final bTime = bData['billedAt'] as Timestamp? ?? bData['createdAt'] as Timestamp?;
+                if (aTime == null && bTime == null) return 0;
+                if (aTime == null) return 1;
+                if (bTime == null) return -1;
+                return bTime.compareTo(aTime);
+              });
+
+              if (orders.isEmpty) return const Center(child: Text("No orders found today"));
 
               return ListView.separated(
-                itemCount: snapshot.data!.docs.length,
+                itemCount: orders.length,
                 separatorBuilder: (_, __) => const Divider(),
                 itemBuilder: (context, index) {
-                  final doc = snapshot.data!.docs[index];
+                  final doc = orders[index];
                   final data = doc.data() as Map<String, dynamic>;
                   final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
                   final status = data['status'] ?? 'unknown';
@@ -1137,9 +1232,38 @@ class _CashierDashboardState extends State<CashierDashboard> {
               });
 
               if (table.currentOrderId != null) {
-                final kotsSnap = await _firestore.collection('kots').where('orderId', isEqualTo: table.currentOrderId).get();
-                for (var doc in kotsSnap.docs) {
-                  batch.update(doc.reference, {'status': 'Served'});
+                final orderSnap = await _firestore.collection('orders').doc(table.currentOrderId).get();
+                if (orderSnap.exists) {
+                  final data = orderSnap.data() as Map<String, dynamic>;
+                  final total = (data['totalAmount'] ?? 0.0).toDouble();
+                  final subtotal = (data['subtotal'] ?? total).toDouble();
+                  final auth = context.read<AuthService>();
+                  final restaurantId = auth.restaurantId;
+                  final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                  final collectionId = "${restaurantId}_$today";
+                  final collectionRef = _firestore.collection('daily_collections').doc(collectionId);
+
+                  // Update order status to billed (as it was cleared)
+                  batch.update(orderSnap.reference, {
+                    'status': 'billed',
+                    'billedAt': FieldValue.serverTimestamp(),
+                  });
+
+                  // Update revenue
+                  batch.set(collectionRef, {
+                    'netCollection': FieldValue.increment(total),
+                    'grossCollection': FieldValue.increment(subtotal),
+                    'tableCollection': FieldValue.increment(total),
+                    'billCount': FieldValue.increment(1),
+                    'tableCount': FieldValue.increment(1),
+                    'restaurantId': restaurantId,
+                    'lastUpdatedAt': FieldValue.serverTimestamp(),
+                  }, SetOptions(merge: true));
+
+                  final kotsSnap = await _firestore.collection('kots').where('orderId', isEqualTo: table.currentOrderId).get();
+                  for (var doc in kotsSnap.docs) {
+                    batch.update(doc.reference, {'status': 'Served'});
+                  }
                 }
               }
 
@@ -1275,7 +1399,9 @@ class _CashierDashboardState extends State<CashierDashboard> {
         transaction.set(collectionRef, {
           'netCollection': FieldValue.increment(total),
           'grossCollection': FieldValue.increment(subtotal),
+          'tableCollection': FieldValue.increment(total), // Table specifically
           'billCount': FieldValue.increment(1),
+          'tableCount': FieldValue.increment(1),
           'restaurantId': restaurantId,
           'lastUpdatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
@@ -1354,10 +1480,13 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   child: StreamBuilder<QuerySnapshot>(
                     stream: _firestore.collection('menu_items')
                         .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
-                        .where('isAvailable', isEqualTo: true).snapshots(),
+                        .snapshots(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                      final allItems = snapshot.data!.docs;
+                      
+                      final allItems = snapshot.data!.docs.where((doc) {
+                        return (doc.data() as Map<String, dynamic>)['isAvailable'] == true;
+                      }).toList();
 
                       // Filter by search
                       final items = searchQuery.isEmpty
@@ -1467,30 +1596,30 @@ class _CashierDashboardState extends State<CashierDashboard> {
   }
 
   Widget _buildUltraMiniStatus(TableStatus status) {
-    Color color = Colors.green;
-    String text = "LIV";
-    IconData icon = Icons.check_circle;
+    Color color = Colors.red;
+    String text = "EMP"; // Changed from LIV for red status
+    IconData icon = Icons.cancel_outlined;
 
     switch (status) {
       case TableStatus.available:
-        color = Colors.green;
-        text = "LIV";
-        icon = Icons.check_circle;
+        color = Colors.red;
+        text = "EMP";
+        icon = Icons.cancel_outlined;
         break;
       case TableStatus.occupied:
-        color = Colors.orange;
+        color = Colors.green;
         text = "OCC";
-        icon = Icons.restaurant;
+        icon = Icons.people;
         break;
       case TableStatus.kotSent:
-        color = Colors.blue;
-        text = "KOT";
-        icon = Icons.kitchen;
+        color = Colors.green;
+        text = "ONG";
+        icon = Icons.restaurant;
         break;
       case TableStatus.billRequested:
-        color = Colors.red;
+        color = Colors.green;
         text = "BIL";
-        icon = Icons.receipt_long;
+        icon = Icons.receipt;
         break;
     }
 

@@ -11,6 +11,8 @@ import 'tabs/menu_tab.dart';
 import 'tabs/tables_tab.dart';
 import 'tabs/orders_tab.dart';
 import 'tabs/analytics_tab.dart';
+import 'tabs/takeaway_tab.dart';
+import '../order/online_orders_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -37,7 +39,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
         final startOfDay = DateTime(today.year, today.month, today.day);
         _todayOrdersStream = FirebaseFirestore.instance.collection('orders')
             .where('restaurantId', isEqualTo: _currentRestaurantId)
-            .where('createdAt', isGreaterThanOrEqualTo: startOfDay)
             .snapshots();
       } else {
         _todayOrdersStream = null;
@@ -59,41 +60,55 @@ class _AdminDashboardState extends State<AdminDashboard> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text("Download Monthly Report"),
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+          title: const Text("Download Monthly Report", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("Select the month and year for the report:"),
+              const Text("Select the month and year for the report:", style: TextStyle(color: Colors.white70)),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  DropdownButton<int>(
-                    value: selectedYear,
-                    items: List.generate(5, (i) => DateTime.now().year - i)
-                        .map((y) => DropdownMenuItem(value: y, child: Text(y.toString())))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => selectedYear = v!),
-                  ),
-                  DropdownButton<int>(
-                    value: selectedMonth,
-                    items: List.generate(12, (i) => i + 1)
-                        .map((m) => DropdownMenuItem(value: m, child: Text(DateFormat('MMMM').format(DateTime(2022, m)))))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => selectedMonth = v!),
-                  ),
-                ],
+              Theme(
+                data: Theme.of(context).copyWith(canvasColor: const Color(0xFF1E1E1E)),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    DropdownButton<int>(
+                      dropdownColor: const Color(0xFF1E1E1E),
+                      style: const TextStyle(color: Color(0xFFE7FF12)),
+                      value: selectedYear,
+                      items: List.generate(5, (i) => DateTime.now().year - i)
+                          .map((y) => DropdownMenuItem(value: y, child: Text(y.toString())))
+                          .toList(),
+                      onChanged: (v) => setDialogState(() => selectedYear = v!),
+                    ),
+                    DropdownButton<int>(
+                      dropdownColor: const Color(0xFF1E1E1E),
+                      style: const TextStyle(color: Color(0xFFE7FF12)),
+                      value: selectedMonth,
+                      items: List.generate(12, (i) => i + 1)
+                          .map((m) => DropdownMenuItem(value: m, child: Text(DateFormat('MMMM').format(DateTime(2022, m)))))
+                          .toList(),
+                      onChanged: (v) => setDialogState(() => selectedMonth = v!),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE7FF12),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
               onPressed: () {
                 Navigator.pop(context);
                 _generateMonthlyReport(selectedYear, selectedMonth);
               },
-              child: const Text("Download PDF"),
+              child: const Text("Download PDF", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -116,38 +131,45 @@ class _AdminDashboardState extends State<AdminDashboard> {
       final restaurantId = context.read<AuthService>().restaurantId;
       final snapshot = await FirebaseFirestore.instance.collection('orders')
           .where('restaurantId', isEqualTo: restaurantId)
-          .where('createdAt', isGreaterThanOrEqualTo: startOfMonth)
-          .where('createdAt', isLessThanOrEqualTo: endOfMonth)
           .get();
       
       final orders = snapshot.docs.where((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        return data['status'] != 'cancelled';
+        // We want to show everything in the report, but usually only billed/active.
+        // For a revenue report, we strictly want billed. 
+        if (data['status'] == 'cancelled') return false;
+        if (data['createdAt'] == null) return false;
+        
+        final createdAt = (data['createdAt'] as Timestamp).toDate();
+        return createdAt.isAfter(startOfMonth.subtract(const Duration(seconds: 1))) && 
+               createdAt.isBefore(endOfMonth.add(const Duration(seconds: 1)));
       }).toList();
       
       if (mounted) Navigator.pop(context);
       
       if (orders.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No records found for $monthName")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No records available for $monthName")));
         return;
       }
 
-      await ReportService.generatePeriodReport("Monthly Revenue Report", "Period: $monthName", orders);
+      await ReportService.generatePeriodReport("Monthly Revenue Report", "Period: $monthName", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
     } catch (e) {
       if (mounted) {
         if (Navigator.canPop(context)) Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error fetching records: $e")));
       }
     }
   }
 
-  final List<Widget> _tabs = [
+  final List<Widget> _tabs = const [
     RevenueTab(),
     AnalyticsTab(),
     UsersTab(),
     MenuTab(),
     TablesTab(),
     OrdersTab(),
+    TakeawayTab(),
+    OnlineOrdersScreen(isTab: true),
   ];
 
   static const _navData = [
@@ -157,7 +179,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
     {'icon': Icons.restaurant_menu, 'label': 'Menu'},
     {'icon': Icons.table_bar, 'label': 'Tables'},
     {'icon': Icons.receipt_long, 'label': 'Orders'},
+    {'icon': Icons.shopping_bag, 'label': 'Takeaway'},
+    {'icon': Icons.cloud_download, 'label': 'Online'},
   ];
+
+  // Specific indices for the Bottom Navbar
+  static const List<int> _bottomBarIndices = [0, 2, 3, 5];
 
   @override
   Widget build(BuildContext context) {
@@ -171,22 +198,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
           return Scaffold(
             appBar: AppBar(
               title: Text(_navData[_selectedIndex]['label'] as String, style: const TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.white,
+              backgroundColor: Colors.black,
               elevation: 0,
-              iconTheme: IconThemeData(color: theme.primaryColor),
+              iconTheme: IconThemeData(color: theme.colorScheme.primary),
+              actions: [
+                const SizedBox(width: 8),
+              ],
             ),
             drawer: Drawer(
               child: Column(
                 children: [
                    DrawerHeader(
-                    decoration: BoxDecoration(color: theme.primaryColor.withOpacity(0.1)),
+                    decoration: const BoxDecoration(color: Colors.black),
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.restaurant, size: 48, color: theme.primaryColor),
+                          Icon(Icons.restaurant, size: 48, color: const Color(0xFFE7FF12)),
                           const SizedBox(height: 10),
-                          Text("LDMA POS", style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.bold, fontSize: 18)),
+                          const Text("YUG POS", style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 18)),
                         ],
                       ),
                     ),
@@ -198,8 +228,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           final item = _navData[index];
                           final isSelected = _selectedIndex == index;
                           return ListTile(
-                            leading: Icon(item['icon'] as IconData, color: isSelected ? theme.primaryColor : Colors.grey),
-                            title: Text(item['label'] as String, style: TextStyle(color: isSelected ? theme.primaryColor : Colors.black, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                            leading: Icon(item['icon'] as IconData, color: isSelected ? const Color(0xFFE7FF12) : Colors.grey),
+                            title: Text(item['label'] as String, style: TextStyle(color: isSelected ? const Color(0xFFE7FF12) : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
                             selected: isSelected,
                             onTap: () {
                               setState(() => _selectedIndex = index);
@@ -207,27 +237,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             },
                           );
                         }),
-                        const Divider(),
+                        const Divider(color: Colors.white10),
                         const Padding(
                           padding: EdgeInsets.only(left: 16, top: 8, bottom: 4),
                           child: Text("REPORTS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
                         ),
-                        StreamBuilder<QuerySnapshot>(
-                          stream: _todayOrdersStream,
-                          builder: (context, snapshot) {
-                            return ListTile(
-                              leading: const Icon(Icons.picture_as_pdf, color: Colors.blue),
-                              title: const Text("Daily PDF Report"),
-                              onTap: snapshot.hasData ? () {
-                                Navigator.pop(context);
-                                _debouncer.run(() => ReportService.generateDailyCollectionReport(DateTime.now(), snapshot.data!.docs));
-                              } : null,
-                            );
-                          }
-                        ),
                         ListTile(
-                          leading: const Icon(Icons.summarize, color: Colors.orange),
-                          title: const Text("Monthly Report"),
+                          leading: const Icon(Icons.summarize, color: Color(0xFFE7FF12)),
+                          title: const Text("Monthly Report", style: TextStyle(color: Colors.white70)),
                           onTap: () {
                             Navigator.pop(context);
                             _showMonthSelectionDialog();
@@ -248,14 +265,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
             body: IndexedStack(index: _selectedIndex, children: _tabs),
             bottomNavigationBar: BottomNavigationBar(
-              currentIndex: _selectedIndex,
-              onTap: (idx) => setState(() => _selectedIndex = idx),
+              currentIndex: _bottomBarIndices.contains(_selectedIndex) 
+                ? _bottomBarIndices.indexOf(_selectedIndex) 
+                : 0,
+              onTap: (idx) => setState(() => _selectedIndex = _bottomBarIndices[idx]),
               type: BottomNavigationBarType.fixed,
-              selectedItemColor: theme.primaryColor,
+              selectedItemColor: theme.colorScheme.primary,
               unselectedItemColor: Colors.grey,
-              items: _navData.map((d) => BottomNavigationBarItem(
-                icon: Icon(d['icon'] as IconData), 
-                label: d['label'] as String
+              backgroundColor: Colors.black,
+              items: _bottomBarIndices.map((i) => BottomNavigationBarItem(
+                icon: Icon(_navData[i]['icon'] as IconData), 
+                label: _navData[i]['label'] as String
               )).toList(),
             ),
           );
@@ -270,10 +290,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 curve: Curves.easeInOut,
                 width: _isExtended ? 240 : 80,
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(2, 0))
-                  ],
+                  color: const Color(0xFF121212),
+                  border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
                 ),
                 child: Column(
                   children: [
@@ -286,8 +304,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         children: [
                           if (_isExtended)
                             const Expanded(
-                              child: Text("LDMA POS", 
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF800000)),
+                              child: Text("YUG POS", 
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFE7FF12)),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -318,20 +336,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   duration: const Duration(milliseconds: 200),
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: isSelected ? theme.primaryColor.withOpacity(0.1) : Colors.transparent,
+                                    color: isSelected ? theme.colorScheme.primary.withOpacity(0.1) : Colors.transparent,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Row(
                                     mainAxisAlignment: _isExtended ? MainAxisAlignment.start : MainAxisAlignment.center,
                                     children: [
-                                      Icon(item['icon'] as IconData, color: isSelected ? theme.primaryColor : Colors.grey[600], size: 24),
+                                      Icon(item['icon'] as IconData, color: isSelected ? theme.colorScheme.primary : Colors.grey[600], size: 24),
                                       if (_isExtended) ...[
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Text(
                                             item['label'] as String,
                                             style: TextStyle(
-                                              color: isSelected ? theme.primaryColor : Colors.grey[700],
+                                              color: isSelected ? theme.colorScheme.primary : Colors.grey[400],
                                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                             ),
                                             overflow: TextOverflow.ellipsis,
@@ -353,39 +371,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           else
                             const SizedBox(height: 16),
                           
-                          // Daily Report Button
-                          StreamBuilder<QuerySnapshot>(
-                            stream: _todayOrdersStream,
-                            builder: (context, snapshot) {
-                              final hasData = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                child: InkWell(
-                                  onTap: hasData ? () => _debouncer.run(() => ReportService.generateDailyCollectionReport(DateTime.now(), snapshot.data!.docs)) : null,
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                    child: Row(
-                                      mainAxisAlignment: _isExtended ? MainAxisAlignment.start : MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.picture_as_pdf, color: hasData ? Colors.blue : Colors.grey[400], size: 24),
-                                        if (_isExtended) ...[
-                                          const SizedBox(width: 12),
-                                          const Expanded(
-                                            child: Text("Daily PDF", 
-                                              style: TextStyle(color: Colors.black87, fontSize: 13),
-                                              overflow: TextOverflow.ellipsis),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }
-                          ),
-
                           // Monthly Report Button
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -398,12 +383,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 child: Row(
                                   mainAxisAlignment: _isExtended ? MainAxisAlignment.start : MainAxisAlignment.center,
                                   children: [
-                                    const Icon(Icons.summarize, color: Colors.orange, size: 24),
+                                    const Icon(Icons.summarize, color: Color(0xFFE7FF12), size: 24),
                                     if (_isExtended) ...[
                                       const SizedBox(width: 12),
                                       const Expanded(
                                         child: Text("Monthly Report", 
-                                          style: TextStyle(color: Colors.black87, fontSize: 13),
+                                          style: TextStyle(color: Colors.white70, fontSize: 13),
                                           overflow: TextOverflow.ellipsis),
                                       ),
                                     ],
@@ -446,7 +431,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
               Expanded(
                 child: Container(
-                  color: Colors.grey[50],
+                  color: Colors.black,
                   child: IndexedStack(index: _selectedIndex, children: _tabs),
                 ),
               ),

@@ -23,9 +23,9 @@ class _TablesTabState extends State<TablesTab> {
       child: Column(
         children: [
           TabBar(
-            labelColor: const Color(0xFF800000),
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: const Color(0xFF800000),
+            labelColor: const Color(0xFFE7FF12),
+            unselectedLabelColor: Colors.white54,
+            indicatorColor: const Color(0xFFE7FF12),
             tabs: const [
               Tab(text: "Sections", icon: Icon(Icons.layers, size: 20)),
               Tab(text: "Tables", icon: Icon(Icons.table_bar, size: 20)),
@@ -61,12 +61,13 @@ class _TablesTabState extends State<TablesTab> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                   const Text("Room Sections", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                   const Text("Room Sections", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                    ElevatedButton.icon(
                      onPressed: () => _showSectionDialog(restaurantId: restaurantId),
-                     icon: const Icon(Icons.add, size: 16),
-                     label: const Text("New Section", style: TextStyle(fontSize: 12)),
+                     icon: const Icon(Icons.add, size: 16, color: Colors.black),
+                     label: const Text("New Section", style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE7FF12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                      ),
                    ),
@@ -83,10 +84,11 @@ class _TablesTabState extends State<TablesTab> {
                   return Card(
                     elevation: 0,
                     margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.grey[100]!)),
+                    color: const Color(0xFF1E1E1E),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.white.withOpacity(0.05))),
                     child: ListTile(
                       dense: true,
-                      title: Text(data['name'] ?? 'Unnamed', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(data['name'] ?? 'Unnamed', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                         onPressed: () => _deleteSection(id),
@@ -119,12 +121,13 @@ class _TablesTabState extends State<TablesTab> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                   const Text("Table Layout", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                   const Text("Table Layout", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                    ElevatedButton.icon(
                      onPressed: () => _showTableDialog(restaurantId: restaurantId),
-                     icon: const Icon(Icons.add, size: 16),
-                     label: const Text("Create Table", style: TextStyle(fontSize: 12)),
+                     icon: const Icon(Icons.add, size: 16, color: Colors.black),
+                     label: const Text("Create Table", style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE7FF12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                      ),
                    ),
@@ -154,12 +157,9 @@ class _TablesTabState extends State<TablesTab> {
                       
                       return Container(
                         decoration: BoxDecoration(
-                          color: isOccupied ? Colors.orange[50] : Colors.green[50]?.withOpacity(0.5),
+                          color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.05) : const Color(0xFF1E1E1E),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: isOccupied ? Colors.orange[200]! : Colors.green[200]!, width: 0.8),
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2)),
-                          ],
+                          border: Border.all(color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.5) : const Color(0xFFE7FF12).withOpacity(0.1), width: 0.8),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(4),
@@ -169,13 +169,13 @@ class _TablesTabState extends State<TablesTab> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Expanded(child: Text(table.name, style: TextStyle(fontSize: isMobile ? 12 : 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  Expanded(child: Text(table.name, style: TextStyle(fontSize: isMobile ? 12 : 14, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis)),
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      IconButton(icon: const Icon(Icons.edit, size: 10), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)),
+                                      IconButton(icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)),
                                       const SizedBox(width: 2),
-                                      IconButton(icon: const Icon(Icons.delete, size: 10, color: Colors.red), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () {
+                                      IconButton(icon: const Icon(Icons.delete, size: 10, color: Colors.redAccent), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () {
                                          _firestore.collection('tables').doc(table.id).delete();
                                       }),
                                     ],
@@ -186,12 +186,12 @@ class _TablesTabState extends State<TablesTab> {
                               _buildUltraMiniStatus(table.status),
                               const SizedBox(height: 4),
                               if (!isMobile) ...[
-                                Text("Sec: ${table.section}", style: TextStyle(color: Colors.grey[600], fontSize: 8), overflow: TextOverflow.ellipsis),
-                                Text("Cap: ${table.capacity}", style: TextStyle(color: Colors.grey[600], fontSize: 8)),
+                                Text("Sec: ${table.section}", style: const TextStyle(color: Colors.white60, fontSize: 8), overflow: TextOverflow.ellipsis),
+                                Text("Cap: ${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8)),
                                 const Spacer(),
                               ] else ...[
                                 const Spacer(),
-                                Text("C:${table.capacity}", style: TextStyle(color: Colors.grey[600], fontSize: 8), textAlign: TextAlign.right),
+                                Text("C:${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8), textAlign: TextAlign.right),
                               ],
                               
                               const SizedBox(height: 2),
@@ -266,7 +266,7 @@ class _TablesTabState extends State<TablesTab> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: color, width: 0.5)),
+      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(4), border: Border.all(color: color.withOpacity(0.5), width: 0.5)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -290,16 +290,17 @@ class _TablesTabState extends State<TablesTab> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Clear Table ${table.name}"),
-        content: const Text("Would you like to print the final bill before clearing this table?"),
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: Text("Clear Table ${table.name}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text("Would you like to print the final bill before clearing this table?", style: TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          OutlinedButton(onPressed: () { Navigator.pop(context); _processClearTable(table, printBill: false); }, child: const Text("Clear Only")),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+          OutlinedButton(onPressed: () { Navigator.pop(context); _processClearTable(table, printBill: false); }, style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.white24), foregroundColor: Colors.white), child: const Text("Clear Only")),
           ElevatedButton.icon(
             onPressed: () { Navigator.pop(context); _processClearTable(table, printBill: true); },
-            icon: const Icon(Icons.print),
-            label: const Text("Print & Clear"),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+            icon: const Icon(Icons.print, color: Colors.black),
+            label: const Text("Print & Clear", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12)),
           ),
         ],
       ),
@@ -336,16 +337,31 @@ class _TablesTabState extends State<TablesTab> {
   void _showSectionDialog({String? restaurantId}) {
     final nameCtrl = TextEditingController();
     showDialog(context: context, builder: (context) => AlertDialog(
-      title: const Text("Add New Section"),
-      content: TextField(controller: nameCtrl, decoration: const InputDecoration(hintText: "e.g. Ground Floor")),
+      backgroundColor: const Color(0xFF1E1E1E),
+      title: const Text("Add New Section", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+      content: Theme(
+        data: ThemeData.dark().copyWith(
+          inputDecorationTheme: InputDecorationTheme(
+            labelStyle: const TextStyle(color: Colors.white70),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+          ),
+        ),
+        child: TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: "e.g. Ground Floor")),
+      ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-        ElevatedButton(onPressed: () {
-          if (nameCtrl.text.isNotEmpty) {
-            _firestore.collection('sections').add({'name': nameCtrl.text.trim(), 'restaurantId': restaurantId});
-            Navigator.pop(context);
-          }
-        }, child: const Text("Save")),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+        ElevatedButton(
+          onPressed: () {
+            if (nameCtrl.text.isNotEmpty) {
+              _firestore.collection('sections').add({'name': nameCtrl.text.trim(), 'restaurantId': restaurantId});
+              Navigator.pop(context);
+            }
+          }, 
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+          child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
       ],
     ));
   }
@@ -358,48 +374,65 @@ class _TablesTabState extends State<TablesTab> {
     showDialog(context: context, builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) {
         return AlertDialog(
-          title: Text(table == null ? "Create New Table" : "Edit Table"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: "Table Number/Name")),
-              TextField(controller: capCtrl, decoration: const InputDecoration(labelText: "Capacity"), keyboardType: TextInputType.number),
-              StreamBuilder<QuerySnapshot>(
-                stream: _firestore.collection('sections').where('restaurantId', isEqualTo: restaurantId).snapshots(),
-                builder: (context, snap) {
-                  if (!snap.hasData) return const SizedBox();
-                  final sections = snap.data!.docs;
-                  return DropdownButtonFormField<String>(
-                    value: sections.any((s) => s['name'] == selectedSection) ? selectedSection : null,
-                    hint: const Text("Select Section"),
-                    items: sections.map((s) => DropdownMenuItem(value: s['name'].toString(), child: Text(s['name']))).toList(),
-                    onChanged: (v) => setDialogState(() => selectedSection = v),
-                  );
-                },
+          backgroundColor: const Color(0xFF1E1E1E),
+          title: Text(table == null ? "Create New Table" : "Edit Table", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+          content: Theme(
+            data: ThemeData.dark().copyWith(
+              inputDecorationTheme: InputDecorationTheme(
+                labelStyle: const TextStyle(color: Colors.white70),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
               ),
-            ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Table Number/Name")),
+                TextField(controller: capCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Capacity"), keyboardType: TextInputType.number),
+                StreamBuilder<QuerySnapshot>(
+                  stream: _firestore.collection('sections').where('restaurantId', isEqualTo: restaurantId).snapshots(),
+                  builder: (context, snap) {
+                    if (!snap.hasData) return const SizedBox();
+                    final sections = snap.data!.docs;
+                    return DropdownButtonFormField<String>(
+                      dropdownColor: const Color(0xFF2C2C2C),
+                      value: sections.any((s) => s['name'] == selectedSection) ? selectedSection : null,
+                      hint: const Text("Select Section", style: TextStyle(color: Colors.white54)),
+                      items: sections.map((s) => DropdownMenuItem(value: s['name'].toString(), child: Text(s['name'], style: const TextStyle(color: Colors.white)))).toList(),
+                      onChanged: (v) => setDialogState(() => selectedSection = v),
+                      decoration: const InputDecoration(labelText: "Section"),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
             if (table != null)
               TextButton(onPressed: () { _firestore.collection('tables').doc(table.id).delete(); Navigator.pop(context); }, child: const Text("Delete", style: TextStyle(color: Colors.red))),
-            ElevatedButton(onPressed: () {
-              if (nameCtrl.text.isNotEmpty && selectedSection != null) {
-                final data = {
-                  'name': nameCtrl.text.trim(),
-                  'capacity': int.tryParse(capCtrl.text) ?? 4,
-                  'section': selectedSection,
-                  'status': table?.status.name ?? TableStatus.available.name,
-                  'restaurantId': restaurantId,
-                };
-                if (table == null) {
-                  _firestore.collection('tables').add(data);
-                } else {
-                  _firestore.collection('tables').doc(table.id).update(data);
+            ElevatedButton(
+              onPressed: () {
+                if (nameCtrl.text.isNotEmpty && selectedSection != null) {
+                  final data = {
+                    'name': nameCtrl.text.trim(),
+                    'capacity': int.tryParse(capCtrl.text) ?? 4,
+                    'section': selectedSection,
+                    'status': table?.status.name ?? TableStatus.available.name,
+                    'restaurantId': restaurantId,
+                  };
+                  if (table == null) {
+                    _firestore.collection('tables').add(data);
+                  } else {
+                    _firestore.collection('tables').doc(table.id).update(data);
+                  }
+                  Navigator.pop(context);
                 }
-                Navigator.pop(context);
-              }
-            }, child: const Text("Save")),
+              }, 
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+              child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
           ],
         );
       }

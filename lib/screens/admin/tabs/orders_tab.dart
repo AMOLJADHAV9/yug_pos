@@ -26,8 +26,11 @@ class _OrdersTabState extends State<OrdersTab> {
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text("Order Oversight"),
+        backgroundColor: Colors.black,
+        surfaceTintColor: Colors.transparent,
+        title: const Text("Order Oversight", style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_today),
@@ -37,6 +40,17 @@ class _OrdersTabState extends State<OrdersTab> {
                 initialDate: filterDate,
                 firstDate: DateTime(2020),
                 lastDate: DateTime(2100),
+                builder: (context, child) => Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.dark(
+                      primary: Color(0xFFE7FF12),
+                      onPrimary: Colors.black,
+                      surface: Color(0xFF1E1E1E),
+                      onSurface: Colors.white,
+                    ),
+                  ),
+                  child: child!,
+                ),
               );
               if (date != null) setState(() => filterDate = date);
             },
@@ -44,7 +58,7 @@ class _OrdersTabState extends State<OrdersTab> {
           const SizedBox(width: 8),
           if (MediaQuery.of(context).size.width < 768)
             IconButton(
-              icon: const Icon(Icons.logout, color: Colors.blueGrey),
+              icon: const Icon(Icons.logout, color: Colors.white54),
               onPressed: () => context.read<AuthService>().logout(),
               tooltip: "Logout",
             ),
@@ -53,10 +67,9 @@ class _OrdersTabState extends State<OrdersTab> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showNewOrderDialog(),
-        icon: const Icon(Icons.add_shopping_cart),
-        label: const Text("New Order"),
-        backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_shopping_cart, color: Colors.black),
+        label: const Text("New Order", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFFE7FF12),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _firestore.collection('orders')
@@ -73,14 +86,41 @@ class _OrdersTabState extends State<OrdersTab> {
             final data = doc.data() as Map<String, dynamic>;
             if (data['createdAt'] == null) return false;
             final createdAt = (data['createdAt'] as Timestamp).toDate();
+            final billedAt = data['billedAt'] as Timestamp?;
+            final dateToFilter = billedAt?.toDate() ?? createdAt;
             
-            final matchesDate = createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
+            final matchesDate = dateToFilter.isAfter(startOfDay) && dateToFilter.isBefore(endOfDay);
             final matchesStatus = filterStatus == null || data['status'] == filterStatus;
             
             return matchesDate && matchesStatus;
           }).toList();
 
-          if (orders.isEmpty) return const Center(child: Text("No orders found for this selection", style: TextStyle(color: Colors.grey)));
+          if (orders.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                   Icon(Icons.calendar_today_outlined, color: Colors.white10, size: 48),
+                   const SizedBox(height: 16),
+                   const Text("No orders found for this date", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                   const SizedBox(height: 8),
+                   Text("Viewing: ${DateFormat('dd MMM yyyy').format(filterDate)}", style: const TextStyle(color: Colors.white38, fontSize: 13)),
+                   const SizedBox(height: 24),
+                   if (DateFormat('yyyyMMdd').format(filterDate) == DateFormat('yyyyMMdd').format(DateTime.now()))
+                     ElevatedButton.icon(
+                       onPressed: () => setState(() => filterDate = DateTime.now().subtract(const Duration(days: 1))),
+                       icon: const Icon(Icons.history, size: 18),
+                       label: const Text("VIEW YESTERDAY'S ORDERS"),
+                       style: ElevatedButton.styleFrom(
+                         backgroundColor: const Color(0xFFE7FF12).withOpacity(0.1),
+                         foregroundColor: const Color(0xFFE7FF12),
+                         side: const BorderSide(color: Color(0xFFE7FF12)),
+                       ),
+                     ),
+                ],
+              ),
+            );
+          }
 
           // Sort by creation time descending
           orders.sort((a, b) {
@@ -96,9 +136,12 @@ class _OrdersTabState extends State<OrdersTab> {
             itemBuilder: (context, index) {
               final doc = orders[index];
               final data = doc.data() as Map<String, dynamic>;
+              final isTakeaway = data['orderType'] == 'takeaway';
               final date = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 
               return Card(
+                color: const Color(0xFF1E1E1E),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.white.withOpacity(0.05))),
                 child: InkWell(
                   onTap: () => _showOrderDetails(doc.id, data),
                   borderRadius: BorderRadius.circular(12),
@@ -107,18 +150,35 @@ class _OrdersTabState extends State<OrdersTab> {
                     child: Row(
                       children: [
                         CircleAvatar(
-                          backgroundColor: _getStatusColor(data['status']),
-                          child: const Icon(Icons.receipt, color: Colors.white, size: 20),
+                          backgroundColor: isTakeaway ? Colors.purple.withOpacity(0.1) : _getStatusColor(data['status']).withOpacity(0.1),
+                          child: Icon(
+                            isTakeaway ? Icons.shopping_bag : Icons.receipt, 
+                            color: isTakeaway ? Colors.purple : _getStatusColor(data['status']), 
+                            size: 20
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text("Order #${doc.id.substring(0, 6)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Row(
+                                children: [
+                                  Text("Order #${doc.id.substring(0,6)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
+                                  if (isTakeaway)
+                                    Container(
+                                      margin: const EdgeInsets.only(left: 8),
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                      decoration: BoxDecoration(color: Colors.purple.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                                      child: const Text("TAKEAWAY", style: TextStyle(color: Colors.purpleAccent, fontSize: 8, fontWeight: FontWeight.bold)),
+                                    ),
+                                ],
+                              ),
                               const SizedBox(height: 2),
-                              Text("${data['tableName']} • ${data['waiterName']}", style: TextStyle(fontSize: 12, color: Colors.grey[700]), overflow: TextOverflow.ellipsis),
-                              Text(DateFormat('hh:mm a').format(date), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              Text("${isTakeaway ? 'Takeaway' : (data['tableName'] ?? 'Table')} • ${data['customerName'] ?? 'Walk-in'}", style: const TextStyle(fontSize: 12, color: Colors.white54), overflow: TextOverflow.ellipsis),
+                              if (data['customerPhone'] != null && data['customerPhone'].toString().isNotEmpty)
+                                Text(data['customerPhone'], style: const TextStyle(fontSize: 10, color: Colors.white38)),
+                              Text(DateFormat('hh:mm a').format(date), style: const TextStyle(fontSize: 11, color: Colors.white38)),
                             ],
                           ),
                         ),
@@ -127,10 +187,10 @@ class _OrdersTabState extends State<OrdersTab> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text("₹${data['totalAmount']}", 
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF800000))),
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: _getStatusColor(data['status']).withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                              decoration: BoxDecoration(color: _getStatusColor(data['status']).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
                               child: Text(data['status'].toString().toUpperCase(), style: TextStyle(fontSize: 9, color: _getStatusColor(data['status']), fontWeight: FontWeight.bold)),
                             ),
                           ],
@@ -148,9 +208,9 @@ class _OrdersTabState extends State<OrdersTab> {
                               else if (value == 'delete') _confirmDeleteOrder(doc.id);
                             },
                             itemBuilder: (_) => [
-                              const PopupMenuItem(value: 'print', child: Row(children: [Icon(Icons.print, color: Colors.blue, size: 18), SizedBox(width: 8), Text("Print Bill")])),
-                              const PopupMenuItem(value: 'cancel', child: Row(children: [Icon(Icons.block, color: Colors.orange, size: 18), SizedBox(width: 8), Text("Cancel Order")])),
-                              const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Colors.red, size: 18), SizedBox(width: 8), Text("Delete")])),
+                              const PopupMenuItem(value: 'print', child: Row(children: [Icon(Icons.print, color: Color(0xFFE7FF12), size: 18), SizedBox(width: 8), Text("Print Bill", style: TextStyle(color: Colors.white))])),
+                              const PopupMenuItem(value: 'cancel', child: Row(children: [Icon(Icons.block, color: Colors.orangeAccent, size: 18), SizedBox(width: 8), Text("Cancel Order", style: TextStyle(color: Colors.white))])),
+                              const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Colors.redAccent, size: 18), SizedBox(width: 8), Text("Delete", style: TextStyle(color: Colors.white))])),
                             ],
                           ),
                         ),
@@ -175,10 +235,11 @@ class _OrdersTabState extends State<OrdersTab> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Cancel Order?"),
-        content: const Text("This will mark the order as CANCELLED and free up the table. The record will be kept for history."),
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text("Cancel Order?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text("This will mark the order as CANCELLED and free up the table. The record will be kept for history.", style: TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("No")),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("No", style: TextStyle(color: Colors.white54))),
           ElevatedButton(
             onPressed: () async {
               await _firestore.collection('orders').doc(orderId).update({'status': 'cancelled'});
@@ -193,8 +254,8 @@ class _OrdersTabState extends State<OrdersTab> {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order cancelled and table freed!"), backgroundColor: Colors.orange));
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-            child: const Text("CANCEL ORDER"),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+            child: const Text("CANCEL ORDER", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -227,10 +288,10 @@ class _OrdersTabState extends State<OrdersTab> {
 
   Color _getStatusColor(String? status) {
     switch (status) {
-      case 'billed': return Colors.green;
-      case 'open': return Colors.blue;
-      case 'kotSent': return Colors.orange;
-      case 'cancelled': return Colors.grey;
+      case 'billed': return const Color(0xFFE7FF12);
+      case 'open': return const Color(0xFFE7FF12).withOpacity(0.8);
+      case 'kotSent': return Colors.white70;
+      case 'cancelled': return Colors.red;
       default: return Colors.grey;
     }
   }
@@ -370,25 +431,40 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
   String _selectedCategory = "All";
   String _searchQuery = "";
   final List<CartItem> _selectedItems = [];
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      backgroundColor: Colors.black,
       insetPadding: const EdgeInsets.all(40),
       child: Container(
         width: MediaQuery.of(context).size.width * 0.8,
         height: MediaQuery.of(context).size.height * 0.8,
         padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE7FF12).withOpacity(0.1)),
+        ),
         child: Column(
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("Place New Order", style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                Text("Place New Order", style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                IconButton(icon: const Icon(Icons.close, color: Colors.white70), onPressed: () => Navigator.pop(context)),
               ],
             ),
-            const Divider(),
+            const Divider(color: Colors.white10),
             Expanded(
               child: _selectedTable == null 
                 ? _buildTableSelection()
@@ -438,20 +514,20 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
                       margin: EdgeInsets.zero, // Remove any default margin
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: isSelected ? Colors.blue : Colors.transparent, width: 2),
+                        side: BorderSide(color: isSelected ? const Color(0xFFE7FF12) : Colors.white.withOpacity(0.05), width: isSelected ? 2 : 1),
                       ),
-                      color: isOccupied ? Colors.grey[100] : (isSelected ? Colors.blue[50] : Colors.white),
+                      color: isOccupied ? Colors.black.withOpacity(0.3) : (isSelected ? const Color(0xFFE7FF12).withOpacity(0.1) : const Color(0xFF2C2C2C)),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min, // Tell Column to take minimum space
                         children: [
-                          Icon(Icons.table_bar, color: isOccupied ? Colors.grey[400] : (isSelected ? Colors.blue : Colors.black87), size: 24),
+                          Icon(Icons.table_bar, color: isOccupied ? Colors.white24 : (isSelected ? const Color(0xFFE7FF12) : Colors.white70), size: 24),
                           const SizedBox(height: 4),
                           Flexible(child: Text(table.name, 
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isOccupied ? Colors.white24 : Colors.white),
                             overflow: TextOverflow.ellipsis)),
                           Flexible(child: Text(isOccupied ? "Occupied" : "Available", 
-                            style: TextStyle(fontSize: 9, color: isOccupied ? Colors.red : Colors.green, fontWeight: FontWeight.w600),
+                            style: TextStyle(fontSize: 9, color: isOccupied ? Colors.red : const Color(0xFFE7FF12), fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis)),
                         ],
                       ),
@@ -472,28 +548,63 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
         // Header with Table Info and Back
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE7FF12).withOpacity(0.1))),
           child: Row(
             children: [
-              const Icon(Icons.table_bar, color: Colors.blue, size: 20),
+              const Icon(Icons.table_bar, color: Color(0xFFE7FF12), size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text("Table: ${_selectedTable?.name}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
-                    Text("Capacity: ${_selectedTable?.capacity}", style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
+                    Text("Table: ${_selectedTable?.name}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white), overflow: TextOverflow.ellipsis),
+                    Text("Capacity: ${_selectedTable?.capacity}", style: const TextStyle(fontSize: 10, color: Colors.white54)),
                   ],
                 ),
               ),
               IconButton(
                 onPressed: () => setState(() => _selectedTable = null),
-                icon: const Icon(Icons.swap_horiz, size: 20, color: Colors.blue),
+                icon: const Icon(Icons.swap_horiz, size: 20, color: Color(0xFFE7FF12)),
                 tooltip: "Change Table",
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _nameController,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: "Customer Name",
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  filled: true, fillColor: const Color(0xFF2C2C2C),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: "Contact Number",
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  filled: true, fillColor: const Color(0xFF2C2C2C),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         Expanded(child: _buildSearchAndAdd()),
@@ -509,13 +620,17 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
         final menuPanel = Column(
           children: [
             TextField(
+              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: "Search items...",
-                prefixIcon: const Icon(Icons.search, size: 20),
+                hintStyle: const TextStyle(color: Colors.white54),
+                prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFFE7FF12)),
                 contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE7FF12))),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: const Color(0xFF2C2C2C),
               ),
               onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
             ),
@@ -555,9 +670,9 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
                         }),
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: const Color(0xFF2C2C2C),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.grey[200]!),
+                            border: Border.all(color: Colors.white.withOpacity(0.05)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -567,7 +682,7 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
                                   borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
                                   child: data['imageUrl'] != null 
                                     ? Image.network(data['imageUrl'], fit: BoxFit.cover)
-                                    : Container(color: Colors.grey[50], child: const Icon(Icons.fastfood, size: 20, color: Colors.grey)),
+                                    : Container(color: Colors.black26, child: const Icon(Icons.fastfood, size: 20, color: Color(0xFFE7FF12))),
                                 ),
                               ),
                               Padding(
@@ -575,8 +690,8 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    Text("₹${item.price}", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 8)),
+                                    Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    Text("₹${item.price}", style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 8)),
                                   ],
                                 ),
                               ),
@@ -598,7 +713,7 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Order", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text("Order", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                 if (_selectedItems.isNotEmpty)
                   TextButton(
                     onPressed: () => setState(() => _selectedItems.clear()),
@@ -609,22 +724,22 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
             const SizedBox(height: 4),
             Expanded(
               child: _selectedItems.isEmpty 
-                ? const Center(child: Text("Cart is empty", style: TextStyle(color: Colors.grey, fontSize: 12)))
+                ? const Center(child: Text("Cart is empty", style: TextStyle(color: Colors.white54, fontSize: 12)))
                 : ListView.separated(
                     itemCount: _selectedItems.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
                     itemBuilder: (context, index) {
                       final i = _selectedItems[index];
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        title: Text(i.item.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
-                        subtitle: Text("₹${i.item.price} x ${i.quantity}", style: const TextStyle(fontSize: 10)),
+                        title: Text(i.item.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white), overflow: TextOverflow.ellipsis),
+                        subtitle: Text("₹${i.item.price} x ${i.quantity}", style: const TextStyle(fontSize: 10, color: Colors.white54)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.remove_circle_outline, size: 16, color: Colors.grey),
+                              icon: const Icon(Icons.remove_circle_outline, size: 16, color: Colors.white54),
                               constraints: const BoxConstraints(),
                               padding: EdgeInsets.zero,
                               onPressed: () => setState(() {
@@ -634,7 +749,7 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              icon: const Icon(Icons.add_circle_outline, size: 16, color: Colors.blue),
+                              icon: const Icon(Icons.add_circle_outline, size: 16, color: Color(0xFFE7FF12)),
                               constraints: const BoxConstraints(),
                               padding: EdgeInsets.zero,
                               onPressed: () => setState(() => _selectedItems[index].quantity++),
@@ -645,13 +760,13 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
                     },
                   ),
             ),
-            const Divider(thickness: 1),
+            const Divider(thickness: 1, color: Colors.white10),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Total:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                const Text("Total:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
                 Text("₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(0)}", 
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
               ],
             ),
             const SizedBox(height: 8),
@@ -660,8 +775,8 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
               child: ElevatedButton(
                 onPressed: _selectedItems.isEmpty ? null : _submitOrder,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
+                  backgroundColor: const Color(0xFFE7FF12),
+                  foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
@@ -697,6 +812,9 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
      final adminName = auth.role == UserRole.admin ? "Admin (${auth.currentUser?.email ?? 'Unknown'})" : "Admin";
      final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
 
+     final customerName = _nameController.text.trim().isEmpty ? "Walk-in" : _nameController.text.trim();
+     final customerPhone = _phoneController.text.trim();
+
      final firestore = FirebaseFirestore.instance;
      final batch = firestore.batch();
      final orderRef = firestore.collection('orders').doc();
@@ -706,6 +824,8 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
         'tableId': _selectedTable!.id,
         'tableName': _selectedTable!.name,
         'waiterName': adminName,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
         'status': 'open',
         'createdAt': FieldValue.serverTimestamp(),
         'totalAmount': total,
@@ -740,6 +860,8 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
         'restaurantId': widget.restaurantId,
         'orderId': orderRef.id,
         'tableName': _selectedTable!.name,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
         'status': 'Pending',
         'createdAt': FieldValue.serverTimestamp(),
         'items': _selectedItems.map((i) => {
@@ -759,6 +881,9 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
      // Prepare simple KOT data (only Table and Items) for printing
      final kotData = {
         'tableName': _selectedTable!.name,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        'waiterName': adminName,
         'items': _selectedItems.map((i) => {
            'name': i.item.name,
            'quantity': i.quantity,

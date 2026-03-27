@@ -26,7 +26,9 @@ class AuthService extends ChangeNotifier {
   String? get restaurantId => _restaurantId;
 
   String? _restaurantName;
+  String? _userName;
   String? get restaurantName => _restaurantName;
+  String? get userName => _userName;
 
   String? _savedPin;
   bool get hasSavedPin => _savedPin != null;
@@ -39,7 +41,6 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _init() async {
     _isLoading = true;
-    notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     _savedPin = prefs.getString('waiter_pin');
     
@@ -50,22 +51,30 @@ class AuthService extends ChangeNotifier {
         _restaurantId = null;
         _stopSessionTimer();
       } else {
-        // Logged in but we need to check if they need PIN
-        if (_savedPin == null) {
-          final doc = await _firestore.collection('users').doc(user.uid).get();
-          String roleStr = doc.data()?['role'] ?? 'waiter';
-          _role = _getRoleFromString(roleStr);
-          _restaurantId = doc.data()?['restaurantId'];
-          
-          if (_restaurantId != null) {
-            final resDoc = await _firestore.collection('restaurants').doc(_restaurantId).get();
-            _restaurantName = resDoc.data()?['name'];
+        try {
+          // Logged in but we need to check if they need PIN
+          if (_savedPin == null) {
+            final doc = await _firestore.collection('users').doc(user.uid).get();
+            final data = doc.data();
+            String roleStr = data?['role'] ?? 'waiter';
+            _role = _getRoleFromString(roleStr);
+            _restaurantId = data?['restaurantId'];
+            _userName = data?['name'];
+            
+            if (_restaurantId != null) {
+              final resDoc = await _firestore.collection('restaurants').doc(_restaurantId).get();
+              _restaurantName = resDoc.data()?['name'];
+            }
+            
+            _isUnlocked = true;
+            _startSessionTimer();
+          } else {
+            _isUnlocked = false; // Must enter PIN
           }
-          
-          _isUnlocked = true;
-          _startSessionTimer();
-        } else {
-          _isUnlocked = false; // Must enter PIN
+        } catch (e) {
+          debugPrint("Firestore initialization error: $e");
+          // Fallback if firestore fails but auth is ok
+          _isUnlocked = _savedPin == null; 
         }
       }
       notifyListeners();
@@ -130,9 +139,11 @@ class AuthService extends ChangeNotifier {
         return 'Access Denied: User profile not found.';
       }
       
-      String roleStr = doc.data()?['role'] ?? 'waiter';
+      final data = doc.data();
+      String roleStr = data?['role'] ?? 'waiter';
       _role = _getRoleFromString(roleStr);
-      _restaurantId = doc.data()?['restaurantId'];
+      _restaurantId = data?['restaurantId'];
+      _userName = data?['name'];
       
       if (_restaurantId != null) {
         final resDoc = await _firestore.collection('restaurants').doc(_restaurantId).get();
@@ -175,6 +186,7 @@ class AuthService extends ChangeNotifier {
     _role = UserRole.none;
     _restaurantId = null;
     _restaurantName = null;
+    _userName = null;
     _stopSessionTimer();
     await _auth.signOut();
     notifyListeners();

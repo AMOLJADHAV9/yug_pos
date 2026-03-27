@@ -37,15 +37,16 @@ class UsersTab extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text("Staff Management", 
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: () => _showAddUserDialog(context),
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text("Create Staff Member"),
+                            icon: const Icon(Icons.add, size: 18, color: Colors.black),
+                            label: const Text("Create Staff Member", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                             style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE7FF12),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
@@ -58,12 +59,13 @@ class UsersTab extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text("Staff Management", 
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
                         ElevatedButton.icon(
                           onPressed: () => _showAddUserDialog(context),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text("Create Staff Member"),
+                          icon: const Icon(Icons.add, size: 18, color: Colors.black),
+                          label: const Text("Create Staff Member", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE7FF12),
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
@@ -109,12 +111,9 @@ class UsersTab extends StatelessWidget {
 
         return Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[200]!),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2)),
-            ],
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -125,13 +124,13 @@ class UsersTab extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
-                      child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                     ),
                     _buildStatusChip(status),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(email, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                Text(email, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -173,12 +172,9 @@ class UsersTab extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[100]!),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -187,15 +183,16 @@ class UsersTab extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 48),
             child: DataTable(
-              headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
+              headingRowColor: MaterialStateProperty.all(const Color(0xFF2C2C2C)),
+              dataRowColor: MaterialStateProperty.all(const Color(0xFF1E1E1E)),
               horizontalMargin: 20,
               columnSpacing: 24,
               columns: const [
-                DataColumn(label: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70))),
+                DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70))),
+                DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70))),
+                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70))),
+                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70))),
               ],
               rows: users.map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
@@ -206,15 +203,15 @@ class UsersTab extends StatelessWidget {
                 final uid = doc.id;
 
                 return DataRow(cells: [
-                  DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                  DataCell(Text(email, style: TextStyle(color: Colors.grey[600]))),
+                  DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white))),
+                  DataCell(Text(email, style: const TextStyle(color: Colors.white70))),
                   DataCell(_buildRoleChip(role.toString())),
                   DataCell(_buildStatusChip(status)),
                   DataCell(Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.mail_outline, size: 20, color: Colors.blue),
+                        icon: const Icon(Icons.mail_outline, size: 20, color: Color(0xFFE7FF12)),
                         onPressed: () => _sendResetEmail(context, email),
                         tooltip: "Reset Password",
                       ),
@@ -222,7 +219,7 @@ class UsersTab extends StatelessWidget {
                         icon: Icon(
                           status == 'active' ? Icons.block : Icons.check_circle_outline, 
                           size: 20, 
-                          color: status == 'active' ? Colors.red : Colors.green
+                          color: status == 'active' ? Colors.redAccent : const Color(0xFFE7FF12)
                         ),
                         onPressed: () => _toggleUserStatus(context, uid, status == 'active'),
                         tooltip: status == 'active' ? "Disable User" : "Enable User",
@@ -243,35 +240,36 @@ class UsersTab extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, color: color, size: 18),
+          decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: const Color(0xFFE7FF12), size: 18),
         ),
         const SizedBox(width: 12),
-        Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[800])),
+        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70)),
         const SizedBox(width: 12),
-        Expanded(child: Divider(color: color.withOpacity(0.2), thickness: 1)),
+        Expanded(child: Divider(color: Colors.white.withOpacity(0.1), thickness: 1)),
       ],
     );
   }
 
   Widget _buildRoleChip(String role) {
-    Color color = Colors.blue;
-    if (role == 'admin') color = Colors.purple;
-    if (role == 'cashier') color = Colors.orange;
+    Color color = const Color(0xFFE7FF12);
+    if (role == 'admin') color = Colors.purpleAccent;
+    if (role == 'cashier') color = Colors.orangeAccent;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.3))),
       child: Text(role.toUpperCase(), style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 
   Widget _buildStatusChip(String status) {
     bool active = status == 'active';
+    Color color = active ? const Color(0xFFE7FF12) : Colors.redAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: active ? Colors.green[50] : Colors.red[50], borderRadius: BorderRadius.circular(20)),
-      child: Text(active ? "ACTIVE" : "DISABLED", style: TextStyle(color: active ? Colors.green : Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.3))),
+      child: Text(active ? "ACTIVE" : "DISABLED", style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 
@@ -330,29 +328,46 @@ class _AddUserDialogState extends State<AddUserDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text("Register New Staff Member"),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      content: SingleChildScrollView(
-        child: Column(
-          children: [
-            TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: "Full Name")),
-            TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: "Email")),
-            TextField(controller: _passCtrl, decoration: const InputDecoration(labelText: "Assign Password"), obscureText: true),
-            TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: "Phone (Optional)")),
-            TextField(controller: _pinCtrl, decoration: const InputDecoration(labelText: "Login PIN (4 digits)"), maxLength: 4, keyboardType: TextInputType.number),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedRole,
-              items: ['waiter', 'cashier', 'admin'].map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase()))).toList(),
-              onChanged: (v) => setState(() => _selectedRole = v!),
-              decoration: const InputDecoration(labelText: "Assign Role"),
-            ),
-          ],
+      backgroundColor: const Color(0xFF1E1E1E),
+      title: const Text("Register New Staff Member", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+      content: Theme(
+        data: Theme.of(context).copyWith(
+          brightness: Brightness.dark,
+          inputDecorationTheme: InputDecorationTheme(
+            labelStyle: const TextStyle(color: Colors.white70),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+          ),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: "Full Name")),
+              TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: "Email")),
+              TextField(controller: _passCtrl, decoration: const InputDecoration(labelText: "Assign Password"), obscureText: true),
+              TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: "Phone (Optional)")),
+              TextField(controller: _pinCtrl, decoration: const InputDecoration(labelText: "Login PIN (4 digits)"), maxLength: 4, keyboardType: TextInputType.number),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                dropdownColor: const Color(0xFF2C2C2C),
+                value: _selectedRole,
+                items: ['waiter', 'cashier', 'admin'].map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase(), style: const TextStyle(color: Colors.white)))).toList(),
+                onChanged: (v) => setState(() => _selectedRole = v!),
+                decoration: const InputDecoration(labelText: "Assign Role"),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-        ElevatedButton(onPressed: _loading ? null : _create, child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text("Create User")),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+        ElevatedButton(
+          onPressed: _loading ? null : _create, 
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+          child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text("Create User", style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
       ],
     );
   }

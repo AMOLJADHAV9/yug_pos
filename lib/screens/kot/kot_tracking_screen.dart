@@ -27,18 +27,28 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
     final restaurantId = auth.restaurantId;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Active KOTs')),
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        title: const Text('Active KOTs', style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Color(0xFFE7FF12)),
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: firestore
             .collection('kots')
             .where('restaurantId', isEqualTo: restaurantId)
-            .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
           
-          final kots = snapshot.data!.docs;
-          if (kots.isEmpty) return const Center(child: Text("All KOTs are clear!"));
+          final kots = snapshot.data!.docs.toList();
+          kots.sort((a, b) {
+            final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+            final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+            return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+          });
+          if (kots.isEmpty) return const Center(child: Text("All KOTs are clear!", style: TextStyle(color: Colors.white54)));
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -49,12 +59,15 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
               final status = data['status'] ?? 'Pending';
               final orderId = data['orderId'];
 
-              if (status == 'Served') return const SizedBox();
+              if (status == 'Served' || status == 'Done') return const SizedBox();
 
-              return Card(
-                elevation: 2,
+              return Container(
                 margin: const EdgeInsets.only(bottom: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E1E),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE7FF12).withOpacity(0.1)),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -67,8 +80,8 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text("KOT #${kots[index].id.substring(0, 6).toUpperCase()}", 
-                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                              Text("Table: ${data['tableName'] ?? 'N/A'}", style: TextStyle(color: Colors.grey[700])),
+                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFE7FF12))),
+                              Text("Table: ${data['tableName'] ?? 'N/A'}", style: const TextStyle(color: Colors.white70)),
                             ],
                           ),
                           Row(
@@ -88,20 +101,20 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      const Divider(),
+                      Divider(color: Colors.white.withOpacity(0.05)),
                       ...items.map((item) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4.0),
                           child: Row(
                             children: [
-                              Text('${item['quantity']}x', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text('${item['quantity']}x', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(item['name'])),
+                              Expanded(child: Text(item['name'], style: const TextStyle(color: Colors.white))),
                             ],
                           ),
                         );
                       }),
-                      const Divider(),
+                      Divider(color: Colors.white.withOpacity(0.05)),
                     ],
                   ),
                 ),

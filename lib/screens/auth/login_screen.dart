@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import 'register_screen.dart';
-import 'admin_register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,7 +16,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passCtrl = TextEditingController();
   bool _loading = false;
   String _pinInput = '';
-  
+
+  // Theme Colors
+  final Color _primaryYellow = const Color(0xFFE7FF12);
+  final Color _bgBlack = Colors.black;
+  final Color _surfaceGrey = const Color(0xFF1A1A1A);
+
   void _loginEmail() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) return;
     setState(() => _loading = true);
@@ -26,28 +31,24 @@ class _LoginScreenState extends State<LoginScreen> {
     
     if (error != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error),
-        backgroundColor: Colors.red,
+        content: Text(error, style: const TextStyle(color: Colors.white)),
+        backgroundColor: Colors.redAccent.withOpacity(0.8),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ));
     }
   }
 
   void _pinKeyPressed(String val) {
     if (_pinInput.length < 4) {
-      setState(() {
-        _pinInput += val;
-      });
-      if (_pinInput.length == 4) {
-        _verifyPin();
-      }
+      setState(() => _pinInput += val);
+      if (_pinInput.length == 4) _verifyPin();
     }
   }
 
   void _pinBackspace() {
     if (_pinInput.isNotEmpty) {
-      setState(() {
-        _pinInput = _pinInput.substring(0, _pinInput.length - 1);
-      });
+      setState(() => _pinInput = _pinInput.substring(0, _pinInput.length - 1));
     }
   }
   
@@ -55,55 +56,155 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.read<AuthService>();
     final success = auth.unlockWithPin(_pinInput);
     if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Invalid PIN'),
-        backgroundColor: Colors.red,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Invalid PIN', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.redAccent.withOpacity(0.8),
+        behavior: SnackBarBehavior.floating,
       ));
-      setState(() {
-        _pinInput = '';
-      });
+      setState(() => _pinInput = '');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Center(
-            child: Consumer<AuthService>(
-              builder: (context, auth, _) {
-                if (auth.isLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
-                bool usePinMode = auth.currentUser != null && auth.hasSavedPin;
-  
-                return Container(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  margin: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10))
-                    ]
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.restaurant_menu, size: 64, color: Color(0xFF800000)),
-                      const SizedBox(height: 16),
-                      const Text("LDMA POS LOGIN", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                      const SizedBox(height: 32),
-                      _buildFormContent(auth, usePinMode),
-                    ],
-                  ),
-                );
-              },
+      backgroundColor: _bgBlack,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 800) {
+            return SafeArea(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildBrandingSection(isMobile: true),
+                    _buildLoginFormSection(isMobile: true),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            return Row(
+              children: [
+                Expanded(flex: 5, child: _buildBrandingSection(isMobile: false)),
+                Expanded(flex: 4, child: _buildLoginFormSection(isMobile: false)),
+              ],
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildBrandingSection({required bool isMobile}) {
+    return Container(
+      width: double.infinity,
+      height: isMobile ? 320 : double.infinity,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('lib/assets/img/poswelimg.jpg'),
+          fit: BoxFit.cover,
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Dark Overlay
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_bgBlack, _bgBlack.withOpacity(0.7), _bgBlack.withOpacity(0.3)],
+                begin: isMobile ? Alignment.bottomCenter : Alignment.centerRight,
+                end: isMobile ? Alignment.topCenter : Alignment.centerLeft,
+              ),
             ),
+          ),
+          
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.all(isMobile ? 24.0 : 64.0),
+              child: Column(
+                crossAxisAlignment: isMobile ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Logo
+                  Image.asset(
+                    'lib/assets/img/yug_pos_logo.png', 
+                    width: isMobile ? 120 : 180,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Icon(Icons.storefront, size: isMobile ? 60 : 80, color: _primaryYellow),
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    "Welcome to",
+                    style: GoogleFonts.inter(fontSize: isMobile ? 18 : 22, color: Colors.white.withOpacity(0.7)),
+                    textAlign: isMobile ? TextAlign.center : TextAlign.left,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "YUG POS",
+                    style: GoogleFonts.inter(fontSize: isMobile ? 40 : 64, fontWeight: FontWeight.w900, color: _primaryYellow, height: 1.0, letterSpacing: -1),
+                    textAlign: isMobile ? TextAlign.center : TextAlign.left,
+                  ),
+                  if (!isMobile) const SizedBox(height: 24),
+                  if (!isMobile)
+                    SizedBox(
+                      width: 400,
+                      child: Text(
+                        "The ultimate point-of-sale solution designed for efficiency, speed, and seamless management.",
+                        style: GoogleFonts.inter(fontSize: 16, color: Colors.white70, height: 1.6),
+                      ),
+                    ),
+                  if (!isMobile) const Spacer(),
+                  if (!isMobile)
+                    Text("© ${DateTime.now().year} Yug POS. Premium Version.", style: GoogleFonts.inter(color: Colors.white24, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoginFormSection({required bool isMobile}) {
+    return Center(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 24.0 : 48.0),
+          child: Consumer<AuthService>(
+            builder: (context, auth, _) {
+              if (auth.isLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+              bool usePinMode = auth.currentUser != null && auth.hasSavedPin;
+              return Container(
+                constraints: const BoxConstraints(maxWidth: 400),
+                padding: EdgeInsets.all(isMobile ? 24 : 40),
+                decoration: BoxDecoration(
+                  color: _surfaceGrey,
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40, offset: const Offset(0, 20))],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      usePinMode ? "Unlock Device" : "Sign In", 
+                      style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white), 
+                      textAlign: TextAlign.center
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      usePinMode ? "Enter your 4-digit security PIN" : "Enter your credentials below", 
+                      style: GoogleFonts.inter(fontSize: 14, color: Colors.white54), 
+                      textAlign: TextAlign.center
+                    ),
+                    const SizedBox(height: 40),
+                    _buildFormContent(auth, usePinMode),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -119,45 +220,65 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 8),
         TextField(
           controller: _emailCtrl,
+          style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
-            labelText: 'Email',
-            prefixIcon: const Icon(Icons.email_outlined),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            labelText: 'Email Address',
+            labelStyle: GoogleFonts.inter(color: Colors.white60),
+            prefixIcon: const Icon(Icons.mail_outline, color: Colors.white38),
+            filled: true, 
+            fillColor: Colors.black,
+            contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: _primaryYellow, width: 1.5)),
           ),
           keyboardType: TextInputType.emailAddress,
         ),
         const SizedBox(height: 16),
         TextField(
           controller: _passCtrl,
+          style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             labelText: 'Password',
-            prefixIcon: const Icon(Icons.lock_outline),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            labelStyle: GoogleFonts.inter(color: Colors.white60),
+            prefixIcon: const Icon(Icons.lock_outline, color: Colors.white38),
+            filled: true, 
+            fillColor: Colors.black,
+            contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: _primaryYellow, width: 1.5)),
           ),
           obscureText: true,
         ),
         const SizedBox(height: 32),
-        ElevatedButton(
-          onPressed: _loading ? null : _loginEmail,
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Colors.white,
+        SizedBox(
+          height: 60,
+          child: ElevatedButton(
+            onPressed: _loading ? null : _loginEmail,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryYellow,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 4,
+              shadowColor: _primaryYellow.withOpacity(0.3),
+            ),
+            child: _loading
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
+                : Text("SIGN IN TO DASHBOARD", style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
           ),
-          child: _loading 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Text("LOGIN", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ),
-        const SizedBox(height: 16),
-        TextButton(
-          onPressed: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen()));
-          },
-          child: const Text("Register New Account"),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text("New to Yug POS?", style: GoogleFonts.inter(color: Colors.white38, fontSize: 14)),
+            TextButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
+              style: TextButton.styleFrom(foregroundColor: _primaryYellow),
+              child: Text("Register Now", style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+            )
+          ],
         )
       ],
     );
@@ -168,20 +289,23 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Text("Enter PIN", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Text("Welcome back, ${auth.currentUser?.email ?? 'Waiter'}", style: TextStyle(color: Colors.grey[600])),
-        const SizedBox(height: 32),
+        CircleAvatar(radius: 36, backgroundColor: Colors.black, child: Icon(Icons.person, size: 36, color: _primaryYellow)),
+        const SizedBox(height: 12),
+        Text(auth.currentUser?.email ?? 'User', style: GoogleFonts.inter(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 40),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(4, (index) {
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              width: 20,
-              height: 20,
+            bool filled = index < _pinInput.length;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              width: 18, height: 18,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: index < _pinInput.length ? Theme.of(context).colorScheme.primary : Colors.grey[300],
+                color: filled ? _primaryYellow : Colors.transparent,
+                border: Border.all(color: filled ? _primaryYellow : Colors.white24, width: 2),
+                boxShadow: filled ? [BoxShadow(color: _primaryYellow.withOpacity(0.4), blurRadius: 10, spreadRadius: 1)] : [],
               ),
             );
           }),
@@ -189,42 +313,61 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 48),
         _buildNumpad(),
         const SizedBox(height: 24),
-        TextButton(
+        TextButton.icon(
           onPressed: () => auth.logout(),
-          child: const Text("Logout & Use Email"),
+          icon: Icon(Icons.logout, size: 18, color: Colors.white38),
+          label: Text("Switch Account", style: GoogleFonts.inter(color: Colors.white38, fontWeight: FontWeight.w600)),
         )
       ],
     );
   }
 
   Widget _buildNumpad() {
-    return GridView.count(
-      shrinkWrap: true,
-      crossAxisCount: 3,
-      childAspectRatio: 1.5,
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
-      physics: const NeverScrollableScrollPhysics(),
+    return Column(
       children: [
-        for (var i = 1; i <= 9; i++) _buildNumKey('$i'),
-        _buildNumKey(''), // empty
-        _buildNumKey('0'),
-        IconButton(
-          onPressed: _pinBackspace,
-          icon: const Icon(Icons.backspace_outlined, size: 28),
-          color: Colors.black87,
-        )
+        for (var row in [[1,2,3], [4,5,6], [7,8,9]]) 
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: row.map((num) => _buildNumKey('$num')).toList(),
+            ),
+          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            const SizedBox(width: 70, height: 70), // Empty space
+            _buildNumKey('0'),
+            _buildNumKey('backspace', icon: Icons.backspace_outlined),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _buildNumKey(String val) {
-    if (val.isEmpty) return const SizedBox.shrink();
+  Widget _buildNumKey(String val, {IconData? icon}) {
     return InkWell(
-      onTap: () => _pinKeyPressed(val),
-      borderRadius: BorderRadius.circular(32),
-      child: Center(
-        child: Text(val, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: Colors.black87)),
+      onTap: () {
+        if (val == 'backspace') {
+          _pinBackspace();
+        } else {
+          _pinKeyPressed(val);
+        }
+      },
+      borderRadius: BorderRadius.circular(40),
+      child: Container(
+        width: 70,
+        height: 70,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black,
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Center(
+          child: val == 'backspace'
+              ? Icon(icon, size: 24, color: _primaryYellow)
+              : Text(val, style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w600, color: Colors.white)),
+        ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import '../../providers/cart_provider.dart';
 import '../../models/table_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/kot_notification_service.dart';
@@ -8,6 +9,7 @@ import '../../utils/debouncer.dart';
 import '../kot/kot_tracking_screen.dart';
 import '../order/order_summary_screen.dart';
 import '../order/menu_screen.dart';
+import '../order/takeaway_list_screen.dart';
 
 class TablesScreen extends StatefulWidget {
   const TablesScreen({super.key});
@@ -21,20 +23,23 @@ class _TablesScreenState extends State<TablesScreen> {
   final KotNotificationService _kotService = KotNotificationService();
 
   @override
-  void initState() {
-    super.initState();
-    _kotService.startListening();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final restaurantId = context.read<AuthService>().restaurantId;
+    if (restaurantId != null) {
+      _kotService.startListening(restaurantId);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
       body: IndexedStack(
         index: _currentIndex,
         children: const [
           TablesGridTab(),
           KotTrackingScreen(),
+          TakeawayListScreen(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -43,6 +48,7 @@ class _TablesScreenState extends State<TablesScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.table_restaurant), label: 'Tables'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'KOTs'),
+          BottomNavigationBarItem(icon: Icon(Icons.shopping_bag), label: 'Takeaway'),
         ],
       ),
     );
@@ -64,7 +70,6 @@ class _TablesGridTabState extends State<TablesGridTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -74,7 +79,9 @@ class _TablesGridTabState extends State<TablesGridTab> {
             StreamBuilder<void>(
               stream: FirebaseFirestore.instance.snapshotsInSync(),
               builder: (context, _) => FutureBuilder<QuerySnapshot>(
-                future: FirebaseFirestore.instance.collection('tables').limit(1).get(const GetOptions(source: Source.server)),
+                future: FirebaseFirestore.instance.collection('tables')
+                    .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
+                    .limit(1).get(const GetOptions(source: Source.server)),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox.shrink();
                   if (snapshot.hasError) {
@@ -154,8 +161,9 @@ class _TablesGridTabState extends State<TablesGridTab> {
   }
 
   Widget _buildFilters() {
+    final restaurantId = context.read<AuthService>().restaurantId;
     return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('tables').snapshots(),
+      stream: _firestore.collection('tables').where('restaurantId', isEqualTo: restaurantId).snapshots(),
       builder: (context, snapshot) {
         final List<String> sections = ['All'];
         if (snapshot.hasData) {
@@ -182,10 +190,11 @@ class _TablesGridTabState extends State<TablesGridTab> {
                 child: ChoiceChip(
                   label: Text(text, style: TextStyle(
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? Colors.white : Colors.black87
+                    color: isSelected ? Colors.black : Colors.white70
                   )),
                   selected: isSelected,
-                  selectedColor: Theme.of(context).colorScheme.primary,
+                  selectedColor: const Color(0xFFE7FF12),
+                  backgroundColor: const Color(0xFF1E1E1E),
                   onSelected: (val) {
                     if (val) setState(() => _selectedSection = text);
                   },
@@ -199,8 +208,9 @@ class _TablesGridTabState extends State<TablesGridTab> {
   }
 
   Widget _buildGrid() {
+    final restaurantId = context.read<AuthService>().restaurantId;
     return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('tables').snapshots(),
+      stream: _firestore.collection('tables').where('restaurantId', isEqualTo: restaurantId).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -214,22 +224,22 @@ class _TablesGridTabState extends State<TablesGridTab> {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            int crossAxisCount = 2;
+            int crossAxisCount = 4; // Increased from 3 to 4 for ultra-compact mobile
             if (constraints.maxWidth > 1200) {
-              crossAxisCount = 6;
+              crossAxisCount = 8; // Increased for desktop too
             } else if (constraints.maxWidth > 900) {
-              crossAxisCount = 4;
+              crossAxisCount = 6;
             } else if (constraints.maxWidth > 600) {
-              crossAxisCount = 3;
+              crossAxisCount = 4;
             }
 
             return GridView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(8), // Even smaller padding
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.2,
+                crossAxisSpacing: 8, // Even smaller spacing
+                mainAxisSpacing: 8,
+                childAspectRatio: 0.9, // Taller to fit vertical stack
               ),
               itemCount: tables.length,
               itemBuilder: (context, index) {
@@ -247,19 +257,19 @@ class _TablesGridTabState extends State<TablesGridTab> {
     String statusStr;
     switch (table.status) {
       case TableStatus.available:
-        statusColor = Colors.green;
+        statusColor = Colors.red;
         statusStr = 'Available';
         break;
       case TableStatus.occupied:
-        statusColor = Colors.orange;
+        statusColor = Colors.green;
         statusStr = 'Occupied';
         break;
       case TableStatus.kotSent:
-        statusColor = Colors.blue;
+        statusColor = Colors.green;
         statusStr = 'KOT Sent';
         break;
       case TableStatus.billRequested:
-        statusColor = Colors.red;
+        statusColor = Colors.green;
         statusStr = 'Bill Requested';
         break;
     }
@@ -268,43 +278,51 @@ class _TablesGridTabState extends State<TablesGridTab> {
       onTap: () {
         _debouncer.run(() => _handleTableTap(table));
       },
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: statusColor.withOpacity(0.5), width: 2),
+          color: const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: table.status == TableStatus.available ? Colors.transparent : statusColor, 
+            width: 1.5
+          ),
           boxShadow: [
-            BoxShadow(
-              color: statusColor.withOpacity(0.1), 
-              blurRadius: 10, 
-              offset: const Offset(0, 4)
-            )
+            if (table.status != TableStatus.available)
+              BoxShadow(
+                color: statusColor.withOpacity(0.2), 
+                blurRadius: 8, 
+                offset: const Offset(0, 2)
+              )
           ]
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(table.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
+            Text(table.name, style: TextStyle(
+              fontSize: 15, 
+              fontWeight: FontWeight.bold,
+              color: table.status == TableStatus.available ? Colors.white : statusColor
+            )),
+            const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: statusColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 statusStr,
-                style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 9),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.people_outline, size: 16, color: Colors.grey),
+                Icon(Icons.people_outline, size: 12, color: Colors.grey.shade500),
                 const SizedBox(width: 4),
-                Text('${table.capacity} pax', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                Text('${table.capacity}p', style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
               ],
             )
           ],
@@ -315,30 +333,93 @@ class _TablesGridTabState extends State<TablesGridTab> {
 
   void _handleTableTap(TableModel table) {
     if (table.status == TableStatus.available) {
+      final nameController = TextEditingController();
+      final phoneController = TextEditingController();
       showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text("Start order for ${table.name}?"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context), 
-              child: const Text('Cancel')
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => MenuScreen(table: table)));
-              }, 
-              child: const Text('Confirm')
-            ),
-          ]
-        )
-      );
+          context: context,
+          builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1E1E1E),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Text("Start order for ${table.name}?",
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: "Customer Name",
+                      labelStyle: TextStyle(color: Colors.white70),
+                      enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white24)),
+                      focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFE7FF12))),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: "Contact Number",
+                      labelStyle: TextStyle(color: Colors.white70),
+                      enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white24)),
+                      focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFE7FF12))),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel',
+                        style: TextStyle(color: Colors.white54))),
+                ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      final cart = context.read<CartProvider>();
+                      cart.setTable(table.id);
+                      cart.setCustomerInfo(nameController.text,
+                          phone: phoneController.text);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => MenuScreen(
+                                    table: table,
+                                    customerName: nameController.text.isEmpty
+                                        ? "Walk-in"
+                                        : nameController.text,
+                                    customerPhone: phoneController.text,
+                                  )));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE7FF12),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Confirm',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+              ]));
     } else {
       if (table.currentOrderId != null) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => OrderSummaryScreen(table: table, orderId: table.currentOrderId!)));
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => OrderSummaryScreen(
+                    table: table, orderId: table.currentOrderId!)));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: No active order found on this table')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Error: No active order found on this table')));
       }
     }
   }

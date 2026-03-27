@@ -20,7 +20,7 @@ class _CartViewContentState extends State<CartViewContent> {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.black,
         borderRadius: widget.isBottomSheet ? const BorderRadius.vertical(top: Radius.circular(24)) : null,
       ),
       padding: const EdgeInsets.only(top: 16),
@@ -32,9 +32,9 @@ class _CartViewContentState extends State<CartViewContent> {
                 width: 40,
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)),
               ),
-            const Text('Your Order', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text('Your Order', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
             const SizedBox(height: 16),
             Expanded(
               child: Consumer<CartProvider>(
@@ -59,7 +59,7 @@ class _CartViewContentState extends State<CartViewContent> {
                           cart.removeItem(cartItem);
                         },
                         child: ListTile(
-                          title: Text(cartItem.item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          title: Text(cartItem.item.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                           subtitle: cartItem.specialInstructions.isNotEmpty
                               ? Text('Note: ${cartItem.specialInstructions}', style: const TextStyle(color: Colors.redAccent))
                               : null,
@@ -75,22 +75,22 @@ class _CartViewContentState extends State<CartViewContent> {
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                     visualDensity: VisualDensity.compact,
-                                    icon: const Icon(Icons.remove_circle_outline, size: 18),
+                                    icon: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.white60),
                                     onPressed: () => cart.updateQuantity(cartItem, cartItem.quantity - 1),
                                   ),
                                   const SizedBox(width: 4),
-                                  Text('${cartItem.quantity}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                  Text('${cartItem.quantity}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
                                   const SizedBox(width: 4),
                                   IconButton(
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                     visualDensity: VisualDensity.compact,
-                                    icon: const Icon(Icons.add_circle_outline, size: 18),
+                                    icon: const Icon(Icons.add_circle_outline, size: 18, color: Color(0xFFE7FF12)),
                                     onPressed: () => cart.updateQuantity(cartItem, cartItem.quantity + 1),
                                   ),
                                 ],
                               ),
-                              Text('\$${cartItem.totalPrice.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Theme.of(context).colorScheme.primary)),
+                              Text('₹${cartItem.totalPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFE7FF12))),
                             ],
                           ),
                         ),
@@ -108,8 +108,8 @@ class _CartViewContentState extends State<CartViewContent> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text('\$${cart.totalAmount.toStringAsFixed(2)}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                      const Text('Total:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Text('₹${cart.totalAmount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
                     ],
                   ),
                 );
@@ -125,13 +125,13 @@ class _CartViewContentState extends State<CartViewContent> {
                       onPressed: cart.items.isEmpty || _isSubmitting ? null : () => _placeOrder(cart, context),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Colors.white,
+                        backgroundColor: const Color(0xFFE7FF12),
+                        foregroundColor: Colors.black,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       child: _isSubmitting 
-                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Text('Place Order (Send KOT)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                          : const Text('PLACE ORDER (SEND KOT)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     );
                   }
                 ),
@@ -167,6 +167,10 @@ class _CartViewContentState extends State<CartViewContent> {
       final auth = context.read<AuthService>();
       final restaurantId = auth.restaurantId;
       final restaurantName = auth.restaurantName ?? "LDMA POS";
+      final cashierName = auth.userName ?? 'Cashier';
+      final customerName = cart.customerName ?? 'Walk-in';
+      final customerPhone = cart.customerPhone ?? '';
+      final waiterName = cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter';
 
       if (tableDoc.exists && tableDoc.data()?['currentOrderId'] != null) {
         orderId = tableDoc.data()!['currentOrderId'];
@@ -181,7 +185,10 @@ class _CartViewContentState extends State<CartViewContent> {
         batch.set(orderRef, {
           'tableId': cart.tableId,
           'tableName': (tableDoc.data() as Map<String, dynamic>)['name'] ?? 'Unknown',
-          'waiterName': 'Waiter',
+          'waiterName': waiterName,
+          'customerName': customerName,
+          'customerPhone': customerPhone,
+          'cashierName': cashierName,
           'status': 'active',
           'restaurantId': restaurantId,
           'createdAt': FieldValue.serverTimestamp(),
@@ -196,6 +203,7 @@ class _CartViewContentState extends State<CartViewContent> {
 
       final kotRef = firestore.collection('kots').doc();
       final kotId = kotRef.id;
+      final kotNumber = kotId.substring(0, 6).toUpperCase();
 
       final kotItems = cart.items.map((cartItem) => {
         'menuItemId': cartItem.item.id,
@@ -209,11 +217,15 @@ class _CartViewContentState extends State<CartViewContent> {
         'orderId': orderId,
         'tableId': cart.tableId,
         'tableName': (tableDoc.data() as Map<String, dynamic>)['name'] ?? 'Unknown',
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        'waiterName': waiterName,
+        'cashierName': cashierName,
         'status': 'Pending',
         'restaurantId': restaurantId,
         'items': kotItems,
         'createdAt': FieldValue.serverTimestamp(),
-        'kotNumber': kotId.substring(0, 6).toUpperCase(),
+        'kotNumber': kotNumber,
       });
 
       final itemsRef = firestore.collection('orders').doc(orderId).collection('items');
@@ -237,6 +249,12 @@ class _CartViewContentState extends State<CartViewContent> {
       // Auto-Print KOT for Waiter
       final kotData = {
         'tableName': tableDoc.exists ? (tableDoc.data() as Map<String, dynamic>)['name'] : 'Unknown',
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        'waiterName': waiterName,
+        'cashierName': cashierName,
+        'kotNumber': kotNumber,
+        'createdAt': DateTime.now(),
         'items': cart.items.map((i) => {
           'name': i.item.name,
           'quantity': i.quantity,

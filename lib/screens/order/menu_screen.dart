@@ -10,7 +10,14 @@ import '../../widgets/cart_view_content.dart';
 
 class MenuScreen extends StatefulWidget {
   final TableModel table;
-  const MenuScreen({super.key, required this.table});
+  final String customerName;
+  final String? customerPhone;
+  const MenuScreen({
+    super.key, 
+    required this.table, 
+    this.customerName = "Walk-in",
+    this.customerPhone,
+  });
 
   @override
   State<MenuScreen> createState() => _MenuScreenState();
@@ -24,16 +31,21 @@ class _MenuScreenState extends State<MenuScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CartProvider>().setTable(widget.table.id);
+      final cart = context.read<CartProvider>();
+      cart.setTable(widget.table.id);
+      cart.setCustomerInfo(widget.customerName, phone: widget.customerPhone);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('Table ${widget.table.name} Menu'),
+        backgroundColor: Colors.black,
+        elevation: 0,
+        title: Text('Table ${widget.table.name} Menu', style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Color(0xFFE7FF12)),
       ),
       body: Column(
         children: [
@@ -73,24 +85,24 @@ class _MenuScreenState extends State<MenuScreen> {
                 },
                 child: Container(
                   padding: const EdgeInsets.all(16),
-                  color: Theme.of(context).colorScheme.primary,
+                  color: const Color(0xFFE7FF12),
                   child: SafeArea(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(16)),
-                          child: Text('${cart.totalItems}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                          child: Text('${cart.totalItems}', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
                         const Row(
                           children: [
-                            Text('View Cart', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text('View Cart', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
                             SizedBox(width: 8),
-                            Icon(Icons.shopping_cart_outlined, color: Colors.white)
+                            Icon(Icons.shopping_cart_outlined, color: Colors.black)
                           ],
                         ),
-                        Text('\$${cart.totalAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text('₹${cart.totalAmount.toStringAsFixed(0)}', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
                       ],
                     ),
                   ),
@@ -108,13 +120,16 @@ class _MenuScreenState extends State<MenuScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore.collection('menu_categories')
           .where('restaurantId', isEqualTo: restaurantId)
-          .orderBy('order').snapshots(),
+          .snapshots(),
       builder: (context, snapshot) {
-        final List<String> categories = ['All', 'Starters', 'Mains', 'Desserts', 'Drinks'];
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-           categories.clear();
-           categories.add('All');
-           categories.addAll(snapshot.data!.docs.map((d) => (d.data() as Map)['name'].toString()));
+        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 8)));
+        
+        final List<String> categories = ['All'];
+        if (snapshot.hasData) {
+           final docs = snapshot.data!.docs.toList();
+           // Optional in-memory sort to avoid index requirement
+           docs.sort((a, b) => (a.get('order') ?? 0).compareTo(b.get('order') ?? 0));
+           categories.addAll(docs.map((d) => d.get('name').toString()));
         }
 
         return SizedBox(
@@ -131,10 +146,11 @@ class _MenuScreenState extends State<MenuScreen> {
                 child: ChoiceChip(
                   label: Text(cat, style: TextStyle(
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? Colors.white : Colors.black87
+                    color: isSelected ? Colors.black : Colors.white70
                   )),
                   selected: isSelected,
-                  selectedColor: Theme.of(context).colorScheme.primary,
+                  selectedColor: const Color(0xFFE7FF12),
+                  backgroundColor: const Color(0xFF1E1E1E),
                   onSelected: (val) {
                     if (val) setState(() => _selectedCategory = cat);
                   },
@@ -161,27 +177,33 @@ class _MenuScreenState extends State<MenuScreen> {
             
         return LayoutBuilder(
           builder: (context, constraints) {
-            int crossAxisCount = 2;
+            int crossAxisCount = 5; // Increased from 2 to 5 for ultra-compact mobile
             if (constraints.maxWidth > 1200) {
-              crossAxisCount = 6;
+              crossAxisCount = 8;
             } else if (constraints.maxWidth > 900) {
-              crossAxisCount = 4;
+              crossAxisCount = 6;
             } else if (constraints.maxWidth > 600) {
-              crossAxisCount = 3;
+              crossAxisCount = 5;
             }
 
             return GridView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(8), // Reduced padding
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: crossAxisCount,
-                childAspectRatio: 0.85,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+                childAspectRatio: 0.72, // Taller to fit vertical stack
+                crossAxisSpacing: 6, // Reduced spacing
+                mainAxisSpacing: 6,
               ),
               itemCount: items.length,
               itemBuilder: (context, index) {
                 final item = items[index];
-                return _buildMenuItemCard(item);
+                return Consumer<CartProvider>(
+                  builder: (context, cart, child) {
+                    final cartIdx = cart.items.indexWhere((i) => i.item.id == item.id);
+                    final quantity = cartIdx >= 0 ? cart.items[cartIdx].quantity : 0;
+                    return _buildMenuItemCard(item, quantity);
+                  },
+                );
               },
             );
           },
@@ -190,49 +212,65 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildMenuItemCard(MenuItem item) {
-    return Card(
-      elevation: 2,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: item.isAvailable ? () => _showQuantitySelector(item) : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              flex: 3,
-              child: Container(
-                color: Colors.grey[200],
-                child: item.imageUrl != null && item.imageUrl!.isNotEmpty
-                    ? Image.network(item.imageUrl!, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.fastfood, size: 48, color: Colors.grey))
-                    : const Icon(Icons.fastfood, size: 48, color: Colors.grey),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('\$${item.price.toStringAsFixed(2)}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 16)),
-                        if (!item.isAvailable)
-                          const Text('Out', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ],
-                    )
-                  ],
+  Widget _buildMenuItemCard(MenuItem item, int quantity) {
+    final bool isSelected = quantity > 0;
+    return Stack(
+      children: [
+        Card(
+          elevation: isSelected ? 4 : 1,
+          clipBehavior: Clip.antiAlias,
+          color: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: isSelected ? const BorderSide(color: Color(0xFFE7FF12), width: 1.5) : BorderSide(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: InkWell(
+            onTap: item.isAvailable ? () {
+              context.read<CartProvider>().addItem(item);
+            } : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    color: Colors.black.withOpacity(0.2),
+                    child: item.imageUrl != null && item.imageUrl!.isNotEmpty
+                        ? Image.network(item.imageUrl!, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.fastfood, size: 28, color: Colors.white24))
+                        : const Icon(Icons.fastfood, size: 28, color: Colors.white24),
+                  ),
                 ),
-              ),
-            )
-          ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('₹${item.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 9)),
+                          if (!item.isAvailable)
+                            const Text('Out', style: TextStyle(color: Colors.red, fontSize: 8, fontWeight: FontWeight.bold)),
+                        ],
+                      )
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
         ),
-      ),
+        if (isSelected)
+          Positioned(
+            top: 4, right: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(color: const Color(0xFFE7FF12), borderRadius: BorderRadius.circular(8)),
+              child: Text("$quantity", style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          ),
+      ],
     );
   }
 
@@ -246,8 +284,9 @@ class _MenuScreenState extends State<MenuScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              backgroundColor: const Color(0xFF1E1E1E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+              title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -255,39 +294,49 @@ class _MenuScreenState extends State<MenuScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.remove_circle_outline, size: 32),
+                        icon: const Icon(Icons.remove_circle_outline, size: 32, color: Color(0xFFE7FF12)),
                         onPressed: quantity > 1 ? () => setState(() => quantity--) : null,
                       ),
                       const SizedBox(width: 16),
-                      Text('$quantity', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                      Text('$quantity', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
                       const SizedBox(width: 16),
                       IconButton(
-                        icon: const Icon(Icons.add_circle_outline, size: 32),
+                        icon: const Icon(Icons.add_circle_outline, size: 32, color: Color(0xFFE7FF12)),
                         onPressed: () => setState(() => quantity++),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Special Instructions',
-                      hintText: 'e.g. No onion',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  Theme(
+                    data: ThemeData.dark().copyWith(
+                      inputDecorationTheme: InputDecorationTheme(
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+                      ),
                     ),
-                    onChanged: (val) => instructions = val,
+                    child: TextField(
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Special Instructions',
+                        hintText: 'e.g. No onion',
+                        hintStyle: TextStyle(color: Colors.white24),
+                      ),
+                      onChanged: (val) => instructions = val,
+                    ),
                   )
                 ],
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
                 ElevatedButton(
                   onPressed: () {
                     context.read<CartProvider>().addItem(item, quantity: quantity, instructions: instructions);
                     Navigator.pop(context);
                   }, 
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: const Color(0xFFE7FF12),
+                    foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
                   ),
                   child: const Text('Add to Cart', style: TextStyle(fontWeight: FontWeight.bold))

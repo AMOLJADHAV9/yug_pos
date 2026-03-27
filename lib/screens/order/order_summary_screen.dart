@@ -23,9 +23,12 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('Table ${widget.table.name} Order'),
+        backgroundColor: Colors.black,
+        elevation: 0,
+        title: Text('Table ${widget.table.name} Order', style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Color(0xFFE7FF12)),
         actions: [
           StreamBuilder<DocumentSnapshot>(
             stream: _firestore.collection('orders').doc(widget.orderId).snapshots(),
@@ -37,14 +40,14 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
               if (status == 'bill_requested') {
                 return const Padding(
                   padding: EdgeInsets.only(right: 16.0),
-                  child: Center(child: Text('Bill Requested', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold))),
+                  child: Center(child: Text('Bill Requested', style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold))),
                 );
               }
 
               return TextButton.icon(
                 onPressed: () => _debouncer.run(() => _requestBill(context)),
-                icon: const Icon(Icons.receipt_long, color: Colors.white),
-                label: const Text('Request Bill', style: TextStyle(color: Colors.white)),
+                icon: const Icon(Icons.receipt_long, color: Color(0xFFE7FF12)),
+                label: const Text('Request Bill', style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
               );
             }
           )
@@ -54,11 +57,14 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
         stream: _firestore.collection('orders').doc(widget.orderId)
             .collection('items')
             .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
-            .orderBy('status').snapshots(),
+            .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           
-          final items = snapshot.data!.docs;
+          final items = snapshot.data!.docs.toList();
+          // Sort in memory to avoid requiring a composite index
+          items.sort((a, b) => (a['status'] ?? '').toString().compareTo((b['status'] ?? '').toString()));
+          
           if (items.isEmpty) return const Center(child: Text('No items yet'));
 
           double totalAmount = 0;
@@ -81,16 +87,16 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: const BoxDecoration(
-                  color: Colors.white,
+                  color: Color(0xFF1A1A1A),
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))]
+                  boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, -5))]
                 ),
                 child: SafeArea(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total:', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                      Text('\$${totalAmount.toStringAsFixed(2)}', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                      const Text('Total:', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Text('₹${totalAmount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
                     ],
                   ),
                 ),
@@ -103,8 +109,10 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
         onPressed: () {
           Navigator.push(context, MaterialPageRoute(builder: (_) => MenuScreen(table: widget.table)));
         },
+        backgroundColor: const Color(0xFFE7FF12),
+        foregroundColor: Colors.black,
         icon: const Icon(Icons.add),
-        label: const Text('Add More'),
+        label: const Text('Add More', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -126,14 +134,19 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.white.withOpacity(0.05)),
+      ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         title: Row(
           children: [
-            Text('${data['quantity']}x', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary, fontSize: 16)),
+            const Text('x', style: TextStyle(color: Colors.white38, fontSize: 14)),
+            Text('${data['quantity']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE7FF12), fontSize: 18)),
             const SizedBox(width: 12),
-            Expanded(child: Text(data['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+            Expanded(child: Text(data['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white))),
           ],
         ),
         subtitle: data['specialInstructions'] != null && data['specialInstructions'].toString().isNotEmpty
@@ -143,7 +156,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text('\$${data['totalPrice'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('₹${data['totalPrice'].toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -160,11 +173,17 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Request Bill?'),
-        content: const Text('This will notify the cashier and lock the order from adding new items.'),
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Request Bill?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+        content: const Text('This will notify the cashier and lock the order from adding new items.', style: TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+            child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold))
+          ),
         ],
       )
     );

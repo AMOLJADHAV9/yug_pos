@@ -23,10 +23,14 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   final TextEditingController _searchController = TextEditingController();
   final List<CartItem> _selectedItems = [];
   final Debouncer _debouncer = Debouncer(milliseconds: 1000);
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
 
   @override
   void dispose() {
     _searchController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
     _debouncer.dispose();
     super.dispose();
   }
@@ -37,45 +41,154 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
     final isMobile = screenWidth < 700;
 
     return Dialog(
-      insetPadding: isMobile ? EdgeInsets.zero : const EdgeInsets.all(24),
+      backgroundColor: const Color(0xFF121212),
+      insetPadding: isMobile ? EdgeInsets.zero : const EdgeInsets.all(16),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(isMobile ? 0 : 16)),
       child: Container(
-        width: isMobile ? screenWidth : screenWidth * 0.9,
-        height: MediaQuery.of(context).size.height * (isMobile ? 1.0 : 0.9),
-        color: Colors.grey[50],
+        width: isMobile ? screenWidth : screenWidth * 0.95,
+        height: MediaQuery.of(context).size.height * (isMobile ? 1.0 : 0.95),
+        color: const Color(0xFF121212),
         child: isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
       ),
     );
   }
 
   Widget _buildMobileLayout() {
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          _buildDialogHeader(),
-          _buildSearchBar(),
-          Container(
-            color: Colors.white,
-            child: TabBar(
-              labelColor: Colors.brown[700],
-              indicatorColor: Colors.brown[700],
-              tabs: [
-                Tab(text: "Menu", icon: const Icon(Icons.restaurant_menu, size: 18)),
-                Tab(
-                  text: "Cart (${_selectedItems.fold(0, (sum, i) => sum + i.quantity)})",
-                  icon: const Icon(Icons.shopping_cart, size: 18),
+    return Column(
+      children: [
+        _buildDialogHeader(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: _buildSearchBar(),
+        ),
+        _buildCategoryStrip(), // NEW: Horizontal categories for mobile
+        Expanded(
+          child: _buildMenuPane(),
+        ),
+        if (_selectedItems.isNotEmpty) _buildMobileBottomCart(),
+      ],
+    );
+  }
+
+  Widget _buildCategoryStrip() {
+    final restaurantId = context.read<AuthService>().restaurantId;
+    return Container(
+      height: 35, // Reduced from 45
+      margin: const EdgeInsets.only(bottom: 4), // Reduced margin
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('menu_categories')
+            .where('restaurantId', isEqualTo: restaurantId)
+            .snapshots(),
+        builder: (context, snapshot) {
+          final List<String> categories = ["All"];
+          if (snapshot.hasData) {
+            final docs = snapshot.data!.docs.toList();
+            docs.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
+            categories.addAll(docs.map((d) => d['name'] as String).toList());
+          }
+
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: categories.length,
+            itemBuilder: (context, index) {
+              final name = categories[index];
+              final isSelected = _selectedCategory == name;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(name, style: TextStyle(
+                    fontSize: 10, // Reduced from 12
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? Colors.black : Colors.white70
+                  )),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4), // Reduced padding
+                  visualDensity: VisualDensity.compact, // Compact chip
+                  selected: isSelected,
+                  selectedColor: const Color(0xFFE7FF12),
+                  backgroundColor: Colors.white.withOpacity(0.05),
+                  onSelected: (val) {
+                    if (val) setState(() => _selectedCategory = name);
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMobileBottomCart() {
+    final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
+    final count = _selectedItems.fold(0, (sum, i) => sum + i.quantity);
+
+    return InkWell(
+      onTap: _showCartDetailsBottomSheet,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE7FF12),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, -5))],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Text("$count ITEMS", style: const TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold)),
+                   Text("₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Row(
+                children: [
+                  const Text("VIEW CART", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_right, color: Colors.black),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCartDetailsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            decoration: const BoxDecoration(
+              color: Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)),
+                ),
+                Expanded(
+                   child: _buildCartPaneWithCallback((updatedItems) {
+                      setState(() {});
+                      setSheetState(() {});
+                   }),
                 ),
               ],
             ),
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [_buildMenuPane(), _buildCartPane()],
-            ),
-          ),
-        ],
+          );
+        }
       ),
     );
   }
@@ -104,10 +217,10 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         _buildCategorySidebar(),
         // FAR RIGHT: CART (Toggleable or persistent)
         Container(
-          width: 300,
+          width: 320,
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(left: BorderSide(color: Colors.grey[200]!)),
+            color: const Color(0xFF1A1A1A),
+            border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
           ),
           child: _buildCartPane(),
         ),
@@ -118,18 +231,18 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   Widget _buildCategorySidebar() {
     final restaurantId = context.read<AuthService>().restaurantId;
     return Container(
-      width: 140,
+      width: 110, // Reduced from 140
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(left: BorderSide(color: Colors.grey[200]!)),
+        color: const Color(0xFF000000),
+        border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
       ),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             width: double.infinity,
-            color: Colors.grey[50],
-            child: const Center(child: Text("Categories", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+            color: Colors.white.withOpacity(0.05),
+            child: const Center(child: Text("Categories", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white54))), // Shortened label
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
@@ -164,24 +277,23 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
     return InkWell(
       onTap: () => setState(() => _selectedCategory = name),
       child: Container(
-        height: 90,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        height: 70, // Reduced from 90
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), // Reduced margin
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF800000).withOpacity(0.1) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? const Color(0xFF800000).withOpacity(0.3) : Colors.grey[100]!),
-          boxShadow: isSelected ? [BoxShadow(color: const Color(0xFF800000).withOpacity(0.1), blurRadius: 4)] : null,
+          color: isSelected ? const Color(0xFFE7FF12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isSelected ? const Color(0xFFE7FF12) : Colors.white.withOpacity(0.05)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             AspectRatio(
-              aspectRatio: 1.5,
+              aspectRatio: 1.8, // More compact
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
                 child: imageUrl != null 
                   ? Image.network(imageUrl, fit: BoxFit.cover)
-                  : Icon(Icons.category, color: isSelected ? const Color(0xFF800000) : Colors.grey[300], size: 24),
+                  : Icon(Icons.category, color: isSelected ? Colors.black : Colors.white24, size: 20), // Smaller icon
               ),
             ),
             Expanded(
@@ -191,9 +303,9 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                   child: Text(
                     name, 
                     style: TextStyle(
-                      fontSize: 10, 
+                      fontSize: 9, // Reduced from 10
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? const Color(0xFF800000) : Colors.black87,
+                      color: isSelected ? Colors.black : Colors.white70,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 1,
@@ -209,23 +321,63 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   }
 
   Widget _buildDialogHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text("Table ${widget.table.name}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Text(DateFormat('dd MMM, hh:mm a').format(DateTime.now()), style: TextStyle(color: Colors.grey, fontSize: 11)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text("Table ${widget.table.name}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                Text(DateFormat('dd MMM, hh:mm a').format(DateTime.now()), style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              ],
+            ),
+            Row(
+              children: [
+                 Text("Total: ₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(0)}", 
+                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
+                 const SizedBox(width: 16),
+                 IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
           ],
         ),
+        const SizedBox(height: 12),
         Row(
           children: [
-             Text("Total: ₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(0)}", 
-               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF800000))),
-             const SizedBox(width: 16),
-             IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+            Expanded(
+              child: TextField(
+                controller: _nameController,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: "Customer Name",
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  filled: true, fillColor: Colors.black,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: "Contact Number",
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  filled: true, fillColor: Colors.black,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
           ],
         ),
       ],
@@ -240,13 +392,14 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           hintText: 'Search items...',
-          prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 20),
+          hintStyle: const TextStyle(color: Colors.white38),
+          prefixIcon: const Icon(Icons.search, color: Color(0xFFE7FF12), size: 20),
           suffixIcon: _searchQuery.isNotEmpty
-            ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); })
+            ? IconButton(icon: const Icon(Icons.clear, size: 18, color: Colors.white54), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); })
             : null,
-          filled: true, fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey[200]!)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey[200]!)),
+          filled: true, fillColor: Colors.black,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
           contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
         ),
         onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
@@ -280,60 +433,77 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                 ? const Center(child: Text("No items available.", style: TextStyle(color: Colors.grey)))
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      final cols = constraints.maxWidth < 400 ? 3 : (constraints.maxWidth < 600 ? 4 : 5);
+                      final cols = constraints.maxWidth < 360 ? 5 : (constraints.maxWidth < 600 ? 6 : 7);
                       return GridView.builder(
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: cols,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                          childAspectRatio: 0.75,
+                          crossAxisSpacing: 4, // Reduced spacing
+                          mainAxisSpacing: 4,
+                          childAspectRatio: 0.72, // Slightly more vertical space for 2 lines
                         ),
                         itemCount: filteredItems.length,
                         itemBuilder: (context, index) {
                           final item = filteredItems[index];
+                          final cartIdx = _selectedItems.indexWhere((i) => i.item.id == item.id);
+                          final count = cartIdx >= 0 ? _selectedItems[cartIdx].quantity : 0;
+                          final isSelected = count > 0;
+
                           return InkWell(
                             onTap: () => setState(() {
-                              final existingIdx = _selectedItems.indexWhere((i) => i.item.id == item.id);
-                              if (existingIdx >= 0) {
-                                _selectedItems[existingIdx].quantity++;
+                              if (cartIdx >= 0) {
+                                _selectedItems[cartIdx].quantity++;
                               } else {
                                 _selectedItems.add(CartItem(item: item));
                               }
                             }),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey[100]!),
-                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 4, offset: const Offset(0, 2))],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[50],
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-                                      ),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: item.imageUrl != null 
-                                          ? Image.network(item.imageUrl!, fit: BoxFit.cover, width: double.infinity)
-                                          : Center(child: Icon(Icons.fastfood, size: 28, color: Colors.grey[200])),
+                            child: Stack(
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFFE7FF12).withOpacity(0.08) : const Color(0xFF1E1E1E),
+                                    borderRadius: BorderRadius.circular(8), // Smaller radius
+                                    border: Border.all(color: isSelected ? const Color(0xFFE7FF12) : Colors.white.withOpacity(0.05)),
                                     ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                        Text("₹${item.price.toStringAsFixed(0)}", style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 9)),
-                                      ],
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(0.4),
+                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
+                                          ),
+                                          clipBehavior: Clip.antiAlias,
+                                          child: item.imageUrl != null 
+                                              ? Image.network(item.imageUrl!, fit: BoxFit.cover, width: double.infinity)
+                                              : const Center(child: Icon(Icons.fastfood, size: 20, color: Colors.white10)), // Smaller icon
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3), // Smaller padding
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                            const SizedBox(height: 2),
+                                            Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(color: isSelected ? const Color(0xFFE7FF12) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 10)),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Positioned(
+                                    top: 2, right: 2,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                      decoration: BoxDecoration(color: const Color(0xFFE7FF12), borderRadius: BorderRadius.circular(8)),
+                                      child: Text("$count", style: const TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold)),
                                     ),
                                   ),
-                                ],
-                              ),
+                              ],
                             ),
                           );
                         },
@@ -348,13 +518,17 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   }
 
   Widget _buildCartPane() {
+    return _buildCartPaneWithCallback(null);
+  }
+
+  Widget _buildCartPaneWithCallback(Function(List<CartItem>)? onChange) {
     return Column(
       children: [
         const Padding(
           padding: EdgeInsets.all(16.0),
-          child: Text("Your Order", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          child: Text("Cart Summary", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white70)),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: Colors.white.withOpacity(0.05)),
 
         Expanded(
           child: _selectedItems.isEmpty
@@ -371,8 +545,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(i.item.name, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                            Text("₹${i.item.price.toStringAsFixed(2)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                            Text(i.item.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis),
+                            Text("₹${i.item.price.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white38, fontSize: 12)),
                           ],
                         ),
                       ),
@@ -388,15 +562,22 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                 _selectedItems[index].quantity--;
                               } else {
                                 _selectedItems.removeAt(index);
+                                if (_selectedItems.isEmpty && Navigator.canPop(context)) {
+                                   Navigator.pop(context);
+                                }
                               }
+                              if (onChange != null) onChange(_selectedItems);
                             }),
                           ),
-                          Text("${i.quantity}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text("${i.quantity}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                           IconButton(
-                            icon: const Icon(Icons.add_circle, color: Colors.green, size: 22),
+                            icon: const Icon(Icons.add_circle, color: Color(0xFFE7FF12), size: 22),
                             constraints: const BoxConstraints(),
                             padding: const EdgeInsets.all(4),
-                            onPressed: () => setState(() => _selectedItems[index].quantity++),
+                            onPressed: () => setState(() {
+                               _selectedItems[index].quantity++;
+                               if (onChange != null) onChange(_selectedItems);
+                            }),
                           ),
                         ],
                       ),
@@ -410,8 +591,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, -5))],
+            color: const Color(0xFF1E1E1E),
+            border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -419,10 +600,10 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("Total:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Text("Total:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   Text(
                     "₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(2)}",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.brown[800]),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12)),
                   ),
                 ],
               ),
@@ -430,12 +611,12 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
               ElevatedButton(
                 onPressed: _selectedItems.isEmpty ? null : () => _debouncer.run(() => _submitOrder()),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[600],
-                  foregroundColor: Colors.white,
+                  backgroundColor: const Color(0xFFE7FF12),
+                  foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text("Place Order (Send KOT)", style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text("PLACE ORDER (SEND KOT)", style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -449,6 +630,9 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
      final waiterDisplayName = auth.role == UserRole.admin ? "Admin (${auth.currentUser?.email?.split('@')[0] ?? 'Admin'})" : "Cashier";
      final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
 
+     final customerName = _nameController.text.trim().isEmpty ? "Walk-in" : _nameController.text.trim();
+     final customerPhone = _phoneController.text.trim();
+
      final firestore = FirebaseFirestore.instance;
      final batch = firestore.batch();
      final orderRef = firestore.collection('orders').doc();
@@ -457,6 +641,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         'tableId': widget.table.id,
         'tableName': widget.table.name,
         'waiterName': waiterDisplayName,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
         'status': 'open',
         'restaurantId': auth.restaurantId,
         'createdAt': FieldValue.serverTimestamp(),
@@ -490,6 +676,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         'orderId': orderRef.id,
         'tableId': widget.table.id,
         'tableName': widget.table.name,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
         'status': 'Pending',
         'restaurantId': auth.restaurantId,
         'createdAt': FieldValue.serverTimestamp(),
@@ -510,6 +698,9 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
 
      final kotData = {
         'tableName': widget.table.name,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        'waiterName': waiterDisplayName,
         'items': _selectedItems.map((i) => {
            'name': i.item.name,
            'quantity': i.quantity,

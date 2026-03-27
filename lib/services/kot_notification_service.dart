@@ -6,11 +6,14 @@ class KotNotificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   bool _isListening = false;
 
-  void startListening() {
+  void startListening(String restaurantId) {
     if (_isListening) return;
     _isListening = true;
 
-    _firestore.collection('kots').where('status', isEqualTo: 'Done').snapshots().listen((snapshot) {
+    _firestore.collection('kots')
+        .where('restaurantId', isEqualTo: restaurantId)
+        .snapshots()
+        .listen((snapshot) {
       for (var change in snapshot.docChanges) {
         if (change.type == DocumentChangeType.modified) {
           final data = change.doc.data();
