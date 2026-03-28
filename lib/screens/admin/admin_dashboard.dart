@@ -52,6 +52,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     super.dispose();
   }
 
+
   void _showMonthSelectionDialog() {
     int selectedYear = DateTime.now().year;
     int selectedMonth = DateTime.now().month;
@@ -116,6 +117,43 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  Future<void> _generateDailyReport() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final restaurantId = context.read<AuthService>().restaurantId;
+      final today = DateTime.now();
+      final startOfDay = DateTime(today.year, today.month, today.day);
+      final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
+
+      final snapshot = await FirebaseFirestore.instance.collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .where('createdAt', isGreaterThanOrEqualTo: startOfDay)
+          .where('createdAt', isLessThanOrEqualTo: endOfDay)
+          .get();
+      
+      if (mounted) Navigator.pop(context);
+      
+      if (snapshot.docs.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records available for today")));
+        return;
+      }
+
+      final orders = snapshot.docs.toList();
+      final dateStr = DateFormat('dd MMM yyyy').format(today);
+      await ReportService.generatePeriodReport("Daily Revenue Report", "Date: $dateStr", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
+    } catch (e) {
+      if (mounted) {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error fetching records: $e")));
+      }
+    }
+  }
+
   Future<void> _generateMonthlyReport(int year, int month) async {
     final startOfMonth = DateTime(year, month, 1);
     final endOfMonth = DateTime(year, month + 1, 0, 23, 59, 59);
@@ -161,15 +199,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  final List<Widget> _tabs = const [
-    RevenueTab(),
-    AnalyticsTab(),
-    UsersTab(),
-    MenuTab(),
-    TablesTab(),
-    OrdersTab(),
-    TakeawayTab(),
-    OnlineOrdersScreen(isTab: true),
+  late final List<Widget> _tabs = [
+    RevenueTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+    const AnalyticsTab(),
+    const UsersTab(),
+    const MenuTab(),
+    const TablesTab(),
+    const OrdersTab(),
+    const TakeawayTab(),
+    const OnlineOrdersScreen(isTab: true),
   ];
 
   static const _navData = [
@@ -241,6 +279,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         const Padding(
                           padding: EdgeInsets.only(left: 16, top: 8, bottom: 4),
                           child: Text("REPORTS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.today, color: Color(0xFFE7FF12)),
+                          title: const Text("Daily Report", style: TextStyle(color: Colors.white70)),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _generateDailyReport();
+                          },
                         ),
                         ListTile(
                           leading: const Icon(Icons.summarize, color: Color(0xFFE7FF12)),
@@ -371,6 +417,34 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           else
                             const SizedBox(height: 16),
                           
+                          
+                          // Daily Report Button
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            child: InkWell(
+                              onTap: _generateDailyReport,
+                              borderRadius: BorderRadius.circular(12),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                child: Row(
+                                  mainAxisAlignment: _isExtended ? MainAxisAlignment.start : MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.file_download, color: Color(0xFFE7FF12), size: 24),
+                                    if (_isExtended) ...[
+                                      const SizedBox(width: 12),
+                                      const Expanded(
+                                        child: Text("Daily Report", 
+                                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                                          overflow: TextOverflow.ellipsis),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
                           // Monthly Report Button
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

@@ -112,29 +112,36 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: channel.toString().toLowerCase() == 'zomato' ? Colors.red.withOpacity(0.2) : Colors.orange.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: channel.toString().toLowerCase() == 'zomato' ? Colors.red.withOpacity(0.2) : Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(channel.toString().toUpperCase(), 
+                              style: TextStyle(color: channel.toString().toLowerCase() == 'zomato' ? Colors.redAccent : Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
-                          child: Text(channel.toString().toUpperCase(), 
-                            style: TextStyle(color: channel.toString().toLowerCase() == 'zomato' ? Colors.redAccent : Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(width: 8),
-                        Text("#${data['externalId'] ?? id.substring(0, 5)}", 
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(DateFormat('hh:mm a').format(createdAt), style: const TextStyle(color: Colors.white38, fontSize: 12)),
-                  ],
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text("#${data['externalId'] ?? id.substring(0, 5)}", 
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(DateFormat('hh:mm a').format(createdAt), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(

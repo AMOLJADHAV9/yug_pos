@@ -59,9 +59,18 @@ class _CartViewContentState extends State<CartViewContent> {
                           cart.removeItem(cartItem);
                         },
                         child: ListTile(
-                          title: Text(cartItem.item.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                          isThreeLine: cartItem.specialInstructions.isNotEmpty,
+                          title: Text(cartItem.item.name, 
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           subtitle: cartItem.specialInstructions.isNotEmpty
-                              ? Text('Note: ${cartItem.specialInstructions}', style: const TextStyle(color: Colors.redAccent))
+                              ? Text('Note: ${cartItem.specialInstructions}', 
+                                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                )
                               : null,
                           trailing: Column(
                             mainAxisSize: MainAxisSize.min,

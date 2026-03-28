@@ -7,7 +7,8 @@ import '../../../services/auth_service.dart';
 import 'package:provider/provider.dart';
 
 class RevenueTab extends StatefulWidget {
-  const RevenueTab({super.key});
+  final Function(int)? onTabRequested;
+  const RevenueTab({super.key, this.onTabRequested});
 
   @override
   State<RevenueTab> createState() => _RevenueTabState();
@@ -77,10 +78,10 @@ class _RevenueTabState extends State<RevenueTab> {
                 return GridView.count(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: width > 900 ? 5 : (width > 600 ? 5 : 2), 
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: width > 600 ? 1.0 : 1.1,
+                  crossAxisCount: width > 900 ? 5 : (width > 600 ? 4 : (width < 300 ? 2 : 3)), 
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: width > 600 ? 1.0 : 0.95,
                   children: [
                     _buildStatCard(
                       "Daily Total", 
@@ -88,6 +89,7 @@ class _RevenueTabState extends State<RevenueTab> {
                       Icons.currency_rupee, 
                       Colors.green,
                       subtitle: "Total ($billCount Bills)",
+                      onTap: () => _showTodayDetails('Total'),
                     ),
                     _buildStatCard(
                       "Table Sales", 
@@ -95,6 +97,7 @@ class _RevenueTabState extends State<RevenueTab> {
                       Icons.restaurant, 
                       const Color(0xFFE7FF12),
                       subtitle: "$tableCount Orders",
+                      onTap: () => _showTodayDetails('table'),
                     ),
                     _buildStatCard(
                       "Takeaway Sales", 
@@ -102,6 +105,7 @@ class _RevenueTabState extends State<RevenueTab> {
                       Icons.shopping_bag, 
                       Colors.purpleAccent,
                       subtitle: "$takeawayCount Orders",
+                      onTap: () => _showTodayDetails('takeaway'),
                     ),
                     _buildStatCard(
                       "Online Sales", 
@@ -109,9 +113,10 @@ class _RevenueTabState extends State<RevenueTab> {
                       Icons.cloud_download, 
                       Colors.blueAccent,
                       subtitle: "$onlineCount Z/S Orders",
+                      onTap: () => _showTodayDetails('online'),
                     ),
-                    _buildActiveTablesCard(firestore, restaurantId),
-                    _buildPendingKotsCard(firestore, restaurantId),
+                    _buildActiveTablesCard(firestore, restaurantId, onTap: () => widget.onTabRequested?.call(4)), // Still switch tab for tables
+                    _buildPendingKotsCard(firestore, restaurantId, onTap: () => _showTodayDetails('Pending')),
                   ],
                 );
               },
@@ -147,63 +152,72 @@ class _RevenueTabState extends State<RevenueTab> {
           child: Icon(icon, color: const Color(0xFFE7FF12), size: 18),
         ),
         const SizedBox(width: 12),
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        Flexible(
+          child: Text(title, 
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(child: Divider(color: const Color(0xFFE7FF12).withOpacity(0.2), thickness: 1.5)),
       ],
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, {String? subtitle, Color? subtitleColor}) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, {String? subtitle, Color? subtitleColor, VoidCallback? onTap}) {
     final themeYellow = const Color(0xFFE7FF12);
-    return Container(
-      height: 100, // Fixed height
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: themeYellow.withOpacity(0.05), width: 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: themeYellow.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: themeYellow.withOpacity(0.05), width: 1),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min, // Ensure we stay compact
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: themeYellow.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, color: subtitleColor ?? themeYellow, size: 12),
               ),
-              child: Icon(icon, color: subtitleColor ?? themeYellow, size: 12),
-            ),
-            const SizedBox(height: 6),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(title,
-                style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(height: 2),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(value,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: subtitleColor ?? themeYellow)),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 1),
+              const SizedBox(height: 6),
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(subtitle,
-                  style: TextStyle(color: subtitleColor ?? Colors.grey, fontSize: 8, fontWeight: FontWeight.w500)),
+                child: Text(title,
+                  style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
               ),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: subtitleColor ?? themeYellow)),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 1),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(subtitle,
+                    style: TextStyle(color: subtitleColor ?? Colors.grey, fontSize: 8, fontWeight: FontWeight.w500)),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildActiveTablesCard(FirebaseFirestore firestore, String? restaurantId) {
+  Widget _buildActiveTablesCard(FirebaseFirestore firestore, String? restaurantId, {VoidCallback? onTap}) {
     return StreamBuilder<QuerySnapshot>(
       stream: firestore.collection('tables')
           .where('restaurantId', isEqualTo: restaurantId)
@@ -211,12 +225,12 @@ class _RevenueTabState extends State<RevenueTab> {
           .snapshots(),
       builder: (context, snapshot) {
         final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
-        return _buildStatCard("Occupied", count.toString(), Icons.table_bar, Colors.green);
+        return _buildStatCard("Occupied", count.toString(), Icons.table_bar, Colors.green, onTap: onTap);
       },
     );
   }
 
-  Widget _buildPendingKotsCard(FirebaseFirestore firestore, String? restaurantId) {
+  Widget _buildPendingKotsCard(FirebaseFirestore firestore, String? restaurantId, {VoidCallback? onTap}) {
     return StreamBuilder<QuerySnapshot>(
       stream: firestore.collection('orders')
           .where('restaurantId', isEqualTo: restaurantId)
@@ -224,7 +238,7 @@ class _RevenueTabState extends State<RevenueTab> {
           .snapshots(),
       builder: (context, snapshot) {
         final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
-        return _buildStatCard("Pending", count.toString(), Icons.timer, Colors.red);
+        return _buildStatCard("Pending", count.toString(), Icons.timer, Colors.red, onTap: onTap);
       },
     );
   }
@@ -317,58 +331,126 @@ class _RevenueTabState extends State<RevenueTab> {
     );
   }
 
+  void _showTodayDetails(String type) async {
+    final auth = context.read<AuthService>();
+    final restaurantId = auth.restaurantId;
+    final today = DateTime.now();
+    final startOfDay = DateTime(today.year, today.month, today.day);
+
+    showDialog(context: context, builder: (context) => const Center(child: CircularProgressIndicator()));
+
+    try {
+      Query query = FirebaseFirestore.instance.collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId);
+      
+      if (type == 'Pending') {
+        query = query.where('status', whereIn: ['open', 'kotSent', 'Preparing']);
+      } else {
+        query = query.where('createdAt', isGreaterThanOrEqualTo: startOfDay);
+        if (type != 'Total') {
+          query = query.where('orderType', isEqualTo: type.toLowerCase());
+        }
+      }
+
+      final snapshot = await query.get();
+      if (mounted) Navigator.pop(context);
+
+      _showOrderDetailDialog("Today's ${type[0].toUpperCase()}${type.substring(1)} Details", snapshot.docs);
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
+  }
+
   void _showOrderDetailDialog(String title, List<QueryDocumentSnapshot> orders) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
+        titlePadding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(title, 
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
           ],
         ),
-        content: SizedBox(
-          width: 500,
-          child: orders.isEmpty 
-              ? const Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text("No orders found for this period.", style: TextStyle(color: Colors.white54)),
-                )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: orders.length,
-                  separatorBuilder: (context, index) => Divider(color: Colors.white.withOpacity(0.05)),
-                  itemBuilder: (context, index) {
-                    final data = orders[index].data() as Map<String, dynamic>;
-                    final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-                    final amount = (data['totalAmount'] ?? 0).toDouble();
-                    final waiter = data['waiterName'] ?? 'Unknown';
-                    final customer = data['customerName'] ?? 'Walk-in';
+        contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Divider(color: Colors.white10),
+              Flexible(
+                child: orders.isEmpty 
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.receipt_long, size: 48, color: Colors.white10),
+                            SizedBox(height: 16),
+                            Text("No orders found today.", style: TextStyle(color: Colors.white54)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: orders.length,
+                        itemBuilder: (context, index) {
+                          final data = orders[index].data() as Map<String, dynamic>;
+                          final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+                          final amount = (data['totalAmount'] ?? 0).toDouble();
+                          final waiter = data['waiterName'] ?? 'Unknown';
+                          final customer = data['customerName'] ?? 'Walk-in';
 
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.receipt_long, color: Color(0xFFE7FF12), size: 20),
+                          final titlePrefix = data['tableName'] ?? 
+                                               (data['orderType']?.toString().toUpperCase() ?? 
+                                                data['orderSource']?.toString().toUpperCase() ?? 'ORDER');
+                          
+                          return Column(
+                            children: [
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                                  child: const Icon(Icons.receipt_long, color: Color(0xFFE7FF12), size: 20),
+                                ),
+                                title: Text("$titlePrefix - ₹${amount.toStringAsFixed(0)}", 
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text("$customer • $waiter", 
+                                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                    Text(DateFormat('hh:mm a').format(createdAt), style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                                  ],
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.print, color: Color(0xFFE7FF12), size: 18),
+                                  onPressed: () => ReportService.printOrderReceipt(data, orders[index].id),
+                                ),
+                              ),
+                              Divider(color: Colors.white.withOpacity(0.05)),
+                            ],
+                          );
+                        },
                       ),
-                      title: Text("${data['tableName']} - ₹${amount.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("$customer • $waiter", style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                          Text(DateFormat('hh:mm a').format(createdAt), style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                        ],
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.print, color: Color(0xFFE7FF12), size: 18),
-                        onPressed: () => ReportService.printOrderReceipt(data, orders[index].id),
-                      ),
-                    );
-                  },
-                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

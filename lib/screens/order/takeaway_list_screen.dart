@@ -81,7 +81,13 @@ class _TakeawayListScreenState extends State<TakeawayListScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(data['customerName'] ?? 'Walk-in', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                Expanded(
+                  child: Text(
+                    "${data['customerName'] ?? 'Walk-in'} (${(data['items'] as List?)?.length ?? 0} items)", 
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(

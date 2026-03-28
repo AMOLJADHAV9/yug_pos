@@ -148,7 +148,7 @@ class _TablesTabState extends State<TablesTab> {
                       crossAxisCount: crossAxis, 
                       crossAxisSpacing: 6, 
                       mainAxisSpacing: 6,
-                      childAspectRatio: isMobile ? 0.65 : 1.0, 
+                      childAspectRatio: isMobile ? 0.4 : 1.0, 
                     ),
                     itemCount: tables.length,
                     itemBuilder: (context, index) {
@@ -170,33 +170,46 @@ class _TablesTabState extends State<TablesTab> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(child: Text(table.name, style: TextStyle(fontSize: isMobile ? 12 : 14, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis)),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)),
-                                      const SizedBox(width: 2),
-                                      IconButton(icon: const Icon(Icons.delete, size: 10, color: Colors.redAccent), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () {
-                                         _firestore.collection('tables').doc(table.id).delete();
-                                      }),
-                                    ],
-                                  ),
+                                  if (!isMobile) 
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)),
+                                        const SizedBox(width: 2),
+                                        IconButton(icon: const Icon(Icons.delete, size: 10, color: Colors.redAccent), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () {
+                                           _firestore.collection('tables').doc(table.id).delete();
+                                        }),
+                                      ],
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 2),
                               _buildUltraMiniStatus(table.status),
-                              const SizedBox(height: 4),
-                              if (!isMobile) ...[
+                              if (isMobile) ...[
+                                Text("Sec: ${table.section}", style: const TextStyle(color: Colors.white60, fontSize: 8), overflow: TextOverflow.ellipsis, maxLines: 1),
+                                // Removed capacity here, already at bottom
+                              ] else ...[
                                 Text("Sec: ${table.section}", style: const TextStyle(color: Colors.white60, fontSize: 8), overflow: TextOverflow.ellipsis),
                                 Text("Cap: ${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8)),
                                 const Spacer(),
-                              ] else ...[
-                                const Spacer(),
-                                Text("C:${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8), textAlign: TextAlign.right),
                               ],
                               
-                              const SizedBox(height: 2),
-                              if (isOccupied && table.status != TableStatus.billRequested)
-                                _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table)),
+                              if (isOccupied) ...[
+                                if (isMobile) 
+                                  Row(
+                                    children: [
+                                      if (table.status != TableStatus.billRequested)
+                                        Expanded(child: _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table))),
+                                      if (table.status != TableStatus.billRequested) const SizedBox(width: 2),
+                                      Expanded(child: _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table))),
+                                    ],
+                                  )
+                                else ...[
+                                  if (table.status != TableStatus.billRequested)
+                                    _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table)),
+                                  _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table)),
+                                ],
+                              ],
                               
                               _buildUltraCompactButton("ORDER", Icons.add_shopping_cart, Colors.green, () {
                                 showDialog(
@@ -205,9 +218,21 @@ class _TablesTabState extends State<TablesTab> {
                                   builder: (context) => CommonOrderDialog(table: table),
                                 );
                               }),
-
-                              if (isOccupied)
-                                _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table)),
+                              
+                              if (isMobile) ...[
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), 
+                                      padding: EdgeInsets.zero, 
+                                      constraints: const BoxConstraints(), 
+                                      onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)
+                                    ),
+                                    Text("C:${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8), textAlign: TextAlign.right),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -225,20 +250,20 @@ class _TablesTabState extends State<TablesTab> {
 
   Widget _buildUltraCompactButton(String label, IconData icon, Color color, VoidCallback onPressed) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3.0),
-      child: SizedBox(
-        width: double.infinity,
-        height: 22,
-        child: ElevatedButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon, size: 8),
-          label: Text(label, style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color,
-            foregroundColor: Colors.white,
-            padding: EdgeInsets.zero,
-            elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      padding: const EdgeInsets.only(bottom: 2.0),
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Container(
+          width: double.infinity,
+          height: 18,
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 7, color: Colors.white),
+              const SizedBox(width: 1),
+              Text(label, style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis),
+            ],
           ),
         ),
       ),

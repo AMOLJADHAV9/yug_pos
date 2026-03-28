@@ -56,12 +56,6 @@ class _OrdersTabState extends State<OrdersTab> {
             },
           ),
           const SizedBox(width: 8),
-          if (MediaQuery.of(context).size.width < 768)
-            IconButton(
-              icon: const Icon(Icons.logout, color: Colors.white54),
-              onPressed: () => context.read<AuthService>().logout(),
-              tooltip: "Logout",
-            ),
           const SizedBox(width: 8),
         ],
       ),
@@ -164,7 +158,12 @@ class _OrdersTabState extends State<OrdersTab> {
                             children: [
                               Row(
                                 children: [
-                                  Text("Order #${doc.id.substring(0,6)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
+                                  Flexible(
+                                    child: Text("Order #${doc.id.substring(0,6)}", 
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
                                   if (isTakeaway)
                                     Container(
                                       margin: const EdgeInsets.only(left: 8),
@@ -460,7 +459,9 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("Place New Order", style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                Expanded(
+                  child: Text("Place New Order", style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis),
+                ),
                 IconButton(icon: const Icon(Icons.close, color: Colors.white70), onPressed: () => Navigator.pop(context)),
               ],
             ),
@@ -732,9 +733,16 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
                       final i = _selectedItems[index];
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        title: Text(i.item.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white), overflow: TextOverflow.ellipsis),
-                        subtitle: Text("₹${i.item.price} x ${i.quantity}", style: const TextStyle(fontSize: 10, color: Colors.white54)),
+                        dense: false, // Changed from true to allow more height
+                        isThreeLine: true,
+                        title: Text(i.item.name, 
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white), 
+                          maxLines: 1, 
+                          overflow: TextOverflow.ellipsis),
+                        subtitle: Text("₹${i.item.price} x ${i.quantity}", 
+                          style: const TextStyle(fontSize: 10, color: Colors.white54),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
