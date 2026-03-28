@@ -148,7 +148,7 @@ class _TablesTabState extends State<TablesTab> {
                       crossAxisCount: crossAxis, 
                       crossAxisSpacing: 6, 
                       mainAxisSpacing: 6,
-                      childAspectRatio: isMobile ? 0.4 : 1.0, 
+                      childAspectRatio: isMobile ? 0.55 : 1.0, 
                     ),
                     itemCount: tables.length,
                     itemBuilder: (context, index) {
@@ -162,7 +162,7 @@ class _TablesTabState extends State<TablesTab> {
                           border: Border.all(color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.5) : const Color(0xFFE7FF12).withOpacity(0.1), width: 0.8),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(2),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -183,7 +183,7 @@ class _TablesTabState extends State<TablesTab> {
                                     ),
                                 ],
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 1),
                               _buildUltraMiniStatus(table.status),
                               if (isMobile) ...[
                                 Text("Sec: ${table.section}", style: const TextStyle(color: Colors.white60, fontSize: 8), overflow: TextOverflow.ellipsis, maxLines: 1),
@@ -255,7 +255,7 @@ class _TablesTabState extends State<TablesTab> {
         onTap: onPressed,
         child: Container(
           width: double.infinity,
-          height: 18,
+          height: 16,
           decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
