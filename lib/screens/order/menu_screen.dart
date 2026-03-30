@@ -10,13 +10,9 @@ import '../../widgets/cart_view_content.dart';
 
 class MenuScreen extends StatefulWidget {
   final TableModel table;
-  final String customerName;
-  final String? customerPhone;
   const MenuScreen({
     super.key, 
     required this.table, 
-    this.customerName = "Walk-in",
-    this.customerPhone,
   });
 
   @override
@@ -32,8 +28,8 @@ class _MenuScreenState extends State<MenuScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final cart = context.read<CartProvider>();
-      cart.setTable(widget.table.id);
-      cart.setCustomerInfo(widget.customerName, phone: widget.customerPhone);
+      cart.setTable(widget.table.id, widget.table.name);
+      cart.setCustomerName("Walk-in");
     });
   }
 
@@ -117,10 +113,10 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Widget _buildCategoryTabs() {
     final restaurantId = context.read<AuthService>().restaurantId;
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('menu_categories')
+    return FutureBuilder<QuerySnapshot>(
+      future: _firestore.collection('menu_categories')
           .where('restaurantId', isEqualTo: restaurantId)
-          .snapshots(),
+          .get(),
       builder: (context, snapshot) {
         if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 8)));
         
@@ -165,10 +161,10 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Widget _buildMenuGrid() {
     final restaurantId = context.read<AuthService>().restaurantId;
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('menu_items')
+    return FutureBuilder<QuerySnapshot>(
+      future: _firestore.collection('menu_items')
           .where('restaurantId', isEqualTo: restaurantId)
-          .snapshots(),
+          .get(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         

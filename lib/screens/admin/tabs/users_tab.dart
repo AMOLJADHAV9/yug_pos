@@ -1,95 +1,114 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 
-class UsersTab extends StatelessWidget {
+class UsersTab extends StatefulWidget {
   const UsersTab({super.key});
 
   @override
+  State<UsersTab> createState() => _UsersTabState();
+}
+
+class _UsersTabState extends State<UsersTab> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  @override
   Widget build(BuildContext context) {
-    final restaurantId = context.read<AuthService>().restaurantId;
+    final restaurantId = context.watch<AuthService>().restaurantId;
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('restaurantId', isEqualTo: restaurantId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        
-        final users = snapshot.data?.docs ?? [];
+    if (restaurantId == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+      );
+    }
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isMobile = constraints.maxWidth < 600;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: kIsWeb 
+        ? FutureBuilder<QuerySnapshot>(
+            future: _firestore.collection('users').where('restaurantId', isEqualTo: restaurantId).get(),
+            builder: (context, snapshot) => _buildUsersContent(context, snapshot, restaurantId),
+          )
+        : StreamBuilder<QuerySnapshot>(
+            stream: _firestore.collection('users').where('restaurantId', isEqualTo: restaurantId).snapshots(),
+            builder: (context, snapshot) => _buildUsersContent(context, snapshot, restaurantId),
+          ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddUserDialog(context),
+        icon: const Icon(Icons.person_add_alt_1, color: Colors.black),
+        label: const Text("Add Staff Member", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFFE7FF12),
+      ),
+    );
+  }
 
-            return SingleChildScrollView(
-              padding: EdgeInsets.all(isMobile ? 16 : 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header Row / Column
-                  if (isMobile)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("Staff Management", 
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => _showAddUserDialog(context),
-                            icon: const Icon(Icons.add, size: 18, color: Colors.black),
-                            label: const Text("Create Staff Member", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE7FF12),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  else
+  Widget _buildUsersContent(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot, String? restaurantId) {
+    if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.white54)));
+    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+    
+    final users = snapshot.data?.docs ?? [];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Row / Column
+              if (isMobile)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text("Staff Management", 
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
-                        ElevatedButton.icon(
-                          onPressed: () => _showAddUserDialog(context),
-                          icon: const Icon(Icons.add, size: 18, color: Colors.black),
-                          label: const Text("Create Staff Member", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE7FF12),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+                          onPressed: () => setState(() {}),
+                          tooltip: "Refresh Staff",
                         ),
                       ],
                     ),
-                  const SizedBox(height: 32),
-                  
-                  _buildSectionHeader("Active Staff Members", Icons.people, Colors.blue),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                  ],
+                )
+              else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Staff Management", 
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+                      onPressed: () => setState(() {}),
+                      tooltip: "Refresh Staff",
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 32),
+              
+              _buildSectionHeader("Active Staff Members", Icons.people, Colors.blue),
+              const SizedBox(height: 16),
 
-                  // Responsive List Layout
-                  if (isMobile)
-                    _buildStaffMobileList(users, context)
-                  else
-                    _buildStaffDesktopTable(users, context),
-                  
-                  const SizedBox(height: 40),
-                ],
-              ),
-            );
-          }
+              // Responsive List Layout
+              if (isMobile)
+                _buildStaffMobileList(users, context)
+              else
+                _buildStaffDesktopTable(users, context),
+              
+              const SizedBox(height: 40),
+            ],
+          ),
         );
-      },
+      }
     );
   }
 
@@ -255,6 +274,7 @@ class UsersTab extends StatelessWidget {
     Color color = const Color(0xFFE7FF12);
     if (role == 'admin') color = Colors.purpleAccent;
     if (role == 'cashier') color = Colors.orangeAccent;
+    
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

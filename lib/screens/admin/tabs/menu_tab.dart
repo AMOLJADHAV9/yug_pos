@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
@@ -45,30 +46,55 @@ class _MenuTabState extends State<MenuTab> {
   }
 
   Widget _buildCategoriesView() {
-    final auth = context.read<AuthService>();
+    final auth = context.watch<AuthService>();
     final restaurantId = auth.restaurantId;
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('menu_categories')
-          .where('restaurantId', isEqualTo: restaurantId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        
-        final cats = (snapshot.data?.docs ?? []).toList();
-        // Sort in memory to avoid requiring a composite index
-        cats.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
+    if (restaurantId == null) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+    }
 
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                   const Text("Menu Categories", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+    return kIsWeb 
+      ? FutureBuilder<QuerySnapshot>(
+          future: _firestore.collection('menu_categories').where('restaurantId', isEqualTo: restaurantId).get(),
+          builder: (context, snapshot) => _buildCategoriesContent(context, snapshot, restaurantId),
+        )
+      : StreamBuilder<QuerySnapshot>(
+          stream: _firestore.collection('menu_categories').where('restaurantId', isEqualTo: restaurantId).snapshots(),
+          builder: (context, snapshot) => _buildCategoriesContent(context, snapshot, restaurantId),
+        );
+  }
+
+  Widget _buildCategoriesContent(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot, String? restaurantId) {
+    if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+    
+    final cats = (snapshot.data?.docs ?? []).toList();
+    // Sort in memory to avoid requiring a composite index
+    cats.sort((a, b) => (a['order'] ?? 0).compareTo(b['order'] ?? 0));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+               Expanded(
+                 child: const Text("Menu Categories", 
+                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                   maxLines: 1,
+                   overflow: TextOverflow.ellipsis,
+                 ),
+               ),
+               Row(
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                   IconButton(
+                     icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12), size: 18),
+                     onPressed: () => setState(() {}),
+                     tooltip: "Refresh Categories",
+                   ),
+                   const SizedBox(width: 8),
                    ElevatedButton.icon(
                      onPressed: () => _showCategoryDialog(restaurantId: restaurantId),
                      icon: const Icon(Icons.add, size: 16, color: Colors.black),
@@ -78,201 +104,222 @@ class _MenuTabState extends State<MenuTab> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                      ),
                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: cats.isEmpty 
-                ? const Center(child: Text("No categories yet. Add one to get started!"))
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: cats.length,
-                    itemBuilder: (context, index) {
-                      final data = cats[index].data() as Map<String, dynamic>;
-                      final id = cats[index].id;
-                      final visible = data['isVisible'] ?? true;
-                      const Color accentColor = Colors.deepPurple;
+                 ],
+               ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: cats.isEmpty 
+            ? const Center(child: Text("No categories yet. Add one to get started!"))
+            : ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: cats.length,
+                itemBuilder: (context, index) {
+                  final data = cats[index].data() as Map<String, dynamic>;
+                  final id = cats[index].id;
+                  final visible = data['isVisible'] ?? true;
+                  const Color accentColor = Colors.deepPurple;
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E1E1E),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withOpacity(0.05)),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                                child: Center(
-                                  child: Text("${data['order'] ?? 0}", style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 16)),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(data['name'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
-                                    const SizedBox(height: 2),
-                                    Text(visible ? "VISIBLE" : "HIDDEN", style: TextStyle(color: visible ? const Color(0xFFE7FF12) : Colors.red, fontSize: 9, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.edit_note, color: const Color(0xFFE7FF12).withOpacity(0.7), size: 20),
-                                onPressed: () => _showCategoryDialog(id: id, initialData: data, restaurantId: restaurantId),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                onPressed: () => _firestore.collection('menu_categories').doc(id).delete(),
-                              ),
-                            ],
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                            child: Center(
+                              child: Text("${data['order'] ?? 0}", style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-            ),
-          ],
-        );
-      },
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(data['name'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                                const SizedBox(height: 2),
+                                Text(visible ? "VISIBLE" : "HIDDEN", style: TextStyle(color: visible ? const Color(0xFFE7FF12) : Colors.red, fontSize: 9, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.edit_note, color: const Color(0xFFE7FF12).withOpacity(0.7), size: 20),
+                            onPressed: () => _showCategoryDialog(id: id, initialData: data, restaurantId: restaurantId),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                            onPressed: () => _firestore.collection('menu_categories').doc(id).delete(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+        ),
+      ],
     );
   }
 
   Widget _buildItemsView() {
-    final auth = context.read<AuthService>();
+    final auth = context.watch<AuthService>();
     final restaurantId = auth.restaurantId;
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('menu_items')
-          .where('restaurantId', isEqualTo: restaurantId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        
-        final items = snapshot.data?.docs ?? [];
+    if (restaurantId == null) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+    }
 
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                   const Text("Menu Items", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
-                    Row(
-                      children: [
-                        _buildUrbanPiperSyncButton(restaurantId),
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          onPressed: () => _showItemDialog(restaurantId: restaurantId),
-                          icon: const Icon(Icons.add_circle_outline, size: 16, color: Colors.black),
-                          label: const Text("Add Item", style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                             backgroundColor: const Color(0xFFE7FF12),
-                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isMobile = constraints.maxWidth < 600;
-                  int crossAxis = constraints.maxWidth > 1000 ? 8 : (constraints.maxWidth > 800 ? 7 : (constraints.maxWidth > 600 ? 6 : 5));
-                  
-                  return GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxis,
-                      crossAxisSpacing: 4,
-                      mainAxisSpacing: 4,
-                      childAspectRatio: isMobile ? 1.0 : 0.7,
-                    ),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final data = items[index].data() as Map<String, dynamic>;
-                      final available = data['isAvailable'] ?? true;
-                      const Color accentColor = Color(0xFFE7FF12); // Yellow theme color
+    return kIsWeb 
+      ? FutureBuilder<QuerySnapshot>(
+          future: _firestore.collection('menu_items').where('restaurantId', isEqualTo: restaurantId).get(),
+          builder: (context, snapshot) => _buildItemsContent(context, snapshot, restaurantId),
+        )
+      : StreamBuilder<QuerySnapshot>(
+          stream: _firestore.collection('menu_items').where('restaurantId', isEqualTo: restaurantId).snapshots(),
+          builder: (context, snapshot) => _buildItemsContent(context, snapshot, restaurantId),
+        );
+  }
 
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E1E1E),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withOpacity(0.05)),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    if (data['imageUrl'] != null)
-                                      Image.network(data['imageUrl'], fit: BoxFit.cover)
-                                    else
-                                      Container(color: accentColor.withOpacity(0.05), child: Icon(Icons.restaurant, color: accentColor.withOpacity(0.2), size: 24)),
-                                    if (!available) Container(color: Colors.black45, child: const Center(child: Text("OFF", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 8)))),
-                                    // Top-left Switch overlay
-                                    Positioned(
-                                      top: 2, left: 2, 
-                                      child: Transform.scale(
-                                        scale: 0.5, 
-                                        child: Switch(
-                                          value: available, 
-                                          onChanged: (v) => _firestore.collection('menu_items').doc(items[index].id).update({'isAvailable': v}),
-                                          activeColor: Colors.green,
-                                          inactiveThumbColor: Colors.red,
-                                        ),
-                                      ),
+  Widget _buildItemsContent(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot, String? restaurantId) {
+    if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+    
+    final items = snapshot.data?.docs ?? [];
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+               Expanded(
+                 child: const Text("Menu Items", 
+                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                   maxLines: 1,
+                   overflow: TextOverflow.ellipsis,
+                 ),
+               ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12), size: 18),
+                      onPressed: () => setState(() {}),
+                      tooltip: "Refresh Items",
+                    ),
+                    const SizedBox(width: 8),
+                    _buildUrbanPiperSyncButton(restaurantId),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _showItemDialog(restaurantId: restaurantId),
+                      icon: const Icon(Icons.add_circle_outline, size: 16, color: Colors.black),
+                      label: const Text("Add Item", style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                         backgroundColor: const Color(0xFFE7FF12),
+                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 600;
+              int crossAxis = constraints.maxWidth > 1000 ? 8 : (constraints.maxWidth > 800 ? 7 : (constraints.maxWidth > 600 ? 6 : 5));
+              
+              return GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxis, 
+                  crossAxisSpacing: 4, 
+                  mainAxisSpacing: 4,
+                  childAspectRatio: isMobile ? 1.0 : 0.7, 
+                ),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final data = items[index].data() as Map<String, dynamic>;
+                  final available = data['isAvailable'] ?? true;
+                  const Color accentColor = Color(0xFFE7FF12); // Yellow theme color
+
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (data['imageUrl'] != null)
+                                  Image.network(data['imageUrl'], fit: BoxFit.cover)
+                                else
+                                  Container(color: accentColor.withOpacity(0.05), child: Icon(Icons.restaurant, color: accentColor.withOpacity(0.2), size: 24)),
+                                if (!available) Container(color: Colors.black45, child: const Center(child: Text("OFF", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 8)))),
+                                // Top-left Switch overlay
+                                Positioned(
+                                  top: 2, left: 2, 
+                                  child: Transform.scale(
+                                    scale: 0.5, 
+                                    child: Switch(
+                                      value: available, 
+                                      onChanged: (v) => _firestore.collection('menu_items').doc(items[index].id).update({'isAvailable': v}),
+                                      activeColor: Colors.green,
+                                      inactiveThumbColor: Colors.red,
                                     ),
-                                    Positioned(top: 2, right: 2, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(4)), child: Text("₹${data['price']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.white)))),
+                                  ),
+                                ),
+                                Positioned(top: 2, right: 2, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(4)), child: Text("₹${data['price']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.white)))),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(data['name'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                Text(data['category'] ?? 'Gen', style: TextStyle(color: accentColor.withOpacity(0.8), fontSize: 8, fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    GestureDetector(onTap: () => _showItemDialog(id: items[index].id, initialData: data, restaurantId: restaurantId), child: Icon(Icons.edit, size: 14, color: const Color(0xFFE7FF12).withOpacity(0.7))),
+                                    const SizedBox(width: 12),
+                                    GestureDetector(onTap: () => _firestore.collection('menu_items').doc(items[index].id).delete(), child: Icon(Icons.delete, size: 14, color: Colors.redAccent.withOpacity(0.7))),
                                   ],
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(data['name'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    Text(data['category'] ?? 'Gen', style: TextStyle(color: accentColor.withOpacity(0.8), fontSize: 8, fontWeight: FontWeight.w600)),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        GestureDetector(onTap: () => _showItemDialog(id: items[index].id, initialData: data, restaurantId: restaurantId), child: Icon(Icons.edit, size: 14, color: const Color(0xFFE7FF12).withOpacity(0.7))),
-                                        const SizedBox(width: 12),
-                                        GestureDetector(onTap: () => _firestore.collection('menu_items').doc(items[index].id).delete(), child: Icon(Icons.delete, size: 14, color: Colors.redAccent.withOpacity(0.7))),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        ],
+                      ),
+                    ),
                   );
                 },
-              ),
-            ),
-          ],
-        );
-      },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -472,21 +519,15 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
               TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: "Price (INR)"), keyboardType: TextInputType.number),
               TextField(controller: descCtrl, decoration: const InputDecoration(labelText: "Description (Optional)")),
               const SizedBox(height: 12),
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('menu_categories').where('restaurantId', isEqualTo: widget.restaurantId).snapshots(),
-                builder: (context, snap) {
-                  if (!snap.hasData) return const SizedBox();
-                  final cats = snap.data!.docs;
-                  return DropdownButtonFormField<String>(
-                    dropdownColor: const Color(0xFF2C2C2C),
-                    value: cats.any((d) => d['name'] == selectedCategory) ? selectedCategory : null,
-                    hint: const Text("Select Category", style: TextStyle(color: Colors.white54)),
-                    items: cats.map((d) => DropdownMenuItem(value: d['name'].toString(), child: Text(d['name'], style: const TextStyle(color: Colors.white)))).toList(),
-                    onChanged: (v) => setState(() => selectedCategory = v),
-                    decoration: const InputDecoration(labelText: "Category"),
-                  );
-                },
-              ),
+              kIsWeb 
+                ? FutureBuilder<QuerySnapshot>(
+                    future: FirebaseFirestore.instance.collection('menu_categories').where('restaurantId', isEqualTo: widget.restaurantId).get(),
+                    builder: (context, snap) => _buildCategoryDropdown(snap),
+                  )
+                : StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('menu_categories').where('restaurantId', isEqualTo: widget.restaurantId).snapshots(),
+                    builder: (context, snap) => _buildCategoryDropdown(snap),
+                  ),
               const SizedBox(height: 8),
               SwitchListTile(
                 title: const Text("Available in POS", style: TextStyle(fontSize: 14, color: Colors.white)),
@@ -532,6 +573,19 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
           child: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text("Save", style: TextStyle(fontWeight: FontWeight.bold))
         ),
       ],
+    );
+  }
+
+  Widget _buildCategoryDropdown(AsyncSnapshot<QuerySnapshot> snap) {
+    if (!snap.hasData) return const SizedBox();
+    final cats = snap.data!.docs;
+    return DropdownButtonFormField<String>(
+      dropdownColor: const Color(0xFF2C2C2C),
+      value: cats.any((d) => d['name'] == selectedCategory) ? selectedCategory : null,
+      hint: const Text("Select Category", style: TextStyle(color: Colors.white54)),
+      items: cats.map((d) => DropdownMenuItem(value: d['name'].toString(), child: Text(d['name'], style: const TextStyle(color: Colors.white)))).toList(),
+      onChanged: (v) => setState(() => selectedCategory = v),
+      decoration: const InputDecoration(labelText: "Category"),
     );
   }
 }

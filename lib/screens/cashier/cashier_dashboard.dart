@@ -11,6 +11,10 @@ import '../../utils/debouncer.dart';
 import '../../widgets/order_dialog.dart';
 import '../order/takeaway_list_screen.dart';
 import '../order/online_orders_screen.dart'; // New import
+import '../../widgets/takeaway_order_dialog.dart';
+import '../../widgets/cart_view_content.dart';
+import 'revenue_dashboard.dart'; 
+import 'order_history_screen.dart'; // New import
 
 class CashierDashboard extends StatefulWidget {
   const CashierDashboard({super.key});
@@ -23,58 +27,61 @@ class _CashierDashboardState extends State<CashierDashboard> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String? _selectedTableId;
   Map<String, dynamic>? _selectedOrderData;
-  bool _hasCreatedTempTable = false; // Requirement 4.6
+  bool _hasCreatedTempTable = false;
+  String? _selectedCategory;
+  final TextEditingController _itemSearchController = TextEditingController();
+  final Debouncer _debouncer = Debouncer(milliseconds: 300);
+  
+  List<String>? _cachedCategories;
+  List<MenuItem>? _cachedItems;
+  bool _isMenuLoading = false;
+  int _mobileTabIndex = 1;
+  String _selectedOrderType = 'Dine In';
+  String? _selectedTableSection;
+  bool _showMidnightResetBanner = false;
 
+  int _getTotalCartQuantity() {
+    if (_selectedOrderData == null) return 0;
+    final items = _selectedOrderData!['items'] as List<dynamic>? ?? [];
+    return items.fold(0, (sum, i) => sum + ((i['quantity'] as num?)?.toInt() ?? 0));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetch menu once on first mount to avoid triggering setState inside build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final restaurantId = context.read<AuthService>().restaurantId;
+      _fetchMenuData(restaurantId);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.read<AuthService>();
+    final auth = context.watch<AuthService>();
     final restaurantId = auth.restaurantId;
     final restaurantName = auth.restaurantName ?? "YUG POS";
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    final isMobile = MediaQuery.of(context).size.width < 1000;
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(restaurantName.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-            const SizedBox(width: 8),
-            StreamBuilder<void>(
-              stream: FirebaseFirestore.instance.snapshotsInSync(),
-              builder: (context, _) => FutureBuilder<QuerySnapshot>(
-                future: FirebaseFirestore.instance.collection('tables')
-                    .where('restaurantId', isEqualTo: restaurantId)
-                    .limit(1).get(const GetOptions(source: Source.server)),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox.shrink();
-                  if (snapshot.hasError) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.red[100], borderRadius: BorderRadius.circular(4)),
-                      child: const Text("OFFLINE", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
-            ),
-          ],
-        ),
+        centerTitle: true,
+        title: Text("YUG POS", style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 20)),
         actions: isMobile
           ? [
-               IconButton(icon: const Icon(Icons.refresh), onPressed: () => setState(() {}), tooltip: "Refresh Data"),
+               IconButton(icon: const Icon(Icons.refresh), onPressed: () => _fetchMenuData(restaurantId, force: true), tooltip: "Refresh Data"),
             ]
           : [
-              IconButton(icon: const Icon(Icons.receipt_long), onPressed: () => _showOrderOversightDialog(), tooltip: "Recent Bills / Reprint"),
-              IconButton(icon: const Icon(Icons.history), onPressed: () => _showSessionHistory(), tooltip: "Session History"),
-              IconButton(icon: const Icon(Icons.settings), onPressed: () => _showManagementMenu(), tooltip: "Menu/Table Setup"),
-              IconButton(icon: const Icon(Icons.cloud_download, color: Colors.blueAccent), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OnlineOrdersScreen())), tooltip: "Online Orders (Z/S)"), // New action button
-              IconButton(icon: const Icon(Icons.refresh), onPressed: () => setState(() {}), tooltip: "Refresh Data"),
-              const SizedBox(width: 8),
-              IconButton(icon: const Icon(Icons.logout), onPressed: () => context.read<AuthService>().logout(), tooltip: "Logout"),
-              const SizedBox(width: 16),
+               IconButton(icon: const Icon(Icons.receipt_long), onPressed: () => _showOrderOversightDialog(), tooltip: "Recent Bills / Reprint"),
+               IconButton(icon: const Icon(Icons.list_alt, color: Color(0xFFE7FF12)), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryScreen())), tooltip: "All Orders Report"),
+               IconButton(icon: const Icon(Icons.bar_chart, color: Color(0xFFE7FF12)), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RevenueDashboard())), tooltip: "Revenue Dashboard"),
+               IconButton(icon: const Icon(Icons.settings), onPressed: () => _showManagementMenu(), tooltip: "Menu/Table Setup"),
+               IconButton(icon: const Icon(Icons.cloud_download, color: Colors.blueAccent), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OnlineOrdersScreen())), tooltip: "Online Orders (Z/S)"), 
+               IconButton(icon: const Icon(Icons.refresh), onPressed: () => setState(() {}), tooltip: "Refresh Data"),
+               const SizedBox(width: 8),
+               IconButton(icon: const Icon(Icons.logout), onPressed: () => context.read<AuthService>().logout(), tooltip: "Logout"),
+               const SizedBox(width: 16),
             ],
       ),
       drawer: isMobile ? Drawer(
@@ -103,11 +110,19 @@ class _CashierDashboardState extends State<CashierDashboard> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.history),
-              title: const Text('Session History'),
+               leading: const Icon(Icons.list_alt, color: Color(0xFFE7FF12)),
+               title: const Text('All Orders Report'),
+               onTap: () {
+                 Navigator.pop(context);
+                 Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryScreen()));
+               },
+             ),
+             ListTile(
+               leading: const Icon(Icons.bar_chart, color: Color(0xFFE7FF12)),
+              title: const Text('Revenue Dashboard'),
               onTap: () {
                 Navigator.pop(context);
-                _showSessionHistory();
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const RevenueDashboard()));
               },
             ),
             ListTile(
@@ -120,7 +135,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
             ),
             ListTile(
               leading: const Icon(Icons.shopping_bag, color: Color(0xFFE7FF12)),
-              title: const Text('Takeaway'),
+              title: const Text('Tk/Del Orders'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const TakeawayListScreen()));
@@ -143,88 +158,112 @@ class _CashierDashboardState extends State<CashierDashboard> {
           ],
         ),
       ) : null,
+      bottomNavigationBar: (isMobile && _selectedOrderType == 'Dine In') 
+        ? BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: const Color(0xFF1E1E1E),
+            selectedItemColor: const Color(0xFFE7FF12),
+            unselectedItemColor: Colors.grey,
+            currentIndex: _selectedOrderType == 'Dine In' ? _mobileTabIndex : 0,
+            onTap: (index) {
+              if (_selectedOrderType == 'Dine In') {
+                setState(() => _mobileTabIndex = index);
+              }
+            },
+            items: [
+              const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: "Menu"),
+              if (_selectedOrderType == 'Dine In') 
+                const BottomNavigationBarItem(icon: Icon(Icons.numbers), label: "Tables"),
+            ],
+          )
+        : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 800;
-
-          // Sub-header stats bar (shown in all layouts)
-          final statsBar = Container(
-            width: double.infinity,
-            color: const Color(0xFF1A1A1A),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      _buildCollectionCounter(),
-                      const SizedBox(width: 8),
-                      _buildOnlineOrderBadge(), // New Badge
-                    ],
-                  ),
-                  // This stat chip seems out of place here, removing it based on typical UI patterns
-                  // _buildStatChip("Online Order Oversight", Colors.white70),
-                ],
-              ),
-            ),
-          );
+          final isWide = constraints.maxWidth >= 1000;
 
           if (isWide) {
-            // Wide/Desktop: side-by-side layout
             return Row(
               children: [
-                Expanded(
-                  flex: 3,
+                if (_selectedOrderType == 'Dine In') Container(
+                  width: 320,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
+                  ),
                   child: Column(
                     children: [
-                      statsBar,
                       _buildMidnightResetBanner(restaurantId),
-                      Expanded(child: _buildTableGrid(restaurantId)),
+                      Expanded(child: _buildTableZone(restaurantId)),
                     ],
                   ),
                 ),
+                if (_selectedOrderType != 'Dine In')
+                   const SizedBox(width: 20), // Tiny margin for cleaner layout
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    color: Colors.black,
+                    child: Column(
+                      children: [
+                        _buildTopControlBar(restaurantId, restaurantName),
+                        Expanded(child: _buildItemsZone(restaurantId)),
+                      ],
+                    ),
+                  ),
+                ),
                 Container(
-                  width: 400,
+                  width: 380,
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E1E1E),
                     border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
                   ),
-                  child: _buildLiveKotFeed(restaurantId),
+                  child: _buildCartBillingZone(restaurantId),
                 ),
               ],
             );
           } else {
-            // Mobile: Tab layout
-            return DefaultTabController(
-              length: 2,
-              child: Column(
-                children: [
-                  statsBar,
-                  _buildMidnightResetBanner(restaurantId),
-                  Container(
-                    color: const Color(0xFF1A1A1A),
-                    child: const TabBar(
-                      labelColor: Color(0xFFE7FF12),
-                      unselectedLabelColor: Colors.grey,
-                      indicatorColor: Color(0xFFE7FF12),
-                      tabs: const [
-                        Tab(icon: Icon(Icons.table_bar), text: "Tables"),
-                        Tab(icon: Icon(Icons.kitchen), text: "KOT Feed"),
-                      ],
+            return Stack(
+              children: [
+                Column(
+                  children: [
+                    _buildMidnightResetBanner(restaurantId),
+                    Expanded(
+                      child: IndexedStack(
+                        index: _mobileTabIndex,
+                        children: [
+                          _buildItemsZone(restaurantId),
+                          _buildTableZone(restaurantId),
+                        ],
+                      ),
                     ),
+                  ],
+                ),
+                if (_mobileTabIndex == 0)
+                  Consumer<CartProvider>(
+                    builder: (context, cart, child) {
+                      if (cart.items.isEmpty) return const SizedBox.shrink();
+                      return DraggableScrollableSheet(
+                        initialChildSize: 0.11,
+                        minChildSize: 0.11,
+                        maxChildSize: 0.95,
+                        snap: true,
+                        snapSizes: const [0.11, 0.95],
+                        builder: (context, scrollController) {
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E1E1E),
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                              boxShadow: [
+                                BoxShadow(color: Colors.black.withOpacity(0.6), blurRadius: 15, offset: const Offset(0, -5)),
+                              ],
+                            ),
+                            child: CartViewContent(isBottomSheet: true, scrollController: scrollController),
+                          );
+                        },
+                      );
+                    },
                   ),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        _buildTableGrid(restaurantId),
-                        _buildLiveKotFeed(restaurantId),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              ],
             );
           }
         },
@@ -232,9 +271,87 @@ class _CashierDashboardState extends State<CashierDashboard> {
     );
   }
 
-  Widget _buildCollectionCounter() {
-    final auth = context.read<AuthService>();
-    final restaurantId = auth.restaurantId;
+  Widget _buildTopControlBar(String? restaurantId, String restaurantName) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: TextField(
+                controller: _itemSearchController,
+                onChanged: (v) => setState(() {}),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: const InputDecoration(
+                  hintText: "Search menu items...",
+                  hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                  prefixIcon: Icon(Icons.search, color: Colors.grey, size: 18),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          _buildCollectionCounter(restaurantId),
+          const SizedBox(width: 16),
+          _buildOnlineOrderBadge(restaurantId),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 20, color: Color(0xFFE7FF12)),
+            onPressed: () => _fetchMenuData(restaurantId, force: true),
+            tooltip: "Refresh Data",
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOnlineOrderBadge(String? restaurantId) {
+    if (restaurantId == null) return const SizedBox.shrink();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .where('orderSource', isEqualTo: 'urbanpiper')
+          .where('status', isEqualTo: 'pending')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs.length ?? 0;
+        if (count == 0) return const SizedBox.shrink();
+
+        return GestureDetector(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OnlineOrdersScreen())),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(12)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.shopping_bag, size: 14, color: Colors.white),
+                const SizedBox(width: 4),
+                Text("$count NEW", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCollectionCounter(String? restaurantId) {
+    if (restaurantId == null) return const SizedBox.shrink();
+
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final docId = "${restaurantId}_$today";
     
@@ -242,66 +359,28 @@ class _CashierDashboardState extends State<CashierDashboard> {
       stream: _firestore.collection('daily_collections').doc(docId).snapshots(),
       builder: (context, snapshot) {
         double net = 0;
-        double gross = 0;
-        double refunds = 0;
-        int bills = 0;
+        double table = 0;
         double takeaway = 0;
-        int tkCount = 0;
+        double delivery = 0;
 
-        if (snapshot.hasData && snapshot.data!.exists) {
+        if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           net = (data['netCollection'] ?? 0).toDouble();
-          gross = (data['grossCollection'] ?? 0).toDouble();
-          refunds = (data['refundTotal'] ?? 0).toDouble();
-          bills = data['billCount'] ?? 0;
+          table = (data['tableCollection'] ?? 0).toDouble();
           takeaway = (data['takeawayCollection'] ?? 0).toDouble();
-          tkCount = data['takeawayCount'] ?? 0;
+          delivery = (data['deliveryCollection'] ?? 0).toDouble();
         }
 
-        return Row( // Changed from SingleChildScrollView to Row as it's now part of a larger Row
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildStatChip("Net: ₹${net.toStringAsFixed(0)}", Colors.green),
-            _buildStatChip("Tk: ₹${takeaway.toStringAsFixed(0)}", Colors.purple),
-            _buildStatChip("Gross: ₹${gross.toStringAsFixed(0)}", Colors.blue),
-            _buildStatChip("Bills: $bills ($tkCount Tk)", Colors.orange),
-            if (refunds > 0) _buildStatChip("Refunds: ₹${refunds.toStringAsFixed(0)}", Colors.red),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildOnlineOrderBadge() {
-    final auth = context.read<AuthService>();
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('orders')
-          .where('restaurantId', isEqualTo: auth.restaurantId)
-          .where('orderSource', isEqualTo: 'urbanpiper')
-          .where('status', isEqualTo: 'pending')
-          .snapshots(),
-      builder: (context, snapshot) {
-        final count = snapshot.data?.docs.length ?? 0;
-        if (count == 0) return const SizedBox();
-        return GestureDetector(
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OnlineOrdersScreen())),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.red,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(color: Colors.red.withOpacity(0.5), blurRadius: 4, spreadRadius: 1)
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.cloud_download, color: Colors.white, size: 14),
-                const SizedBox(width: 4),
-                Text("$count New Online", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-              ],
-            ),
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row( 
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildStatChip("Net: ₹${net.toStringAsFixed(0)}", Colors.green),
+              _buildStatChip("Dine In: ₹${table.toStringAsFixed(0)}", const Color(0xFFE7FF12)),
+              _buildStatChip("Tk: ₹${takeaway.toStringAsFixed(0)}", Colors.purpleAccent),
+              _buildStatChip("Del: ₹${delivery.toStringAsFixed(0)}", Colors.deepOrange),
+            ],
           ),
         );
       },
@@ -325,10 +404,10 @@ class _CashierDashboardState extends State<CashierDashboard> {
   }
 
   Widget _buildTableGrid(String? restaurantId) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('tables')
+    return FutureBuilder<QuerySnapshot>(
+      future: _firestore.collection('tables')
           .where('restaurantId', isEqualTo: restaurantId)
-          .snapshots(),
+          .get(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         
@@ -365,7 +444,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
   Widget _buildTableCard(TableModel table) {
     final isOccupied = table.status != TableStatus.available;
     final gridWidth = MediaQuery.of(context).size.width;
-    final isMobile = gridWidth < 600;
+    final isMobile = gridWidth < 1000;
 
     return Container(
       decoration: BoxDecoration(
@@ -377,17 +456,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
         ],
       ),
       child: InkWell(
-        onTap: () {
-          if (table.currentOrderId != null) {
-            _showOrderDetailPanel(table);
-          } else {
-             showDialog(
-               context: context,
-               barrierDismissible: false,
-               builder: (context) => CommonOrderDialog(table: table),
-             );
-          }
-        },
+        onTap: () => _handleTableSelect(table),
         borderRadius: BorderRadius.circular(10),
         child: Padding(
           padding: const EdgeInsets.all(4),
@@ -486,10 +555,10 @@ class _CashierDashboardState extends State<CashierDashboard> {
           ),
         ),
         Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: _firestore.collection('kots')
+          child: FutureBuilder<QuerySnapshot>(
+            future: _firestore.collection('kots')
                 .where('restaurantId', isEqualTo: restaurantId)
-                .snapshots(),
+                .get(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -612,68 +681,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
     );
   }
 
-  Widget _buildMidnightResetBanner(String? restaurantId) {
-    if (restaurantId == null) return const SizedBox();
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final docId = "${restaurantId}_$today";
-    return StreamBuilder<DocumentSnapshot>(
-      stream: _firestore.collection('daily_collections').doc(docId).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.exists) return const SizedBox();
-        return Container(
-          width: double.infinity,
-          color: Colors.orange[100],
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-          child: Row(
-            children: [
-              const Icon(Icons.warning, color: Colors.orange),
-              const SizedBox(width: 12),
-              const Expanded(child: Text("New day detected. Please refresh to start a new collection session.")),
-              TextButton(onPressed: () => setState(() {}), child: const Text("REFRESH")),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
-  void _showSessionHistory() {
-    final restaurantId = context.read<AuthService>().restaurantId;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Daily Collection History"),
-        content: SizedBox(
-          width: 500,
-          height: 400,
-          child: StreamBuilder<QuerySnapshot>(
-            stream: _firestore.collection('daily_collections')
-                .where('restaurantId', isEqualTo: restaurantId)
-                .orderBy('lastUpdatedAt', descending: true)
-                .limit(30).snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-              if (snapshot.data!.docs.isEmpty) return const Center(child: Text("No history available"));
 
-              return ListView.builder(
-                itemCount: snapshot.data!.docs.length,
-                itemBuilder: (context, index) {
-                  final doc = snapshot.data!.docs[index];
-                  final data = doc.data() as Map<String, dynamic>;
-                  return ListTile(
-                    title: Text("Date: ${doc.id}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("Bills: ${data['billCount'] ?? 0} | Gross: ₹${(data['grossCollection'] ?? 0).toStringAsFixed(2)}"),
-                    trailing: Text("Net: ₹${(data['netCollection'] ?? 0).toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close"))],
-      ),
-    );
-  }
 
   void _showManagementMenu() {
     showModalBottomSheet(
@@ -730,10 +739,10 @@ class _CashierDashboardState extends State<CashierDashboard> {
            children: [
              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: "Item Name")),
              TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: "Price"), keyboardType: TextInputType.number),
-             StreamBuilder<QuerySnapshot>(
-               stream: _firestore.collection('categories')
+             FutureBuilder<QuerySnapshot>(
+               future: _firestore.collection('menu_categories')
                    .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
-                   .snapshots(),
+                   .get(),
                builder: (context, snap) {
                  if (!snap.hasData) return const SizedBox();
                  return DropdownButtonFormField<String>(
@@ -750,11 +759,12 @@ class _CashierDashboardState extends State<CashierDashboard> {
            ElevatedButton(
              onPressed: () async {
                if (nameCtrl.text.isNotEmpty && priceCtrl.text.isNotEmpty && selectedCategory != null) {
-                  await _firestore.collection('items').add({
+                  await _firestore.collection('menu_items').add({
                     'name': nameCtrl.text.trim(),
                     'price': double.tryParse(priceCtrl.text) ?? 0.0,
                     'category': selectedCategory,
                     'isAvailable': true,
+                    'restaurantId': context.read<AuthService>().restaurantId,
                   });
                   if (mounted) Navigator.pop(context);
                }
@@ -796,128 +806,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
     );
   }
 
-  void _showOrderOversightDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Expanded(
-              child: Text("Order Oversight", 
-                style: TextStyle(fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _showNewOrderDialog();
-              },
-              icon: const Icon(Icons.add_shopping_cart, size: 18),
-              label: const Text("New Order", style: TextStyle(fontSize: 12)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[700], 
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 800,
-          height: 600,
-          child: StreamBuilder<QuerySnapshot>(
-            stream: _firestore.collection('orders')
-                .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-              
-              final todayDate = DateTime.now();
-              bool isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
-              
-              final orders = snapshot.data!.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final billedAt = data['billedAt'] as Timestamp?;
-                final createdAt = data['createdAt'] as Timestamp?;
-                if (billedAt == null && createdAt == null) return false;
-                
-                final relevantDate = (billedAt ?? createdAt!).toDate();
-                return isSameDay(relevantDate, todayDate);
-              }).toList();
 
-              // Sort in memory by billedAt desc (preferred) or createdAt desc
-              orders.sort((a, b) {
-                final aData = a.data() as Map<String, dynamic>;
-                final bData = b.data() as Map<String, dynamic>;
-                final aTime = aData['billedAt'] as Timestamp? ?? aData['createdAt'] as Timestamp?;
-                final bTime = bData['billedAt'] as Timestamp? ?? bData['createdAt'] as Timestamp?;
-                if (aTime == null && bTime == null) return 0;
-                if (aTime == null) return 1;
-                if (bTime == null) return -1;
-                return bTime.compareTo(aTime);
-              });
-
-              if (orders.isEmpty) return const Center(child: Text("No orders found today"));
-
-              return ListView.separated(
-                itemCount: orders.length,
-                separatorBuilder: (_, __) => const Divider(),
-                itemBuilder: (context, index) {
-                  final doc = orders[index];
-                  final data = doc.data() as Map<String, dynamic>;
-                  final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-                  final status = data['status'] ?? 'unknown';
-                  
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: status == 'active' ? Colors.blue : (status == 'billed' ? Colors.green : Colors.grey),
-                      child: const Icon(Icons.receipt, color: Colors.white, size: 20),
-                    ),
-                    title: Text(
-                      "Bill #${data.containsKey('receiptNumber') ? data['receiptNumber'].toString().padLeft(6, '0') : doc.id.substring(0, 6).toUpperCase()} • Table: ${data['tableName'] ?? 'N/A'}", 
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      "₹${data['totalAmount'] ?? 0} • ${DateFormat('hh:mm a').format(createdAt)} • ${status.toUpperCase()}",
-                      style: const TextStyle(fontSize: 11),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (status == 'billed')
-                          IconButton(
-                            icon: const Icon(Icons.print, color: Colors.blue),
-                            onPressed: () => _reprintBill(doc.id, data),
-                            tooltip: "Reprint Bill",
-                          ),
-                        if (status == 'active')
-                          IconButton(
-                            icon: const Icon(Icons.open_in_new, color: Colors.green),
-                            onPressed: () async {
-                              Navigator.pop(context);
-                              // Find the table object to show its panel
-                              final tableSnap = await _firestore.collection('tables').doc(data['tableId']).get();
-                              if (tableSnap.exists) {
-                                _showOrderDetailPanel(TableModel.fromMap(tableSnap.id, tableSnap.data()!));
-                              }
-                            },
-                            tooltip: "View Details",
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close"))],
-      ),
-    );
-  }
 
   void _reprintBill(String orderId, Map<String, dynamic> data) {
     String billNo = orderId.substring(0, 6).toUpperCase();
@@ -948,11 +837,139 @@ class _CashierDashboardState extends State<CashierDashboard> {
      );
   }
 
+  void _showOrderOversightDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.history, color: Color(0xFFE7FF12)),
+            const SizedBox(width: 12),
+            const Text("Order History", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
+          ],
+        ),
+        content: SizedBox(
+          width: 600,
+          height: 500,
+          child: StreamBuilder<QuerySnapshot>(
+            stream: _firestore.collection('orders')
+                .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
+                .orderBy('createdAt', descending: true)
+                .limit(20)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              
+              final orders = snapshot.data!.docs;
+              if (orders.isEmpty) return const Center(child: Text("No recent orders", style: TextStyle(color: Colors.white54)));
+
+              return ListView.separated(
+                itemCount: orders.length,
+                separatorBuilder: (context, index) => const Divider(color: Colors.white10),
+                itemBuilder: (context, index) {
+                  final doc = orders[index];
+                  final data = doc.data() as Map<String, dynamic>;
+                  final orderId = doc.id;
+                  final status = data['status'] ?? 'unknown';
+                  final timestamp = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+                  final customerName = data['customerName'] ?? 'Walk-in';
+                  final paymentMode = data['paymentMode'] ?? (status == 'completed' ? 'Paid' : 'Unpaid');
+                  final items = data['items'] as List? ?? [];
+
+                  return ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                    collapsedIconColor: Colors.white38,
+                    iconColor: const Color(0xFFE7FF12),
+                    title: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("Order #${orderId.substring(orderId.length - 6).toUpperCase()}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text("$customerName • ${DateFormat('hh:mm a').format(timestamp)}", style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text("₹${data['totalAmount']}", style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 14)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (status == 'completed' ? Colors.green : Colors.orange).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                status == 'completed' ? "PAID ($paymentMode)" : status.toUpperCase(),
+                                style: TextStyle(color: status == 'completed' ? Colors.green : Colors.orange, fontSize: 8, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ...items.map((item) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text("${item['quantity']}x ${item['name']}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                  Text("₹${(item['price'] ?? 0) * (item['quantity'] ?? 1)}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                ],
+                              ),
+                            )).toList(),
+                            const Divider(color: Colors.white10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.print, size: 16),
+                                  label: const Text("REPRINT"),
+                                  onPressed: () => _printBillForOrder(orderId),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFFE7FF12),
+                                    side: const BorderSide(color: Color(0xFFE7FF12)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showOrderDetailPanel(TableModel table) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: const Color(0xFF1A1A1A),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.9,
         minChildSize: 0.5,
@@ -979,7 +996,19 @@ class _CashierDashboardState extends State<CashierDashboard> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("TABLE: ${table.name}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("TABLE: ${table.name}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                              Row(
+                                children: [
+                                  Flexible(child: Text("Customer: ${orderData['customerName'] ?? 'Walk-in'}", style: const TextStyle(fontSize: 14, color: Colors.grey), overflow: TextOverflow.ellipsis)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                         Row(
                           children: [
                             ElevatedButton.icon(
@@ -1006,10 +1035,11 @@ class _CashierDashboardState extends State<CashierDashboard> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, -5))],
+                      color: const Color(0xFF1E1E1E),
+                      boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 15, offset: const Offset(0, -5))],
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -1017,39 +1047,39 @@ class _CashierDashboardState extends State<CashierDashboard> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text("Total Amount", style: TextStyle(fontSize: 18, color: Colors.grey)),
-                            Text("₹${total.toStringAsFixed(2)}", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                            const Text("TOTAL AMOUNT", style: TextStyle(fontSize: 14, color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                            Text("₹${total.toStringAsFixed(2)}", style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFFE7FF12))),
                           ],
                         ),
                         const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: () => _showBillingDialog(table, orderData),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE7FF12),
+                            foregroundColor: Colors.black,
+                            minimumSize: const Size(double.infinity, 54),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 8,
+                            shadowColor: const Color(0xFFE7FF12).withOpacity(0.3),
+                          ),
+                          child: const Text("GENERATE BILL", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2)),
+                        ),
+                        const SizedBox(height: 12),
                         Row(
                           children: [
-                             Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.block, color: Colors.red),
-                                label: const Text("CANCEL", style: TextStyle(color: Colors.red, fontSize: 12)),
+                            Expanded(
+                              child: TextButton.icon(
+                                icon: const Icon(Icons.block, color: Colors.redAccent, size: 18),
+                                label: const Text("CANCEL ORDER", style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                                 onPressed: () => _confirmCancelOrder(table, orderData),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            Container(width: 1, height: 16, color: Colors.white10),
                             Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.cleaning_services, color: Colors.orange),
-                                label: const Text("CLEAR", style: TextStyle(color: Colors.orange, fontSize: 12)),
+                              child: TextButton.icon(
+                                icon: const Icon(Icons.cleaning_services, color: Colors.orangeAccent, size: 18),
+                                label: const Text("CLEAR TABLE", style: TextStyle(color: Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                                 onPressed: () => _confirmClearTable(table),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: ElevatedButton(
-                                onPressed: () => _showBillingDialog(table, orderData),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                ),
-                                child: const Text("GENERATE BILL", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                               ),
                             ),
                           ],
@@ -1071,9 +1101,9 @@ class _CashierDashboardState extends State<CashierDashboard> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        color: const Color(0xFF252525),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Row(
         children: [
@@ -1081,12 +1111,12 @@ class _CashierDashboardState extends State<CashierDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text("₹${item['price']} x ${item['quantity']}", style: TextStyle(color: Colors.grey[600])),
+                Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                Text("₹${item['price']} x ${item['quantity']}", style: const TextStyle(color: Colors.white54, fontSize: 12)),
               ],
             ),
           ),
-          Text("₹${(item['price'] * item['quantity']).toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text("₹${(item['price'] * item['quantity']).toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
           const SizedBox(width: 16),
           Row(
             children: [
@@ -1297,10 +1327,10 @@ class _CashierDashboardState extends State<CashierDashboard> {
 
   void _showBillingDialog(TableModel table, Map<String, dynamic> orderData) {
     String selectedPaymentMode = 'Cash';
-    final subtotal = orderData['totalAmount'] ?? 0.0;
-    final cgst = subtotal * 0.025;
-    final sgst = subtotal * 0.025;
-    final grandTotal = subtotal + cgst + sgst;
+    final subtotal = (orderData['totalAmount'] ?? 0.0).toDouble();
+    final cgst = 0.0;
+    final sgst = 0.0;
+    final grandTotal = subtotal;
 
     showDialog(
       context: context,
@@ -1311,11 +1341,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildBillSummaryRow("Subtotal", subtotal),
-              _buildBillSummaryRow("CGST (2.5%)", cgst),
-              _buildBillSummaryRow("SGST (2.5%)", sgst),
+              _buildBillSummaryRow("Total Amount", subtotal, isBold: true),
               const Divider(),
-              _buildBillSummaryRow("GRAND TOTAL", grandTotal, isBold: true),
               const SizedBox(height: 24),
               const Text("Payment Mode:", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
@@ -1361,20 +1388,21 @@ class _CashierDashboardState extends State<CashierDashboard> {
     try {
       final auth = context.read<AuthService>();
       final restaurantId = auth.restaurantId;
-      final restaurantName = auth.restaurantName ?? "LDMA POS";
+      final restaurantName = auth.restaurantName ?? "YUG POS";
       
+      if (restaurantId == null) throw "Unauthorized: Restaurant ID not found.";
+
       final orderRef = _firestore.collection('orders').doc(table.currentOrderId);
       final tableRef = _firestore.collection('tables').doc(table.id);
-      final collectionId = "${restaurantId}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}";
-      final collectionRef = _firestore.collection('daily_collections').doc(collectionId);
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final collectionRef = _firestore.collection('daily_collections').doc("${restaurantId}_$today");
       final counterRef = _firestore.collection('receipt_counters').doc(restaurantId);
 
-      // Pre-fetch KOTs since queries inside transactions are tricky
+      // Pre-fetch KOTs
       final kotsSnap = await _firestore.collection('kots').where('orderId', isEqualTo: table.currentOrderId).get();
 
       int assignedReceiptNo = 0;
 
-      // Perform Atomic Transaction to ensure sequential receipt tracking
       await _firestore.runTransaction((transaction) async {
         final counterSnap = await transaction.get(counterRef);
         assignedReceiptNo = counterSnap.exists ? (counterSnap.data()!['lastReceiptNo'] ?? 0) + 1 : 1;
@@ -1395,35 +1423,50 @@ class _CashierDashboardState extends State<CashierDashboard> {
           'currentOrderId': null,
         });
 
-        // Daily Collection Update logic
-        transaction.set(collectionRef, {
+        // Revenue logic
+        final orderTypeStr = (orderData['orderType'] as String?)?.toLowerCase() ?? '';
+        final orderSource = (orderData['orderSource'] as String?)?.toLowerCase() ?? '';
+        
+        bool isTakeaway = orderTypeStr == 'takeaway' || orderData['tableName'] == 'Takeaway';
+        bool isDelivery = orderTypeStr == 'delivery' || orderSource == 'delivery';
+        bool isOnline = orderTypeStr == 'online' || orderSource == 'zomato' || orderSource == 'swiggy';
+
+        final updates = <String, dynamic>{
           'netCollection': FieldValue.increment(total),
           'grossCollection': FieldValue.increment(subtotal),
-          'tableCollection': FieldValue.increment(total), // Table specifically
           'billCount': FieldValue.increment(1),
-          'tableCount': FieldValue.increment(1),
           'restaurantId': restaurantId,
           'lastUpdatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        };
 
-        // Update global counter
-        transaction.set(counterRef, {
-          'lastReceiptNo': assignedReceiptNo,
-        }, SetOptions(merge: true));
+        if (isOnline) {
+          updates['onlineCollection'] = FieldValue.increment(total);
+          updates['onlineCount'] = FieldValue.increment(1);
+        } else if (isTakeaway) {
+          updates['takeawayCollection'] = FieldValue.increment(total);
+          updates['takeawayCount'] = FieldValue.increment(1);
+        } else if (isDelivery) {
+          updates['deliveryCollection'] = FieldValue.increment(total);
+          updates['deliveryCount'] = FieldValue.increment(1);
+        } else {
+          updates['tableCollection'] = FieldValue.increment(total);
+          updates['tableCount'] = FieldValue.increment(1);
+        }
 
-        // Update KOTs
+        transaction.set(collectionRef, updates, SetOptions(merge: true));
+        transaction.set(counterRef, {'lastReceiptNo': assignedReceiptNo}, SetOptions(merge: true));
+
         for (var doc in kotsSnap.docs) {
           transaction.update(doc.reference, {'status': 'Served'});
         }
       });
 
-      // Generate PDF & Print using the new proper Sequential Receipt Number
       final strReceiptNo = assignedReceiptNo.toString().padLeft(6, '0');
       orderData['receiptNumber'] = assignedReceiptNo;
 
       await ReportService.printFinalBill(
         orderData: orderData,
-        orderId: strReceiptNo, // Use the generated string here!
+        orderId: strReceiptNo,
         subtotal: subtotal,
         cgst: cgst,
         sgst: sgst,
@@ -1433,12 +1476,16 @@ class _CashierDashboardState extends State<CashierDashboard> {
       );
 
       if (mounted) {
-        Navigator.pop(context); // Close dialog
-        Navigator.pop(context); // Close panel
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bill #$strReceiptNo generated and table cleared!")));
+        Navigator.pop(context); // Dialog
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bill #$strReceiptNo printed successfully!"), backgroundColor: Colors.blue));
+        setState(() {
+          _selectedTableId = null;
+          _selectedOrderData = null;
+        });
       }
     } catch (e) {
-       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      debugPrint("Process Billing Error: $e");
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
     }
   }
   void _showAddItemDialog(String orderId, Map<String, dynamic> orderData) {
@@ -1477,10 +1524,10 @@ class _CashierDashboardState extends State<CashierDashboard> {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream: _firestore.collection('menu_items')
+                  child: FutureBuilder<QuerySnapshot>(
+                    future: _firestore.collection('menu_items')
                         .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
-                        .snapshots(),
+                        .get(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                       
@@ -1573,20 +1620,1300 @@ class _CashierDashboardState extends State<CashierDashboard> {
     );
   }
 
+
+
+  Widget _buildTableZone(String? restaurantId) {
+    if (restaurantId == null) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+    }
+    return Container(
+      color: const Color(0xFF1A1A1A),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("TABLES", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.1)),
+                IconButton(
+                  icon: const Icon(Icons.add, color: Color(0xFFE7FF12), size: 20),
+                  onPressed: _showAddTableDialog,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+          // 1. Order Type Switcher (from screenshot)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                children: [
+                  _buildOrderTypeToggle('Dine In', Icons.check, true), 
+                  _buildOrderTypeToggle('Takeaway', Icons.shopping_bag, false),
+                  _buildOrderTypeToggle('Delivery', Icons.delivery_dining, false),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<QuerySnapshot>(
+              future: _firestore.collection('tables')
+                  .where('restaurantId', isEqualTo: restaurantId)
+                  .get(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red, fontSize: 10)));
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                
+                final tables = snapshot.data!.docs.map((doc) => TableModel.fromMap(doc.id, doc.data() as Map<String, dynamic>)).toList();
+                
+                // Extract unique sections (Floors)
+                final floorSections = tables.map((t) => t.section.trim()).toSet().toList();
+                floorSections.sort();
+
+                // Auto-select first section if none selected
+                if (_selectedTableSection == null && floorSections.isNotEmpty) {
+                  // We use a post frame callback to avoid setState during build
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && _selectedTableSection == null) {
+                      setState(() => _selectedTableSection = floorSections.first);
+                    }
+                  });
+                }
+
+                final displayTables = _selectedTableSection == null 
+                  ? tables 
+                  : tables.where((t) => t.section.trim() == _selectedTableSection).toList();
+
+                return Column(
+                  children: [
+                    // Section (Floor) Selector
+                    if (floorSections.isNotEmpty)
+                      Container(
+                        height: 50,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: floorSections.length,
+                          itemBuilder: (context, index) {
+                            final section = floorSections[index];
+                            final isSelected = _selectedTableSection == section;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8.0, top: 4, bottom: 4),
+                              child: ChoiceChip(
+                                label: Text(section.toUpperCase(), 
+                                  style: TextStyle(color: isSelected ? Colors.black : Colors.white70, fontSize: 10, fontWeight: FontWeight.bold)),
+                                selected: isSelected,
+                                selectedColor: const Color(0xFFE7FF12),
+                                backgroundColor: const Color(0xFF2A2A2A),
+                                onSelected: (val) => setState(() => _selectedTableSection = section),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    const Divider(color: Colors.white10),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          const SizedBox(height: 8),
+                          _buildSubGrid(displayTables),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _promptClearTable(String tableId, String currentOrderId) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text("Settle & Clear Table?", style: TextStyle(color: Colors.white)),
+        content: const Text("This will finalize the bill, record the revenue, and clear the table.", style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () async {
+              Navigator.pop(c);
+              
+              // Auto-generate bill/revenue if clear is pressed
+              final doc = await _firestore.collection('orders').doc(currentOrderId).get();
+              if (doc.exists) {
+                final data = doc.data() as Map<String, dynamic>;
+                await _recordRevenueAndUpdateStatus(currentOrderId, data, 'Cash');
+                // Also print the actual receipt!
+                await ReportService.printOrderReceipt(data, currentOrderId);
+              }
+
+              await _firestore.collection('tables').doc(tableId).update({
+                'status': 'available',
+                'currentOrderId': null,
+              });
+              if (_selectedTableId == tableId) {
+                setState(() {
+                  _selectedTableId = null;
+                  _selectedOrderData = null;
+                });
+              }
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Table Cleared & Revenue Saved!"), backgroundColor: Colors.green));
+            },
+            child: const Text("Settle & Clear"),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _startQuickOrder({String? type}) {
+    setState(() {
+      // Generate a pseudo short ID for the quick order
+      final shortId = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
+      _selectedTableId = 'QO-$shortId';
+      if (type != null) _selectedOrderType = type;
+      _selectedOrderData = null;
+      _hasCreatedTempTable = true;
+    });
+  }
+
+  Widget _buildItemsZone(String? restaurantId) {
+    if (restaurantId == null || _isMenuLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+    }
+
+    return Column(
+      children: [
+        // Mobile Search Bar
+        if (MediaQuery.of(context).size.width < 600)
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            color: const Color(0xFF1E1E1E),
+            child: Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: TextField(
+                controller: _itemSearchController,
+                onChanged: (v) => setState(() {}),
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: const InputDecoration(
+                  hintText: "Search menu items...",
+                  hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
+                  prefixIcon: Icon(Icons.search, color: Colors.grey, size: 16),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+          ),
+        _buildCategoryScroll(restaurantId),
+        Expanded(child: _buildItemsGrid(restaurantId)),
+      ],
+    );
+  }
+
+  Future<void> _fetchMenuData(String? restaurantId, {bool force = false}) async {
+    if (restaurantId == null || (_isMenuLoading && !force)) return;
+    
+    if (force) {
+      _cachedItems = null;
+      _cachedCategories = null;
+    }
+    
+    setState(() => _isMenuLoading = true);
+    try {
+      final catsSnap = await _firestore.collection('menu_categories')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .get();
+      final itemsSnap = await _firestore.collection('menu_items')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .get();
+          
+      setState(() {
+        _cachedCategories = catsSnap.docs.map((d) => d['name'].toString()).toList();
+        _cachedItems = itemsSnap.docs.map((doc) => MenuItem.fromMap(doc.id, doc.data() as Map<String, dynamic>)).toList();
+        _isMenuLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isMenuLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error loading menu: $e")));
+      }
+    }
+  }
+
+  Widget _buildCategoryScroll(String? restaurantId) {
+    final categories = _cachedCategories ?? [];
+    
+    return Container(
+      height: 50,
+      color: const Color(0xFF1E1E1E),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _buildCategoryChip("All", _selectedCategory == null);
+          }
+          final cat = categories[index - 1];
+          return _buildCategoryChip(cat, _selectedCategory == cat);
+        },
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip(String label, bool isSelected) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ChoiceChip(
+        label: Text(label, style: TextStyle(color: isSelected ? Colors.black : Colors.white70)),
+        selected: isSelected,
+        selectedColor: const Color(0xFFE7FF12),
+        backgroundColor: const Color(0xFF2A2A2A),
+        onSelected: (selected) {
+          setState(() {
+            _selectedCategory = label == "All" ? null : label;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildItemsGrid(String? restaurantId) {
+    final items = _cachedItems ?? [];
+    final filteredItems = items.where((item) {
+      final matchesSearch = item.name.toLowerCase().contains(_itemSearchController.text.toLowerCase());
+      final matchesCategory = _selectedCategory == null || item.category == _selectedCategory;
+      return matchesSearch && matchesCategory;
+    }).toList();
+
+    return filteredItems.isEmpty
+      ? const Center(child: Text("No items found", style: TextStyle(color: Colors.grey)))
+      : GridView.builder(
+          padding: const EdgeInsets.all(12),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 5,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: filteredItems.length,
+          itemBuilder: (context, index) {
+            final item = filteredItems[index];
+            final isMobile = MediaQuery.of(context).size.width < 600;
+
+            int orderQuantity = 0;
+            if (isMobile) {
+              final cart = context.watch<CartProvider>();
+              final existingIdx = cart.items.indexWhere((i) => i.item.id == item.id);
+              if (existingIdx != -1) orderQuantity = cart.items[existingIdx].quantity;
+            } else if (_selectedOrderData != null) {
+              final cartItems = _selectedOrderData!['items'] as List<dynamic>? ?? [];
+              final existing = cartItems.firstWhere((i) => i['name'] == item.name, orElse: () => null);
+              if (existing != null) orderQuantity = (existing['quantity'] as num?)?.toInt() ?? 0;
+            }
+
+            return GestureDetector(
+              onTap: () => _handleAddItemToSelectedTable(item),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF252525),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: orderQuantity > 0 ? const Color(0xFFE7FF12) : Colors.white12, width: orderQuantity > 0 ? 2 : 1),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                            child: item.imageUrl != null 
+                              ? Image.network(item.imageUrl!, fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(Icons.fastfood, color: Colors.white24, size: 40))
+                              : const Icon(Icons.fastfood, color: Colors.white24, size: 40),
+                          ),
+                          if (orderQuantity > 0)
+                            Positioned(
+                              top: 6,
+                              right: 6,
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFE7FF12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  orderQuantity.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 2),
+                          Text("₹${item.price.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFE7FF12), fontSize: 10, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+  }
+
+  void _handleAddItemToSelectedTable(MenuItem item) async {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    if (isMobile) {
+      context.read<CartProvider>().addItem(item);
+      return;
+    }
+
+    if (_selectedTableId == null) {
+      if (_selectedOrderType == 'Takeaway' || _selectedOrderType == 'Delivery') {
+        _startQuickOrder(type: _selectedOrderType);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Select a table first for Dine In orders!")));
+        return;
+      }
+    }
+    
+    // Logic to add to existing order or create new one
+    if (_selectedOrderData == null) {
+      // Create new order
+      final auth = context.read<AuthService>();
+      String tableName = 'Takeaway/Del';
+      if (!_hasCreatedTempTable) {
+        final tableDoc = await _firestore.collection('tables').doc(_selectedTableId).get();
+        tableName = tableDoc['name'];
+      }
+
+      final newOrderRef = await _firestore.collection('orders').add({
+        'tableId': _selectedTableId,
+        'tableName': tableName,
+        'restaurantId': auth.restaurantId,
+        'items': [{'name': item.name, 'price': item.price, 'quantity': 1}],
+        'totalAmount': item.price,
+        'status': 'pending',
+        'orderSource': _selectedOrderType.toLowerCase().replaceAll(' ', '_'),
+        'orderType': _selectedOrderType,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!_hasCreatedTempTable) {
+        await _firestore.collection('tables').doc(_selectedTableId).update({
+          'status': 'occupied',
+          'currentOrderId': newOrderRef.id,
+        });
+      }
+
+      // Send initial KOT
+      await _firestore.collection('kots').add({
+        'tableId': _selectedTableId,
+        'tableName': tableName,
+        'orderId': newOrderRef.id,
+        'restaurantId': auth.restaurantId,
+        'items': [{'name': item.name, 'quantity': 1}],
+        'waiterName': 'Cashier',
+        'status': 'Pending',
+        'orderType': _selectedOrderType,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      final newDoc = await newOrderRef.get();
+      setState(() {
+        _selectedOrderData = newDoc.data() as Map<String, dynamic>;
+        _selectedOrderData!['id'] = newDoc.id;
+      });
+    } else {
+      // Update existing order
+      final orderId = _selectedOrderData!['id'];
+      List items = List.from(_selectedOrderData!['items']);
+      int existingIdx = items.indexWhere((i) => i['name'] == item.name);
+      
+      if (existingIdx != -1) {
+        items[existingIdx]['quantity'] += 1;
+      } else {
+        items.add({'name': item.name, 'price': item.price, 'quantity': 1});
+      }
+
+      double newTotal = items.fold(0, (sum, i) => sum + (i['price'] * i['quantity']));
+
+      await _firestore.collection('orders').doc(orderId).update({
+        'items': items,
+        'totalAmount': newTotal,
+      });
+
+      setState(() {
+        _selectedOrderData!['items'] = items;
+        _selectedOrderData!['totalAmount'] = newTotal;
+      });
+
+      // Send incremental KOT
+      await _firestore.collection('kots').add({
+        'tableId': _selectedTableId,
+        'tableName': _selectedOrderData!['tableName'],
+        'orderId': orderId,
+        'restaurantId': context.read<AuthService>().restaurantId,
+        'items': [{'name': item.name, 'quantity': 1}],
+        'waiterName': 'Cashier',
+        'status': 'Pending',
+        'orderType': _selectedOrderType,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _selectedOrderData!['items'] = items;
+        _selectedOrderData!['totalAmount'] = newTotal;
+      });
+    }
+  }
+
+  void _increaseItemQuantity(String itemName) {
+    if (_selectedOrderData == null) return;
+    List items = List.from(_selectedOrderData!['items']);
+    int idx = items.indexWhere((i) => i['name'] == itemName);
+    if (idx != -1) {
+      items[idx]['quantity'] += 1;
+      _updateOrderItems(items);
+    }
+  }
+
+  void _decreaseItemQuantity(String itemName) {
+    if (_selectedOrderData == null) return;
+    List items = List.from(_selectedOrderData!['items']);
+    int idx = items.indexWhere((i) => i['name'] == itemName);
+    if (idx != -1) {
+      if (items[idx]['quantity'] > 1) {
+        items[idx]['quantity'] -= 1;
+      } else {
+        items.removeAt(idx);
+      }
+      _updateOrderItems(items);
+    }
+  }
+
+  void _updateOrderItems(List items) async {
+    double newTotal = items.fold(0, (sum, i) => sum + (i['price'] * i['quantity']));
+    final orderId = _selectedOrderData!['id'];
+    
+    setState(() {
+      _selectedOrderData!['items'] = items;
+      _selectedOrderData!['totalAmount'] = newTotal;
+    });
+
+    if (!_hasCreatedTempTable) {
+      await _firestore.collection('orders').doc(orderId).update({
+        'items': items,
+        'totalAmount': newTotal,
+      });
+    }
+  }
+
+  Widget _buildMobileCartTab(String? restaurantId) {
+    return Column(
+      children: [
+        // 1. Order Type Chips
+        Container(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              Expanded(child: _buildMobileSegment('Dine In', Icons.restaurant)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMobileSegment('Takeaway', Icons.shopping_bag)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMobileSegment('Delivery', Icons.delivery_dining)),
+            ],
+          ),
+        ),
+        // 2. Collection Chips
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+          child: _buildCollectionCounter(restaurantId),
+        ),
+        const Divider(color: Colors.white12),
+        // 3. Cart Content
+        Expanded(
+          child: _selectedTableId == null
+            ? Center(
+                child: Text("Add items to start order", style: TextStyle(color: Colors.grey[600])),
+              )
+            : Column(
+                children: [
+                  // Order Header
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("ORDER #${_selectedTableId!.substring(0, 4).toUpperCase()}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                            if (_selectedOrderData != null)
+                              Row(
+                                children: [
+                                  Text("Customer: ${_selectedOrderData!['customerName'] ?? 'Walk-in'}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                ],
+                              ),
+                          ],
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _confirmClearTableById(_selectedTableId!),
+                          icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                          label: const Text("CLEAR", style: TextStyle(color: Colors.white)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.white30),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Items List
+                  Expanded(
+                    child: _selectedOrderData == null || (_selectedOrderData!['items'] as List).isEmpty
+                      ? const Center(child: Text("Cart is empty", style: TextStyle(color: Colors.grey)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: (_selectedOrderData!['items'] as List).length,
+                          itemBuilder: (context, index) {
+                            final item = _selectedOrderData!['items'][index];
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E1E1E),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(item['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                                        const SizedBox(height: 4),
+                                        Text("₹${item['price']} × ${item['quantity']}", style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                                      ],
+                                    ),
+                                  ),
+                                  // +/- Controls
+                                  Row(
+                                    children: [
+                                      _buildQtyBtn(Icons.remove, () => _decreaseItemQuantity(item['name'])),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        child: Text("${item['quantity']}", style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                      ),
+                                      _buildQtyBtn(Icons.add, () => _increaseItemQuantity(item['name'])),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 16),
+                                  SizedBox(
+                                    width: 50,
+                                    child: Text("₹${(item['price'] * item['quantity']).toStringAsFixed(0)}", 
+                                      style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 14), textAlign: TextAlign.right),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                  ),
+                  // Bottom Actions - only show when order data is loaded
+                  if (_selectedOrderData != null)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1C1C1C),
+                      border: Border(top: BorderSide(color: Colors.white12)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text("Total Payable", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                            Text("₹${(_selectedOrderData!['totalAmount'] ?? 0).toStringAsFixed(0)}", 
+                              style: const TextStyle(color: Color(0xFFE7FF12), fontSize: 24, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: _buildActionBtn("KOT", () => _printKOTForOrder(_selectedOrderData!['id']))),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildActionBtn("BILL", () => _printBillForOrder(_selectedOrderData!['id']))),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildActionBtn(_selectedOrderData!['status'] == 'completed' ? "CLEAR TABLE" : "SETTLE", () => _settleOrder(_selectedOrderData!['id']))),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileSegment(String label, IconData icon) {
+    final isSelected = _selectedOrderType == label;
+    return GestureDetector(
+        onTap: () {
+        if (label == 'Takeaway') {
+          showDialog(context: context, builder: (_) => TakeawayOrderDialog(orderType: 'takeaway'));
+        } else if (label == 'Delivery') {
+          showDialog(context: context, builder: (_) => TakeawayOrderDialog(orderType: 'delivery'));
+        } else {
+          setState(() {
+            _selectedOrderType = label;
+            _mobileTabIndex = 0; // Ensure menu tab is active
+          });
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFE7FF12).withOpacity(0.1) : Colors.transparent,
+          border: Border.all(color: isSelected ? const Color(0xFFE7FF12) : Colors.white24),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: isSelected ? const Color(0xFFE7FF12) : Colors.white70),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(fontSize: 12, color: isSelected ? const Color(0xFFE7FF12) : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleTableSelect(TableModel table) async {
+    final isMobile = MediaQuery.of(context).size.width < 1000;
+    if (!isMobile) {
+      final cart = context.read<CartProvider>();
+      cart.setOrderType(OrderType.dineIn);
+      cart.setTable(table.id, table.name);
+    }
+
+    if (table.status != TableStatus.available && table.currentOrderId != null) {
+      final doc = await _firestore.collection('orders').doc(table.currentOrderId).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _selectedOrderData = data;
+          _selectedOrderData!['id'] = doc.id;
+          _selectedTableId = table.id;
+        });
+        
+        // Sync CartProvider for mobile view
+        final cart = context.read<CartProvider>();
+        cart.setOrderType(OrderType.dineIn);
+        cart.setTable(table.id, table.name);
+        cart.setCustomerName(data['customerName'] ?? "Walk-in");
+        
+        final items = data['items'] as List<dynamic>? ?? [];
+        for (var itemData in items) {
+          final menuItemIdx = _cachedItems?.indexWhere((i) => i.name == itemData['name']) ?? -1;
+          if (menuItemIdx >= 0) {
+             cart.addItem(_cachedItems![menuItemIdx], quantity: itemData['quantity'] ?? 1);
+          }
+        }
+        setState(() {
+          _mobileTabIndex = 0; // Switch to Menu for mobile/tablet
+        });
+      }
+    } else {
+      // Instant start order
+      final cart = context.read<CartProvider>();
+      cart.clearCart();
+      cart.setOrderType(OrderType.dineIn);
+      cart.setTable(table.id, table.name);
+      cart.setCustomerName("Walk-in");
+      setState(() {
+        _selectedTableId = table.id;
+        _selectedOrderData = null;
+        _mobileTabIndex = 0; // Switch to Menu for mobile/tablet
+      });
+    }
+  }
+
+
+
+  Widget _buildQtyBtn(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(border: Border.all(color: Colors.grey[800]!), borderRadius: BorderRadius.circular(6)),
+        child: Icon(icon, color: Colors.white70, size: 14),
+      ),
+    );
+  }
+
+  Widget _buildActionBtn(String label, VoidCallback onTap) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        side: const BorderSide(color: Colors.white24),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+    );
+  }
+
+  Widget _buildCartBillingZone(String? restaurantId) {
+    return Column(
+      children: [
+        // ── ORDER TYPE ──────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          color: const Color(0xFF1C1C1C),
+          child: Row(
+            children: [
+              _buildOrderTypeChip('Dine In',  Icons.restaurant),
+              const SizedBox(width: 6),
+              _buildOrderTypeChip('Takeaway', Icons.shopping_bag_outlined),
+              const SizedBox(width: 6),
+              _buildOrderTypeChip('Delivery', Icons.delivery_dining),
+            ],
+          ),
+        ),
+        
+        if (_selectedTableId == null)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _selectedOrderType == 'Dine In' ? Icons.table_bar_outlined : Icons.shopping_cart_outlined, 
+                    color: Colors.white10, 
+                    size: 64,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _selectedOrderType == 'Dine In' 
+                      ? "Select a table to start billing"
+                      : "Add items to start $_selectedOrderType order",
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: const Color(0xFF252525),
+            child: Row(
+              children: [
+                const Icon(Icons.shopping_cart, color: Color(0xFFE7FF12)),
+                const SizedBox(width: 12),
+                Text("ORDER #${_selectedTableId!.substring(0, 4).toUpperCase()}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                _buildUltraCompactButton("CLEAR", Icons.delete, Colors.red, () => _confirmClearTableById(_selectedTableId!)),
+              ],
+            ),
+          ),
+          // ── ITEMS LIST ──────────────────────────────────────────
+          Expanded(
+          child: _selectedOrderData == null 
+            ? const Center(child: Text("Cart is empty", style: TextStyle(color: Colors.grey)))
+            : ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: (_selectedOrderData!['items'] as List).length,
+                separatorBuilder: (_, __) => Divider(color: Colors.white.withOpacity(0.05)),
+                itemBuilder: (context, index) {
+                  final item = _selectedOrderData!['items'][index];
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                            Text("₹${item['price']} x ${item['quantity']}", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      Text("₹${(item['price'] * item['quantity']).toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ],
+                  );
+                },
+              ),
+        ),
+        if (_selectedOrderData != null) ...[
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF252525),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, -5))],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Total Payable", style: TextStyle(color: Colors.grey, fontSize: 16)),
+                    Text("₹${(_selectedOrderData!['totalAmount'] ?? 0).toStringAsFixed(0)}", 
+                      style: const TextStyle(color: Color(0xFFE7FF12), fontSize: 24, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: ElevatedButton(
+                        onPressed: () => _printKOTForOrder(_selectedOrderData!['id']),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text("KOT", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: ElevatedButton(
+                        onPressed: () => _printBillForOrder(_selectedOrderData!['id']),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text("BILL", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: ElevatedButton(
+                        onPressed: () => _settleOrder(_selectedOrderData!['id']),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE7FF12),
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text("SETTLE", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          ], // Closes if (_selectedOrderData != null)
+        ], // Closes else ...[
+      ],
+    );
+  }
+
+  void _confirmClearTableById(String tableId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Clear Table?"),
+        content: const Text("This will delete the current order and free the table."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              if (_hasCreatedTempTable) {
+                if (_selectedOrderData != null && _selectedOrderData!['id'] != null) {
+                  await _firestore.collection('orders').doc(_selectedOrderData!['id']).delete();
+                }
+              } else {
+                final tableDoc = await _firestore.collection('tables').doc(tableId).get();
+                final orderId = tableDoc['currentOrderId'];
+                if (orderId != null) {
+                  await _firestore.collection('orders').doc(orderId).delete();
+                }
+                await _firestore.collection('tables').doc(tableId).update({
+                  'status': 'available',
+                  'currentOrderId': null,
+                });
+              }
+              setState(() {
+                _selectedOrderData = null;
+                _selectedTableId = null;
+                _hasCreatedTempTable = false;
+              });
+              if (mounted) Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("CLEAR"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _printKOTForOrder(String orderId) async {
+    final doc = await _firestore.collection('orders').doc(orderId).get();
+    if (doc.exists) {
+      final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
+      data['kotNumber'] = orderId.substring(0, 4).toUpperCase();
+      await ReportService.printKOTReceipt(data, orderId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("KOT Printed!")));
+    }
+  }
+
+  Future<void> _recordRevenueAndUpdateStatus(String orderId, Map<String, dynamic> data, String paymentMode) async {
+    if (data['status'] == 'completed' || data['status'] == 'paid') return; // Prevent double counting
+    
+    final restaurantId = data['restaurantId'];
+    final total = (data['totalAmount'] as num).toDouble();
+    
+    final orderTypeStr = (data['orderType'] as String?)?.toLowerCase() ?? '';
+    final orderSource = (data['orderSource'] as String?)?.toLowerCase() ?? '';
+    
+    bool isTakeaway = orderTypeStr == 'takeaway' || data['tableName'] == 'Takeaway';
+    bool isDelivery = orderTypeStr == 'delivery' || orderSource == 'delivery';
+    bool isOnline = orderTypeStr == 'online' || orderSource == 'zomato' || orderSource == 'swiggy';
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final collRef = _firestore.collection('daily_collections').doc("${restaurantId}_$today");
+    
+    await _firestore.runTransaction((transaction) async {
+      final collDoc = await transaction.get(collRef);
+      
+      Map<String, dynamic> updates = {
+        'netCollection': FieldValue.increment(total),
+        'grossCollection': FieldValue.increment(total),
+        'billCount': FieldValue.increment(1),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Payment Mode Breakdown
+      if (paymentMode.toLowerCase() == 'upi') {
+        updates['upiCollection'] = FieldValue.increment(total);
+      } else {
+        updates['cashCollection'] = FieldValue.increment(total);
+      }
+      
+      if (isOnline) {
+        updates['onlineCollection'] = FieldValue.increment(total);
+        updates['onlineCount'] = FieldValue.increment(1);
+      } else if (isTakeaway) {
+        updates['takeawayCollection'] = FieldValue.increment(total);
+        updates['takeawayCount'] = FieldValue.increment(1);
+      } else if (isDelivery) {
+        updates['deliveryCollection'] = FieldValue.increment(total);
+        updates['deliveryCount'] = FieldValue.increment(1);
+      } else {
+        updates['tableCollection'] = FieldValue.increment(total);
+        updates['tableCount'] = FieldValue.increment(1);
+      }
+
+      if (!collDoc.exists) {
+        updates['restaurantId'] = restaurantId;
+        updates['netCollection'] = total;
+        updates['grossCollection'] = total;
+        updates['billCount'] = 1;
+
+        // Initialize payment modes
+        if (paymentMode.toLowerCase() == 'upi') {
+          updates['upiCollection'] = total;
+          updates['cashCollection'] = 0.0;
+        } else {
+          updates['cashCollection'] = total;
+          updates['upiCollection'] = 0.0;
+        }
+
+        if (isOnline) { updates['onlineCollection'] = total; updates['onlineCount'] = 1; }
+        else if (isTakeaway) { updates['takeawayCollection'] = total; updates['takeawayCount'] = 1; }
+        else if (isDelivery) { updates['deliveryCollection'] = total; updates['deliveryCount'] = 1; }
+        else { updates['tableCollection'] = total; updates['tableCount'] = 1; }
+        transaction.set(collRef, updates);
+      } else {
+        transaction.update(collRef, updates);
+      }
+    });
+
+    await _firestore.collection('orders').doc(orderId).update({
+      'status': 'completed',
+      'paymentMode': paymentMode,
+      'orderType': _selectedOrderType,
+      'completedAt': FieldValue.serverTimestamp(),
+    });
+    
+    if (_selectedOrderData != null && _selectedOrderData!['id'] == orderId) {
+       setState(() { 
+         _selectedOrderData!['status'] = 'completed'; 
+         _selectedOrderData!['paymentMode'] = paymentMode;
+       });
+    }
+  }
+
+  void _printBillForOrder(String orderId) async {
+    try {
+      final doc = await _firestore.collection('orders').doc(orderId).get();
+      if (!doc.exists) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order not found!")));
+        return;
+      }
+      
+      final orderData = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
+      final restaurantId = orderData['restaurantId'];
+      if (restaurantId == null) throw "Restaurant ID is missing in order data!";
+      
+      final subtotal = (orderData['totalAmount'] as num).toDouble();
+      const cgst = 0.0;
+      const sgst = 0.0;
+      final total = subtotal;
+      
+      final auth = context.read<AuthService>();
+      final restaurantName = auth.restaurantName ?? "YUG POS";
+      
+      int assignedReceiptNo = orderData['receiptNumber'] ?? 0;
+      
+      if (assignedReceiptNo == 0) {
+        // Run a transaction to get the next receipt number sequentially
+        final counterRef = _firestore.collection('receipt_counters').doc(restaurantId);
+        assignedReceiptNo = await _firestore.runTransaction((transaction) async {
+          final counterDoc = await transaction.get(counterRef);
+          int nextNo = 1;
+          if (counterDoc.exists) {
+            nextNo = (counterDoc.data()?['lastReceiptNo'] ?? 0) + 1;
+          }
+          transaction.set(counterRef, {'lastReceiptNo': nextNo}, SetOptions(merge: true));
+          
+          // Also update the order during the same transaction if possible
+          transaction.update(_firestore.collection('orders').doc(orderId), {
+            'receiptNumber': nextNo,
+            'status': 'billed',
+            'subtotal': subtotal,
+            'cgst': cgst,
+            'sgst': sgst,
+            'grandTotal': total,
+            'billedAt': FieldValue.serverTimestamp(),
+          });
+          
+          return nextNo;
+        });
+        orderData['receiptNumber'] = assignedReceiptNo;
+      }
+      
+      final strReceiptNo = assignedReceiptNo.toString().padLeft(6, '0');
+
+      // Update only the basic bill info in Firestore via printBillForOrder transaction
+      // Revenue data will be recorded during _finalizeSettlement after payment mode selection
+      
+      // Print the Premium Final Bill
+      await ReportService.printFinalBill(
+        orderData: orderData,
+        orderId: strReceiptNo,
+        subtotal: subtotal,
+        cgst: cgst,
+        sgst: sgst,
+        total: total,
+        paymentMode: "Cash/Unpaid",
+        hotelName: restaurantName,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bill #$strReceiptNo Printed!"), backgroundColor: Colors.blue));
+      }
+    } catch (e) {
+      debugPrint("Billing Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Billing Failed: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  void _settleOrder(String orderId) async {
+    if (_selectedOrderData == null) return;
+    
+    _showPaymentSelectionDialog(orderId);
+  }
+
+  void _showPaymentSelectionDialog(String orderId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text("Select Payment Method", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("How was the payment made?", style: TextStyle(color: Colors.white70)),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.money, size: 20),
+                    label: const Text("CASH"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[700],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _finalizeSettlement(orderId, 'Cash');
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.qr_code_scanner, size: 20),
+                    label: const Text("UPI"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[700],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _finalizeSettlement(orderId, 'UPI');
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _finalizeSettlement(String orderId, String paymentMode) async {
+    if (_selectedOrderData == null) return;
+    final data = _selectedOrderData!;
+
+    // In case they skipped the BILL button and hit SETTLE directly
+    await _recordRevenueAndUpdateStatus(orderId, data, paymentMode);
+
+    // Physically clear the table
+    if (!_hasCreatedTempTable && _selectedTableId != null) {
+      await _firestore.collection('tables').doc(_selectedTableId).update({
+        'status': 'available',
+        'currentOrderId': null,
+      });
+    }
+
+    setState(() {
+      _selectedOrderData = null;
+      _selectedTableId = null;
+      _hasCreatedTempTable = false;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Table Cleared! Payment recorded via $paymentMode"), 
+          backgroundColor: Colors.green
+        )
+      );
+    }
+  }
+
+  Widget _buildOrderTypeChip(String type, IconData icon) {
+    final isSelected = _selectedOrderType == type;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedOrderType = type),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFE7FF12) : const Color(0xFF2A2A2A),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? const Color(0xFFE7FF12) : Colors.white12,
+              width: 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: isSelected ? Colors.black : Colors.white54),
+              const SizedBox(height: 2),
+              Text(
+                type,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.black : Colors.white54,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildUltraCompactButton(String label, IconData icon, Color color, VoidCallback onPressed) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 3.0),
       child: SizedBox(
-        width: double.infinity,
-        height: 22,
+        height: 28,
         child: ElevatedButton.icon(
           onPressed: onPressed,
-          icon: Icon(icon, size: 8),
-          label: Text(label, style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold)),
+          icon: Icon(icon, size: 12),
+          label: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
             foregroundColor: Colors.white,
-            padding: EdgeInsets.zero,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           ),
@@ -1597,28 +2924,28 @@ class _CashierDashboardState extends State<CashierDashboard> {
 
   Widget _buildUltraMiniStatus(TableStatus status) {
     Color color = Colors.red;
-    String text = "EMP"; // Changed from LIV for red status
-    IconData icon = Icons.cancel_outlined;
+    String text = "FREE";
+    IconData icon = Icons.circle_outlined;
 
     switch (status) {
       case TableStatus.available:
-        color = Colors.red;
-        text = "EMP";
-        icon = Icons.cancel_outlined;
+        color = Colors.grey;
+        text = "FREE";
+        icon = Icons.radio_button_unchecked;
         break;
       case TableStatus.occupied:
-        color = Colors.green;
+        color = Colors.red;
         text = "OCC";
         icon = Icons.people;
         break;
       case TableStatus.kotSent:
-        color = Colors.green;
+        color = Colors.orange;
         text = "ONG";
         icon = Icons.restaurant;
         break;
       case TableStatus.billRequested:
-        color = Colors.green;
-        text = "BIL";
+        color = Colors.blue;
+        text = "BILL";
         icon = Icons.receipt;
         break;
     }
@@ -1633,11 +2960,140 @@ class _CashierDashboardState extends State<CashierDashboard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 7, color: color),
+          Icon(icon, size: 8, color: color),
           const SizedBox(width: 2),
-          Text(text, style: TextStyle(color: color, fontSize: 7, fontWeight: FontWeight.bold)),
+          Text(text, style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.bold)),
         ],
       ),
+    );
+  }
+
+  Widget _buildSubGrid(List<TableModel> tables) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.85,
+      ),
+      itemCount: tables.length,
+      itemBuilder: (context, index) {
+        final table = tables[index];
+        final isSelected = _selectedTableId == table.id;
+        final isOccupied = table.status != TableStatus.available;
+        
+        return GestureDetector(
+          onTap: () => _handleTableSelect(table),
+          onLongPress: isOccupied && table.currentOrderId != null ? () => _promptClearTable(table.id, table.currentOrderId!) : null,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected || isOccupied ? const Color(0xFFE7FF12) : Colors.transparent,
+                width: 1.5,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(table.name, 
+                  style: TextStyle(
+                    color: isSelected || isOccupied ? const Color(0xFFE7FF12) : Colors.white70, 
+                    fontWeight: FontWeight.bold, 
+                    fontSize: 20
+                  )
+                ),
+                const SizedBox(height: 4),
+                Text(table.status == TableStatus.available ? "AVAILABLE" : "OCCUPIED",
+                  style: TextStyle(
+                    color: isSelected || isOccupied ? const Color(0xFFE7FF12).withOpacity(0.5) : Colors.white24, 
+                    fontSize: 10, 
+                    fontWeight: FontWeight.w500
+                  )
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOrderTypeToggle(String label, IconData icon, bool defaultSelected) {
+    bool isSelected = _selectedOrderType == label;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          if (label == 'Takeaway' || label == 'Delivery') {
+             // For Quick Orders, we update state immediately and clear any selected table
+             setState(() {
+               _selectedOrderType = label;
+               _selectedTableId = null;
+               _selectedOrderData = null;
+               _mobileTabIndex = 0;
+             });
+          } else {
+            setState(() {
+              _selectedOrderType = 'Dine In';
+              _selectedTableId = null;
+              _selectedOrderData = null;
+            });
+          }
+        },
+        child: Container(
+          margin: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFE7FF12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: isSelected ? Colors.black : Colors.white70),
+              const SizedBox(width: 6),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label, 
+                    style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    softWrap: false,
+                    maxLines: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  Widget _buildMidnightResetBanner([String? restaurantId]) {
+    if (restaurantId == null) return const SizedBox.shrink();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final docId = "${restaurantId}_$today";
+    return FutureBuilder<DocumentSnapshot?>(
+      future: _firestore.collection('daily_collections').doc(docId).get()
+          .catchError((e) => null),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data == null || snapshot.data!.exists) return const SizedBox.shrink();
+        return Container(
+          width: double.infinity,
+          color: Colors.orange[100],
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Row(
+            children: [
+              const Icon(Icons.warning, color: Colors.orange),
+              const SizedBox(width: 12),
+              const Expanded(child: Text("New day detected. Please refresh to start a new collection session.", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold))),
+              TextButton(onPressed: () => setState(() {}), child: const Text("REFRESH")),
+            ],
+          ),
+        );
+      },
     );
   }
 }

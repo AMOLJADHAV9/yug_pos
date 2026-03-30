@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -19,54 +20,53 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.read<AuthService>();
+    final auth = context.watch<AuthService>();
     final restaurantId = auth.restaurantId;
 
-    Widget body = StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('orders')
-          .where('restaurantId', isEqualTo: restaurantId)
-          .where('orderSource', isEqualTo: 'urbanpiper')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+    if (restaurantId == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+      );
+    }
 
-        final orders = (snapshot.data?.docs ?? []).toList();
-        // Sort in-memory to avoid needing a composite index
-        orders.sort((a, b) {
-          final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
-          final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
-          return (bTime?.millisecondsSinceEpoch ?? 0).compareTo(aTime?.millisecondsSinceEpoch ?? 0);
-        });
+    Widget body = kIsWeb 
+      ? FutureBuilder<QuerySnapshot>(
+          future: _firestore.collection('orders')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .where('orderSource', isEqualTo: 'urbanpiper')
+              .get(),
+          builder: (context, snapshot) => _buildOnlineOrdersList(context, snapshot),
+        )
+      : StreamBuilder<QuerySnapshot>(
+          stream: _firestore.collection('orders')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .where('orderSource', isEqualTo: 'urbanpiper')
+              .snapshots(),
+          builder: (context, snapshot) => _buildOnlineOrdersList(context, snapshot),
+        );
 
-        if (orders.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+    if (widget.isTab) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                 Icon(Icons.cloud_off, size: 64, color: Colors.white.withOpacity(0.1)),
-                 const SizedBox(height: 16),
-                 const Text("No online orders yet.", style: TextStyle(color: Colors.white54)),
-                 const Text("Orders from Zomato/Swiggy will appear here.", style: TextStyle(color: Colors.white24, fontSize: 12)),
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+                  onPressed: () => setState(() {}),
+                  tooltip: "Refresh Online Orders",
+                ),
               ],
             ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: orders.length,
-          itemBuilder: (context, index) {
-            final doc = orders[index];
-            final data = doc.data() as Map<String, dynamic>;
-            return _buildOrderCard(doc.id, data);
-          },
-        );
-      },
-    );
-
-    if (widget.isTab) return body;
-
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
+    
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -77,10 +77,48 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
           IconButton(
             icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
             onPressed: () => setState(() {}),
+            tooltip: "Refresh Online Orders",
           ),
         ],
       ),
       body: body,
+    );
+  }
+
+  Widget _buildOnlineOrdersList(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+    if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+    final orders = (snapshot.data?.docs ?? []).toList();
+    // Sort in-memory to avoid needing a composite index
+    orders.sort((a, b) {
+      final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+      final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+      return (bTime?.millisecondsSinceEpoch ?? 0).compareTo(aTime?.millisecondsSinceEpoch ?? 0);
+    });
+
+    if (orders.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+             Icon(Icons.cloud_off, size: 64, color: Colors.white.withOpacity(0.1)),
+             const SizedBox(height: 16),
+             const Text("No online orders yet.", style: TextStyle(color: Colors.white54)),
+             const Text("Orders from Zomato/Swiggy will appear here.", style: TextStyle(color: Colors.white24, fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: orders.length,
+      itemBuilder: (context, index) {
+        final doc = orders[index];
+        final data = doc.data() as Map<String, dynamic>;
+        return _buildOrderCard(doc.id, data);
+      },
     );
   }
 

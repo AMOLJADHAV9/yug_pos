@@ -15,24 +15,35 @@ class CartItem {
   double get totalPrice => item.price * quantity;
 }
 
+enum OrderType { dineIn, takeaway, delivery }
+
 class CartProvider extends ChangeNotifier {
   final List<CartItem> _items = [];
   String? _tableId;
+  String? _tableName;
   String? _customerName;
-  String? _customerPhone;
   String? _waiterName;
+  OrderType _orderType = OrderType.dineIn;
 
   List<CartItem> get items => _items;
   double get totalAmount => _items.fold(0, (sum, item) => sum + item.totalPrice);
   int get totalItems => _items.fold(0, (sum, item) => sum + item.quantity);
   String? get tableId => _tableId;
+  String? get tableName => _tableName;
   String? get customerName => _customerName;
-  String? get customerPhone => _customerPhone;
   String? get waiterName => _waiterName;
+  OrderType get orderType => _orderType;
 
-  void setCustomerInfo(String name, {String? phone}) {
-    _customerName = name.isEmpty ? "Walk-in" : name;
-    _customerPhone = phone;
+  void setOrderType(OrderType type) {
+    if (_orderType != type) {
+       _orderType = type;
+       if (type != OrderType.dineIn) _tableId = null;
+       notifyListeners();
+    }
+  }
+
+  void setCustomerName(String? name) {
+    _customerName = (name == null || name.isEmpty) ? "Walk-in" : name;
     notifyListeners();
   }
 
@@ -41,9 +52,10 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setTable(String tableId) {
+  void setTable(String tableId, String tableName) {
     if (_tableId != tableId) {
       _tableId = tableId;
+      _tableName = tableName;
       _items.clear();
       notifyListeners();
     }
@@ -79,8 +91,8 @@ class CartProvider extends ChangeNotifier {
     _items.clear();
     _tableId = null;
     _customerName = null;
-    _customerPhone = null;
     _waiterName = null;
+    _orderType = OrderType.dineIn;
     notifyListeners();
   }
 }

@@ -45,11 +45,16 @@ class AuthService extends ChangeNotifier {
     _savedPin = prefs.getString('waiter_pin');
     
     _auth.authStateChanges().listen((user) async {
-      _isLoading = false;
+      // Set loading true immediately to prevent UI from building before restaurantId is set
+      _isLoading = true;
+      notifyListeners();
+
       if (user == null) {
         _isUnlocked = false;
         _restaurantId = null;
+        _role = UserRole.none;
         _stopSessionTimer();
+        _isLoading = false;
       } else {
         try {
           // Logged in but we need to check if they need PIN
@@ -68,13 +73,16 @@ class AuthService extends ChangeNotifier {
             
             _isUnlocked = true;
             _startSessionTimer();
+            _isLoading = false;
           } else {
             _isUnlocked = false; // Must enter PIN
+            _isLoading = false;
           }
         } catch (e) {
           debugPrint("Firestore initialization error: $e");
           // Fallback if firestore fails but auth is ok
           _isUnlocked = _savedPin == null; 
+          _isLoading = false;
         }
       }
       notifyListeners();

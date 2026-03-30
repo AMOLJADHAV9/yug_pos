@@ -23,14 +23,13 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   final TextEditingController _searchController = TextEditingController();
   final List<CartItem> _selectedItems = [];
   final Debouncer _debouncer = Debouncer(milliseconds: 1000);
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
+
+  // Removed _phoneController
 
   @override
   void dispose() {
     _searchController.dispose();
-    _nameController.dispose();
-    _phoneController.dispose();
+
     _debouncer.dispose();
     super.dispose();
   }
@@ -76,10 +75,10 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
     return Container(
       height: 35, // Reduced from 45
       margin: const EdgeInsets.only(bottom: 4), // Reduced margin
-      child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('menu_categories')
+      child: FutureBuilder<QuerySnapshot>(
+        future: FirebaseFirestore.instance.collection('menu_categories')
             .where('restaurantId', isEqualTo: restaurantId)
-            .snapshots(),
+            .get(),
         builder: (context, snapshot) {
           final List<String> categories = ["All"];
           if (snapshot.hasData) {
@@ -245,10 +244,10 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
             child: const Center(child: Text("Categories", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white54))), // Shortened label
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('menu_categories')
+            child: FutureBuilder<QuerySnapshot>(
+              future: FirebaseFirestore.instance.collection('menu_categories')
                   .where('restaurantId', isEqualTo: restaurantId)
-                  .snapshots(),
+                  .get(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const SizedBox();
                 final cats = (snapshot.data?.docs ?? []).toList();
@@ -345,37 +344,12 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Row(
+        const Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: _nameController,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: "Customer Name",
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  filled: true, fillColor: Colors.black,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: "Contact Number",
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  filled: true, fillColor: Colors.black,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Text("Customer: Walk-in", style: TextStyle(color: Colors.white54, fontSize: 13)),
               ),
             ),
           ],
@@ -409,11 +383,11 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
 
   Widget _buildMenuPane() {
     final restaurantId = context.read<AuthService>().restaurantId;
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('menu_items')
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance.collection('menu_items')
           .where('restaurantId', isEqualTo: restaurantId)
           .where('isAvailable', isEqualTo: true)
-          .snapshots(),
+          .get(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -630,8 +604,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
      final waiterDisplayName = auth.role == UserRole.admin ? "Admin (${auth.currentUser?.email?.split('@')[0] ?? 'Admin'})" : "Cashier";
      final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
 
-     final customerName = _nameController.text.trim().isEmpty ? "Walk-in" : _nameController.text.trim();
-     final customerPhone = _phoneController.text.trim();
+     const customerName = "Walk-in";
 
      final firestore = FirebaseFirestore.instance;
      final batch = firestore.batch();
@@ -642,7 +615,6 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         'tableName': widget.table.name,
         'waiterName': waiterDisplayName,
         'customerName': customerName,
-        'customerPhone': customerPhone,
         'status': 'open',
         'restaurantId': auth.restaurantId,
         'createdAt': FieldValue.serverTimestamp(),
@@ -677,7 +649,6 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         'tableId': widget.table.id,
         'tableName': widget.table.name,
         'customerName': customerName,
-        'customerPhone': customerPhone,
         'status': 'Pending',
         'restaurantId': auth.restaurantId,
         'createdAt': FieldValue.serverTimestamp(),
@@ -699,7 +670,6 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
      final kotData = {
         'tableName': widget.table.name,
         'customerName': customerName,
-        'customerPhone': customerPhone,
         'waiterName': waiterDisplayName,
         'items': _selectedItems.map((i) => {
            'name': i.item.name,

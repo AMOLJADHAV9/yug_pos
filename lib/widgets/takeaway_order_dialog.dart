@@ -9,7 +9,12 @@ import '../services/report_service.dart';
 import '../utils/debouncer.dart';
 
 class TakeawayOrderDialog extends StatefulWidget {
-  const TakeawayOrderDialog({super.key});
+  final String orderType; // 'takeaway' or 'delivery'
+  
+  const TakeawayOrderDialog({
+    super.key, 
+    this.orderType = 'takeaway',
+  });
 
   @override
   State<TakeawayOrderDialog> createState() => _TakeawayOrderDialogState();
@@ -21,17 +26,18 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
   final TextEditingController _searchController = TextEditingController();
   final List<CartItem> _selectedItems = [];
   final Debouncer _debouncer = Debouncer(milliseconds: 1000);
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
+
+  // Removed _phoneController
   final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _deliveryBoyController = TextEditingController();
   String _paymentMethod = 'Cash';
 
   @override
   void dispose() {
     _searchController.dispose();
-    _nameController.dispose();
-    _phoneController.dispose();
+
     _addressController.dispose();
+    _deliveryBoyController.dispose();
     _debouncer.dispose();
     super.dispose();
   }
@@ -113,12 +119,12 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text("New Takeaway Order", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                  Text("Parcel / Home Delivery", style: TextStyle(color: Color(0xFFE7FF12), fontSize: 11)),
+                  Text(widget.orderType == 'delivery' ? "New Delivery Order" : "New Takeaway Order", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text(widget.orderType == 'delivery' ? "Home Delivery" : "Parcel / Pickup", style: const TextStyle(color: Color(0xFFE7FF12), fontSize: 11)),
                 ],
               ),
               IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
@@ -132,19 +138,9 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _nameController,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: _inputDecoration("Customer Name"),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: _inputDecoration("Contact Number"),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Text("Type: ${widget.orderType == 'delivery' ? 'Home Delivery' : 'Pickup / Takeaway'}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     ),
                   ),
                 ],
@@ -153,8 +149,16 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
               TextField(
                 controller: _addressController,
                 style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: _inputDecoration("Delivery Address (Optional for Pickup)"),
+                decoration: _inputDecoration(widget.orderType == 'delivery' ? "Delivery Address *" : "Delivery Address (Optional for Pickup)"),
               ),
+              if (widget.orderType == 'delivery') ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _deliveryBoyController,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: _inputDecoration("Delivery Boy / Rider (Optional)"),
+                ),
+              ],
               const SizedBox(height: 8),
               _buildPaymentMethodSelector(),
             ],
@@ -486,9 +490,9 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
               ),
               const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: _selectedItems.isEmpty ? null : () => _submitTakeawayOrder(),
+                onPressed: _selectedItems.isEmpty ? null : () => _submitOrder(),
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 14)),
-                child: const Text("PLACE TAKEAWAY ORDER", style: TextStyle(fontWeight: FontWeight.bold)),
+                child: Text(widget.orderType == 'delivery' ? "PLACE DELIVERY ORDER" : "PLACE TAKEAWAY ORDER", style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -507,7 +511,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
          children: [
            Text("Total: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
            ElevatedButton(
-             onPressed: () => _submitTakeawayOrder(),
+             onPressed: () => _submitOrder(),
              style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
              child: const Text("PLACE ORDER"),
            ),
@@ -516,14 +520,23 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
      );
   }
 
-  void _submitTakeawayOrder() async {
+  void _submitOrder() async {
     final auth = context.read<AuthService>();
     final restaurantId = auth.restaurantId;
     final waiterName = auth.role == UserRole.admin ? "Admin" : (auth.role == UserRole.cashier ? "Cashier" : "Waiter");
     
-    final customerName = _nameController.text.trim().isEmpty ? "Walk-in" : _nameController.text.trim();
-    final customerPhone = _phoneController.text.trim();
     final address = _addressController.text.trim();
+    final deliveryBoy = _deliveryBoyController.text.trim();
+
+    // Validation for Delivery (Address only now)
+    if (widget.orderType == 'delivery' && address.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Delivery address is required."), backgroundColor: Colors.red));
+      }
+      return;
+    }
+
+    final customerName = widget.orderType == 'delivery' ? "Delivery Customer" : "Takeaway";
     final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
 
     final firestore = FirebaseFirestore.instance;
@@ -531,12 +544,14 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
     final orderRef = firestore.collection('orders').doc();
 
     batch.set(orderRef, {
-      'orderType': 'takeaway',
-      'tableName': 'Takeaway',
-      'tableId': 'takeaway',
+      'orderType': widget.orderType,
+      'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
+      'tableId': widget.orderType,
       'customerName': customerName,
-      'customerPhone': customerPhone,
       'deliveryAddress': address,
+      'deliveryBoy': deliveryBoy.isEmpty ? null : deliveryBoy,
+      'deliveryStatus': widget.orderType == 'delivery' ? 'pending' : null,
+      'takeawayStatus': widget.orderType == 'takeaway' ? 'pending' : null,
       'paymentMethod': _paymentMethod,
       'status': 'open',
       'isDelivered': false,
@@ -569,8 +584,8 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
     final kotRef = firestore.collection('kots').doc();
     batch.set(kotRef, {
       'orderId': orderRef.id,
-      'tableName': 'Takeaway',
-      'tableId': 'takeaway',
+      'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
+      'tableId': widget.orderType,
       'customerName': customerName,
       'status': 'Pending',
       'restaurantId': restaurantId,
@@ -583,9 +598,8 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
     
     // Print KOT
     final kotData = {
-      'tableName': 'Takeaway',
+      'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
       'customerName': customerName,
-      'customerPhone': customerPhone,
       'waiterName': waiterName,
       'items': _selectedItems.map((i) => {'name': i.item.name, 'quantity': i.quantity, 'price': i.item.price}).toList(),
     };
@@ -593,7 +607,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
 
     if (mounted) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Takeaway Order Placed!"), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.orderType == 'delivery' ? "Delivery Order Placed!" : "Takeaway Order Placed!"), backgroundColor: Colors.green));
     }
   }
 }

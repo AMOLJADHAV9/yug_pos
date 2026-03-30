@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
@@ -23,8 +24,15 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     final firestore = FirebaseFirestore.instance;
-    final auth = context.read<AuthService>();
+    final auth = context.watch<AuthService>();
     final restaurantId = auth.restaurantId;
+
+    if (restaurantId == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -33,31 +41,53 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
         elevation: 0,
         title: const Text('Active KOTs', style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Color(0xFFE7FF12)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => setState(() {}),
+            tooltip: "Refresh KOTs",
+          ),
+        ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: firestore
-            .collection('kots')
-            .where('restaurantId', isEqualTo: restaurantId)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
-          
-          final kots = snapshot.data!.docs.toList();
-          kots.sort((a, b) {
-            final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
-            final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
-            return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
-          });
-          if (kots.isEmpty) return const Center(child: Text("All KOTs are clear!", style: TextStyle(color: Colors.white54)));
+      body: kIsWeb 
+        ? FutureBuilder<QuerySnapshot>(
+            future: firestore
+                .collection('kots')
+                .where('restaurantId', isEqualTo: restaurantId)
+                .get(),
+            builder: (context, snapshot) => _buildKotList(context, snapshot),
+          )
+        : StreamBuilder<QuerySnapshot>(
+            stream: firestore
+                .collection('kots')
+                .where('restaurantId', isEqualTo: restaurantId)
+                .snapshots(),
+            builder: (context, snapshot) => _buildKotList(context, snapshot),
+          ),
+    );
+  }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: kots.length,
-            itemBuilder: (context, index) {
-              final data = kots[index].data() as Map<String, dynamic>;
-              final items = data['items'] as List;
-              final status = data['status'] ?? 'Pending';
-              final orderId = data['orderId'];
+  Widget _buildKotList(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+    if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+    
+    final kots = snapshot.data?.docs.toList() ?? [];
+    kots.sort((a, b) {
+      final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+      final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+      return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+    });
+    if (kots.isEmpty) return const Center(child: Text("All KOTs are clear!", style: TextStyle(color: Colors.white54)));
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: kots.length,
+      itemBuilder: (context, index) {
+        final kotDoc = kots[index];
+        final data = kotDoc.data() as Map<String, dynamic>;
+        final items = data['items'] as List;
+        final status = data['status'] ?? 'Pending';
+        final orderId = data['orderId'];
 
               if (status == 'Served' || status == 'Done') return const SizedBox();
 
@@ -119,10 +149,7 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
                   ),
                 ),
               );
-            },
-          );
-        },
-      ),
+      },
     );
   }
 

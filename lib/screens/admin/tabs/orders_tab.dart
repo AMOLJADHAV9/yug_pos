@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -22,8 +23,16 @@ class _OrdersTabState extends State<OrdersTab> {
 
   @override
   Widget build(BuildContext context) {
+    final restaurantId = context.watch<AuthService>().restaurantId;
     final startOfDay = DateTime(filterDate.year, filterDate.month, filterDate.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    if (restaurantId == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -55,7 +64,11 @@ class _OrdersTabState extends State<OrdersTab> {
               if (date != null) setState(() => filterDate = date);
             },
           ),
-          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+            onPressed: () => setState(() {}),
+            tooltip: "Refresh Orders",
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -65,18 +78,31 @@ class _OrdersTabState extends State<OrdersTab> {
         label: const Text("New Order", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFFE7FF12),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _firestore.collection('orders')
-            .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 12)));
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          
-          final startOfDay = DateTime(filterDate.year, filterDate.month, filterDate.day);
-          final endOfDay = startOfDay.add(const Duration(days: 1));
+      body: kIsWeb 
+        ? FutureBuilder<QuerySnapshot>(
+            future: _firestore.collection('orders')
+                .where('restaurantId', isEqualTo: restaurantId)
+                .get(),
+            builder: (context, snapshot) => _buildOrderList(context, snapshot),
+          )
+        : StreamBuilder<QuerySnapshot>(
+            stream: _firestore.collection('orders')
+                .where('restaurantId', isEqualTo: restaurantId)
+                .snapshots(),
+            builder: (context, snapshot) => _buildOrderList(context, snapshot),
+          ),
+    );
+  }
 
-          final orders = snapshot.data!.docs.where((doc) {
+  Widget _buildOrderList(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+    if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 12)));
+    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+    if (!snapshot.hasData) return const Center(child: Text("No data available"));
+    
+    final startOfDay = DateTime(filterDate.year, filterDate.month, filterDate.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    final orders = snapshot.data!.docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
             if (data['createdAt'] == null) return false;
             final createdAt = (data['createdAt'] as Timestamp).toDate();
@@ -175,8 +201,6 @@ class _OrdersTabState extends State<OrdersTab> {
                               ),
                               const SizedBox(height: 2),
                               Text("${isTakeaway ? 'Takeaway' : (data['tableName'] ?? 'Table')} • ${data['customerName'] ?? 'Walk-in'}", style: const TextStyle(fontSize: 12, color: Colors.white54), overflow: TextOverflow.ellipsis),
-                              if (data['customerPhone'] != null && data['customerPhone'].toString().isNotEmpty)
-                                Text(data['customerPhone'], style: const TextStyle(fontSize: 10, color: Colors.white38)),
                               Text(DateFormat('hh:mm a').format(date), style: const TextStyle(fontSize: 11, color: Colors.white38)),
                             ],
                           ),
@@ -220,9 +244,6 @@ class _OrdersTabState extends State<OrdersTab> {
               );
             },
           );
-        },
-      ),
-    );
   }
 
   void _confirmCancelOrder(String orderId, Map<String, dynamic> data) {
@@ -317,31 +338,31 @@ class _OrdersTabState extends State<OrdersTab> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Status: ${data['status'].toString().toUpperCase()}", style: TextStyle(fontWeight: FontWeight.bold, color: _getStatusColor(data['status']))),
               const Divider(),
-              ...(data['items'] as List).map((item) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text("${item['quantity']}x ${item['name']}", 
-                        overflow: TextOverflow.ellipsis, maxLines: 1),
-                    ),
-                    const SizedBox(width: 12),
-                    Text("₹${(item['price'] ?? 0) * (item['quantity'] ?? 1)}", 
-                      style: const TextStyle(fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              )),
+              Text("Customer: ${data['customerName'] ?? 'Walk-in'}", style: const TextStyle(fontWeight: FontWeight.w500)),
+              if (data['customerPhone'] != null && data['customerPhone'].toString().isNotEmpty)
+                Text("Phone: ${data['customerPhone']}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Payment Method", style: TextStyle(color: Colors.grey)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
+                    child: Text(data['paymentMode'] ?? (data['status'] == 'completed' ? 'Paid' : 'Not Settled'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
               const Divider(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("Total Amount", style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text("₹${data['totalAmount']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text("₹${data['totalAmount']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFE7FF12))),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -430,12 +451,10 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
   String _selectedCategory = "All";
   String _searchQuery = "";
   final List<CartItem> _selectedItems = [];
-  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
 
   @override
   void dispose() {
-    _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
@@ -573,39 +592,9 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
           ),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _nameController,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: "Customer Name",
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  filled: true, fillColor: const Color(0xFF2C2C2C),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: "Contact Number",
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  filled: true, fillColor: const Color(0xFF2C2C2C),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-          ],
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text("Customer: Walk-in", style: TextStyle(color: Colors.white54, fontSize: 13)),
         ),
         const SizedBox(height: 16),
         Expanded(child: _buildSearchAndAdd()),
@@ -820,8 +809,8 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
      final adminName = auth.role == UserRole.admin ? "Admin (${auth.currentUser?.email ?? 'Unknown'})" : "Admin";
      final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
 
-     final customerName = _nameController.text.trim().isEmpty ? "Walk-in" : _nameController.text.trim();
-     final customerPhone = _phoneController.text.trim();
+     const customerName = "Walk-in";
+     const String? customerPhone = null;
 
      final firestore = FirebaseFirestore.instance;
      final batch = firestore.batch();

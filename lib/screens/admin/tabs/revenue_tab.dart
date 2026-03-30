@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -17,11 +18,14 @@ class RevenueTab extends StatefulWidget {
 class _RevenueTabState extends State<RevenueTab> {
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthService>(context);
+    final auth = context.watch<AuthService>();
     final restaurantId = auth.restaurantId;
 
     if (restaurantId == null) {
-      return const Scaffold(body: Center(child: Text("Restaurant context missing. Please login again.")));
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+      );
     }
 
     final firestore = FirebaseFirestore.instance;
@@ -35,7 +39,23 @@ class _RevenueTabState extends State<RevenueTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Administration Overview", style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text("Administration Overview", 
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+                onPressed: () => setState(() {}),
+                tooltip: "Refresh Dashboard",
+              ),
+            ],
+          ),
           const SizedBox(height: 24),
           // ── TODAY ──────────────────────────────────────────────────────
             Row(
@@ -50,77 +70,15 @@ class _RevenueTabState extends State<RevenueTab> {
             ),
             const SizedBox(height: 16),
             // Use the single source of truth: daily_collections
-            StreamBuilder<DocumentSnapshot>(
-              stream: firestore.collection('daily_collections').doc("${restaurantId}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}").snapshots(),
-              builder: (context, snapshot) {
-                double todayRevenue = 0;
-                double todayTableRevenue = 0;
-                double todayTakeawayRevenue = 0;
-                double todayOnlineRevenue = 0;
-                int billCount = 0;
-                int takeawayCount = 0;
-                int tableCount = 0;
-                int onlineCount = 0;
-
-                if (snapshot.hasData && snapshot.data!.exists) {
-                  final data = snapshot.data!.data() as Map<String, dynamic>;
-                  todayRevenue = (data['netCollection'] ?? 0).toDouble();
-                  todayTableRevenue = (data['tableCollection'] ?? 0).toDouble();
-                  todayTakeawayRevenue = (data['takeawayCollection'] ?? 0).toDouble();
-                  todayOnlineRevenue = (data['onlineCollection'] ?? 0).toDouble();
-                  billCount = data['billCount'] ?? 0;
-                  takeawayCount = data['takeawayCount'] ?? 0;
-                  tableCount = data['tableCount'] ?? 0;
-                  onlineCount = data['onlineCount'] ?? 0;
-                }
-
-                final width = MediaQuery.of(context).size.width;
-                return GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: width > 900 ? 5 : (width > 600 ? 4 : (width < 300 ? 2 : 3)), 
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: width > 600 ? 1.0 : 0.95,
-                  children: [
-                    _buildStatCard(
-                      "Daily Total", 
-                      "₹${todayRevenue.toStringAsFixed(0)}", 
-                      Icons.currency_rupee, 
-                      Colors.green,
-                      subtitle: "Total ($billCount Bills)",
-                      onTap: () => _showTodayDetails('Total'),
-                    ),
-                    _buildStatCard(
-                      "Table Sales", 
-                      "₹${todayTableRevenue.toStringAsFixed(0)}", 
-                      Icons.restaurant, 
-                      const Color(0xFFE7FF12),
-                      subtitle: "$tableCount Orders",
-                      onTap: () => _showTodayDetails('table'),
-                    ),
-                    _buildStatCard(
-                      "Takeaway Sales", 
-                      "₹${todayTakeawayRevenue.toStringAsFixed(0)}", 
-                      Icons.shopping_bag, 
-                      Colors.purpleAccent,
-                      subtitle: "$takeawayCount Orders",
-                      onTap: () => _showTodayDetails('takeaway'),
-                    ),
-                    _buildStatCard(
-                      "Online Sales", 
-                      "₹${todayOnlineRevenue.toStringAsFixed(0)}", 
-                      Icons.cloud_download, 
-                      Colors.blueAccent,
-                      subtitle: "$onlineCount Z/S Orders",
-                      onTap: () => _showTodayDetails('online'),
-                    ),
-                    _buildActiveTablesCard(firestore, restaurantId, onTap: () => widget.onTabRequested?.call(4)), // Still switch tab for tables
-                    _buildPendingKotsCard(firestore, restaurantId, onTap: () => _showTodayDetails('Pending')),
-                  ],
-                );
-              },
-            ),
+            kIsWeb 
+              ? FutureBuilder<DocumentSnapshot>(
+                  future: firestore.collection('daily_collections').doc("${restaurantId}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}").get(),
+                  builder: (context, snapshot) => _buildTodayStats(context, snapshot, firestore, restaurantId),
+                )
+              : StreamBuilder<DocumentSnapshot>(
+                  stream: firestore.collection('daily_collections').doc("${restaurantId}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}").snapshots(),
+                  builder: (context, snapshot) => _buildTodayStats(context, snapshot, firestore, restaurantId),
+                ),
             const SizedBox(height: 12),
             // Diagnostic Label
             Padding(
@@ -218,28 +176,151 @@ class _RevenueTabState extends State<RevenueTab> {
   }
 
   Widget _buildActiveTablesCard(FirebaseFirestore firestore, String? restaurantId, {VoidCallback? onTap}) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: firestore.collection('tables')
-          .where('restaurantId', isEqualTo: restaurantId)
-          .where('status', isNotEqualTo: 'available')
-          .snapshots(),
-      builder: (context, snapshot) {
-        final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
-        return _buildStatCard("Occupied", count.toString(), Icons.table_bar, Colors.green, onTap: onTap);
-      },
-    );
+    return kIsWeb 
+      ? FutureBuilder<QuerySnapshot>(
+          future: firestore.collection('tables')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .where('status', isNotEqualTo: 'available')
+              .get(),
+          builder: (context, snapshot) {
+            final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+            return _buildStatCard("Occupied", count.toString(), Icons.table_bar, Colors.green, onTap: onTap);
+          },
+        )
+      : StreamBuilder<QuerySnapshot>(
+          stream: firestore.collection('tables')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .where('status', isNotEqualTo: 'available')
+              .snapshots(),
+          builder: (context, snapshot) {
+            final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+            return _buildStatCard("Occupied", count.toString(), Icons.table_bar, Colors.green, onTap: onTap);
+          },
+        );
   }
 
   Widget _buildPendingKotsCard(FirebaseFirestore firestore, String? restaurantId, {VoidCallback? onTap}) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: firestore.collection('orders')
-          .where('restaurantId', isEqualTo: restaurantId)
-          .where('status', whereIn: ['open', 'kotSent', 'Preparing']) // Preparing added for future-proofing
-          .snapshots(),
-      builder: (context, snapshot) {
-        final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
-        return _buildStatCard("Pending", count.toString(), Icons.timer, Colors.red, onTap: onTap);
-      },
+    return kIsWeb 
+      ? FutureBuilder<QuerySnapshot>(
+          future: firestore.collection('orders')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .where('status', whereIn: ['open', 'kotSent', 'Preparing'])
+              .get(),
+          builder: (context, snapshot) {
+            final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+            return _buildStatCard("Pending", count.toString(), Icons.timer, Colors.red, onTap: onTap);
+          },
+        )
+      : StreamBuilder<QuerySnapshot>(
+          stream: firestore.collection('orders')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .where('status', whereIn: ['open', 'kotSent', 'Preparing'])
+              .snapshots(),
+          builder: (context, snapshot) {
+            final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+            return _buildStatCard("Pending", count.toString(), Icons.timer, Colors.red, onTap: onTap);
+          },
+        );
+  }
+
+  Widget _buildTodayStats(BuildContext context, AsyncSnapshot<DocumentSnapshot> snapshot, FirebaseFirestore firestore, String? restaurantId) {
+    double todayRevenue = 0;
+    double todayTableRevenue = 0;
+    double todayTakeawayRevenue = 0;
+    double todayDeliveryRevenue = 0;
+    double todayOnlineRevenue = 0;
+    int billCount = 0;
+    int takeawayCount = 0;
+    int deliveryCount = 0;
+    int tableCount = 0;
+    int onlineCount = 0;
+    double todayCashRevenue = 0;
+    double todayUpiRevenue = 0;
+
+    if (snapshot.hasData && snapshot.data!.exists) {
+      final data = snapshot.data!.data() as Map<String, dynamic>;
+      todayRevenue = (data['netCollection'] ?? 0).toDouble();
+      todayTableRevenue = (data['tableCollection'] ?? 0).toDouble();
+      todayTakeawayRevenue = (data['takeawayCollection'] ?? 0).toDouble();
+      todayDeliveryRevenue = (data['deliveryCollection'] ?? 0).toDouble();
+      todayOnlineRevenue = (data['onlineCollection'] ?? 0).toDouble();
+      billCount = data['billCount'] ?? 0;
+      takeawayCount = data['takeawayCount'] ?? 0;
+      deliveryCount = data['deliveryCount'] ?? 0;
+      tableCount = data['tableCount'] ?? 0;
+      onlineCount = data['onlineCount'] ?? 0;
+      todayCashRevenue = (data['cashCollection'] ?? 0).toDouble();
+      todayUpiRevenue = (data['upiCollection'] ?? 0).toDouble();
+    }
+
+    final width = MediaQuery.of(context).size.width;
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: width > 900 ? 5 : (width > 600 ? 4 : (width < 300 ? 2 : 3)), 
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: width > 600 ? 1.0 : 0.95,
+      children: [
+        _buildStatCard(
+          "Daily Total", 
+          "₹${todayRevenue.toStringAsFixed(0)}", 
+          Icons.currency_rupee, 
+          Colors.green,
+          subtitle: "Total ($billCount Bills)",
+          onTap: () => _showTodayDetails('Total'),
+        ),
+        _buildStatCard(
+          "Table Sales", 
+          "₹${todayTableRevenue.toStringAsFixed(0)}", 
+          Icons.restaurant, 
+          const Color(0xFFE7FF12),
+          subtitle: "$tableCount Orders",
+          onTap: () => _showTodayDetails('table'),
+        ),
+        _buildStatCard(
+          "Takeaway Sales", 
+          "₹${todayTakeawayRevenue.toStringAsFixed(0)}", 
+          Icons.shopping_bag, 
+          Colors.purpleAccent,
+          subtitle: "$takeawayCount Orders",
+          onTap: () => _showTodayDetails('takeaway'),
+        ),
+        _buildStatCard(
+          "Delivery Sales", 
+          "₹${todayDeliveryRevenue.toStringAsFixed(0)}", 
+          Icons.delivery_dining, 
+          Colors.deepOrange,
+          subtitle: "$deliveryCount Orders",
+          onTap: () => _showTodayDetails('delivery'),
+        ),
+        _buildStatCard(
+          "Online Sales", 
+          "₹${todayOnlineRevenue.toStringAsFixed(0)}", 
+          Icons.cloud_download, 
+          Colors.blueAccent,
+          subtitle: "$onlineCount Z/S Orders",
+          onTap: () => _showTodayDetails('online'),
+        ),
+        _buildStatCard(
+          "Cash Sales", 
+          "₹${todayCashRevenue.toStringAsFixed(0)}", 
+          Icons.payments, 
+          Colors.greenAccent,
+          subtitle: "Total Cash",
+          onTap: () => _showTodayDetails('Total'),
+        ),
+        _buildStatCard(
+          "UPI Sales", 
+          "₹${todayUpiRevenue.toStringAsFixed(0)}", 
+          Icons.qr_code_scanner, 
+          Colors.blue,
+          subtitle: "Total UPI",
+          onTap: () => _showTodayDetails('Total'),
+        ),
+        _buildActiveTablesCard(firestore, restaurantId, onTap: () => widget.onTabRequested?.call(4)), // Still switch tab for tables
+        _buildPendingKotsCard(firestore, restaurantId, onTap: () => _showTodayDetails('Pending')),
+      ],
     );
   }
 
@@ -247,87 +328,96 @@ class _RevenueTabState extends State<RevenueTab> {
     final now = DateTime.now();
     final monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: firestore.collection('orders')
-          .where('restaurantId', isEqualTo: restaurantId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox.shrink();
+    return kIsWeb 
+      ? FutureBuilder<QuerySnapshot>(
+          future: firestore.collection('orders')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .get(),
+          builder: (context, snapshot) => _buildChartContent(context, snapshot, now, monthNames),
+        )
+      : StreamBuilder<QuerySnapshot>(
+          stream: firestore.collection('orders')
+              .where('restaurantId', isEqualTo: restaurantId)
+              .snapshots(),
+          builder: (context, snapshot) => _buildChartContent(context, snapshot, now, monthNames),
+        );
+  }
+
+  Widget _buildChartContent(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot, DateTime now, List<String> monthNames) {
+    if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox.shrink();
+    
+    final Map<int, double> monthlyRevenue = { for (int i = 0; i < 12; i++) i: 0 };
+
+    if (snapshot.hasData) {
+      for (var doc in snapshot.data!.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data['status'] != 'billed') continue;
+        if (data['createdAt'] == null) continue;
         
-        final Map<int, double> monthlyRevenue = { for (int i = 0; i < 12; i++) i: 0 };
-
-        if (snapshot.hasData) {
-          for (var doc in snapshot.data!.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            if (data['status'] != 'billed') continue;
-            if (data['createdAt'] == null) continue;
-            
-            final createdAt = (data['createdAt'] as Timestamp).toDate();
-            if (createdAt.year == now.year) {
-              final m = createdAt.month - 1;
-              monthlyRevenue[m] = (monthlyRevenue[m] ?? 0) + (data['totalAmount'] ?? 0).toDouble();
-            }
-          }
+        final createdAt = (data['createdAt'] as Timestamp).toDate();
+        if (createdAt.year == now.year) {
+          final m = createdAt.month - 1;
+          monthlyRevenue[m] = (monthlyRevenue[m] ?? 0) + (data['totalAmount'] ?? 0).toDouble();
         }
+      }
+    }
 
-        final maxRevenue = monthlyRevenue.values.fold<double>(0, (a, b) => a > b ? a : b);
+    final maxRevenue = monthlyRevenue.values.fold<double>(0, (a, b) => a > b ? a : b);
 
-        return Container(
-          height: 250,
-          margin: const EdgeInsets.symmetric(vertical: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("${now.year} Revenue Trend", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
-              const SizedBox(height: 16),
-              Expanded(
-                child: BarChart(
-                  BarChartData(
-                    backgroundColor: const Color(0xFF1E1E1E),
-                    maxY: maxRevenue > 0 ? maxRevenue * 1.2 : 100,
-                    barGroups: List.generate(12, (i) {
-                      final isCurrent = i == now.month - 1;
-                      return BarChartGroupData(
-                        x: i,
-                        barRods: [
-                          BarChartRodData(
-                            toY: monthlyRevenue[i] ?? 0,
-                            width: 12,
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                            color: isCurrent ? const Color(0xFFE7FF12) : const Color(0xFFE7FF12).withOpacity(0.15),
-                          ),
-                        ],
-                      );
-                    }),
-                    titlesData: FlTitlesData(
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          getTitlesWidget: (v, meta) {
-                            final i = v.toInt();
-                            if (i < 0 || i >= 12) return const SizedBox.shrink();
-                            return Text(monthNames[i], style: const TextStyle(fontSize: 9, color: Colors.white54));
-                          },
-                        ),
+    return Container(
+      height: 250,
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("${now.year} Revenue Trend", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+          const SizedBox(height: 16),
+          Expanded(
+            child: BarChart(
+              BarChartData(
+                backgroundColor: const Color(0xFF1E1E1E),
+                maxY: maxRevenue > 0 ? maxRevenue * 1.2 : 100,
+                barGroups: List.generate(12, (i) {
+                  final isCurrent = i == now.month - 1;
+                  return BarChartGroupData(
+                    x: i,
+                    barRods: [
+                      BarChartRodData(
+                        toY: monthlyRevenue[i] ?? 0,
+                        width: 12,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        color: isCurrent ? const Color(0xFFE7FF12) : const Color(0xFFE7FF12).withOpacity(0.15),
                       ),
+                    ],
+                  );
+                }),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (v, meta) {
+                        final i = v.toInt();
+                        if (i < 0 || i >= 12) return const SizedBox.shrink();
+                        return Text(monthNames[i], style: const TextStyle(fontSize: 9, color: Colors.white54));
+                      },
                     ),
-                    gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxRevenue > 0 ? maxRevenue / 4 : 25, getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1)),
-                    borderData: FlBorderData(show: false),
                   ),
                 ),
+                gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxRevenue > 0 ? maxRevenue / 4 : 25, getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1)),
+                borderData: FlBorderData(show: false),
               ),
-            ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 

@@ -10,6 +10,18 @@ class ReportService {
     final logoData = await rootBundle.load('lib/assets/img/yug_pos_logo.png');
     return pw.MemoryImage(logoData.buffer.asUint8List());
   }
+
+  static DateTime _getDateTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return DateTime.now();
+  }
+
+  static double _getDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
   // ── Standard thermal widths in PDF points (72 points per inch) ───────────
   static const double _width58mm = 155.91; // approx 155.91 pts
   static const double _width75mm = 212.77; // approx 212.77 pts
@@ -59,6 +71,15 @@ class ReportService {
           textAlign: pw.TextAlign.center,
         ),
       );
+
+  // Helper to format order type display
+  static String _formatOrderTypeDisplay(Map<String, dynamic> data, {bool includeTablePrefix = false, bool isFinalBill = false}) {
+    final type = (data['orderType']?.toString() ?? '').toLowerCase();
+    if (type == 'takeaway') return isFinalBill ? 'Type: TAKEAWAY' : 'TAKEAWAY';
+    if (type == 'delivery') return isFinalBill ? 'Type: DELIVERY' : 'DELIVERY';
+    if (isFinalBill) return 'Table: ${data['tableName']}';
+    return includeTablePrefix ? 'TABLE: ${data['tableName']}' : data['tableName'].toString().toUpperCase();
+  }
 
   // ── DAILY COLLECTION REPORT (A4) ─────────────────────────────────────────
   static Future<void> generateDailyCollectionReport(
@@ -234,23 +255,9 @@ class ReportService {
               ),
               _thickDash(),
               pw.Center(
-                child: pw.Text(data['tableName'].toString().toUpperCase(),
+                child: pw.Text(_formatOrderTypeDisplay(data),
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18)),
               ),
-              pw.SizedBox(height: 4),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                   pw.Text("Token: ${data['kotNumber']}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                   pw.Text(DateFormat('hh:mm a').format(data['createdAt'] ?? DateTime.now()), style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.SizedBox(height: 2),
-              pw.Text("Customer: ${data['customerName']}", style: const pw.TextStyle(fontSize: 9)),
-              if (data['customerPhone'] != null && data['customerPhone'].toString().isNotEmpty)
-                pw.Text("Contact: ${data['customerPhone']}", style: const pw.TextStyle(fontSize: 9)),
-              pw.Text("Cashier: ${data['cashierName']}", style: const pw.TextStyle(fontSize: 8)),
-              pw.Text("Waiter: ${data['waiterName']}", style: const pw.TextStyle(fontSize: 8)),
               _thickDash(),
               ...items.map((item) {
                 final quantity = (item['quantity'] ?? 0).toInt();
@@ -261,6 +268,8 @@ class ReportService {
                 );
               }),
               _dash(),
+              pw.SizedBox(height: 10),
+              pw.Center(child: pw.Text("Thank you from POS Solutions", style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 9))),
               pw.SizedBox(height: 10),
             ]),
           ),
@@ -275,7 +284,7 @@ class ReportService {
       Map<String, dynamic> data, String orderId, {String restaurantName = "YUG POS"}) async {
     final pdf = pw.Document();
     final items = data['items'] as List;
-    final date = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final date = _getDateTime(data['createdAt']);
 
     final roboto = await PdfGoogleFonts.robotoRegular();
     final robotoBold = await PdfGoogleFonts.robotoBold();
@@ -294,7 +303,6 @@ class ReportService {
               pw.Center(child: pw.Image(logo, width: 45, height: 45)),
               pw.SizedBox(height: 4),
               pw.Center(child: pw.Text(restaurantName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
-              pw.Center(child: pw.Text("GSTIN: 27POSYUG1234Z", style: const pw.TextStyle(fontSize: 7))),
               pw.Center(child: pw.Text("ORDER SLIP", style: const pw.TextStyle(fontSize: 8))),
               _thickDash(),
               pw.Row(
@@ -304,11 +312,8 @@ class ReportService {
                   pw.Text(DateFormat('dd/MM/yy hh:mm a').format(date), style: const pw.TextStyle(fontSize: 7)),
                 ],
               ),
-              pw.Text(data['orderType'] == 'takeaway' ? "TAKEAWAY" : "TABLE: ${data['tableName']}", 
+              pw.Text(_formatOrderTypeDisplay(data, includeTablePrefix: true), 
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
-              pw.Text("Customer: ${data['customerName'] ?? 'Walk-in'}", style: const pw.TextStyle(fontSize: 8)),
-              if (data['customerPhone'] != null && data['customerPhone'].toString().isNotEmpty)
-                pw.Text("Contact: ${data['customerPhone']}", style: const pw.TextStyle(fontSize: 8)),
               pw.Text("Waiter: ${data['waiterName']}", style: const pw.TextStyle(fontSize: 8)),
               _dash(),
               pw.Row(children: [
@@ -333,15 +338,13 @@ class ReportService {
                   );
               }).toList(),
               _dash(),
-              _amountRow("Subtotal", "₹${(data['totalAmount'] as num).toDouble().toStringAsFixed(2)}"),
-              _amountRow("CGST (2.5%)", "₹${((data['totalAmount'] as num).toDouble() * 0.025).toStringAsFixed(2)}"),
-              _amountRow("SGST (2.5%)", "₹${((data['totalAmount'] as num).toDouble() * 0.025).toStringAsFixed(2)}"),
+              _amountRow("Total Amount", "₹${_getDouble(data['totalAmount']).toStringAsFixed(2)}"),
               _thickDash(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
-                  pw.Text("₹${((data['totalAmount'] as num).toDouble() * 1.05).toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                   pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                   pw.Text("₹${_getDouble(data['totalAmount']).toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
                 ],
               ),
               _thickDash(),
@@ -365,7 +368,6 @@ class ReportService {
     required String paymentMode,
     String hotelName = "YUG POS",
     String address = "Market Road, City",
-    String gstin = "GSTIN: 27POSYUG1234Z",
   }) async {
     final pdf = pw.Document();
     final items = orderData['items'] as List;
@@ -392,22 +394,18 @@ class ReportService {
               pw.SizedBox(height: 4),
               pw.Center(child: pw.Text(hotelName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
               pw.Center(child: pw.Text(address, style: const pw.TextStyle(fontSize: 7))),
-              pw.Center(child: pw.Text(gstin, style: const pw.TextStyle(fontSize: 7))),
               _thickDash(),
-              pw.Center(child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+              pw.Center(child: pw.Text("INVOICE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
               _dash(),
               pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
                 pw.Text("Bill #: $receiptNum", style: const pw.TextStyle(fontSize: 8)),
-                pw.Text(orderData['orderType'] == 'takeaway' ? "Type: TAKEAWAY" : "Table: ${orderData['tableName']}", 
+                pw.Text(_formatOrderTypeDisplay(orderData, isFinalBill: true), 
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
               ]),
               pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
                 pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 7)),
                 pw.Text("Token: ${orderData['kotNumber'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
               ]),
-              pw.Text("Customer: ${orderData['customerName'] ?? 'Walk-in'}", style: const pw.TextStyle(fontSize: 7)),
-              if (orderData['customerPhone'] != null && orderData['customerPhone'].toString().isNotEmpty)
-                pw.Text("Contact: ${orderData['customerPhone']}", style: const pw.TextStyle(fontSize: 7)),
               if (orderData['orderType'] == 'takeaway' && orderData['deliveryAddress'] != null)
                 pw.Text("Address: ${orderData['deliveryAddress']}", style: const pw.TextStyle(fontSize: 7)),
               pw.Text("Cashier: ${orderData['cashierName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 7)),
@@ -423,7 +421,7 @@ class ReportService {
               ]),
               _dash(),
 
-              // ── Items ───────────────────────────────────────────
+              // ── Items ───────────────────────────────────────────                  
               ...items.map((item) => pw.Padding(
                     padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
                     child: pw.Row(children: [
@@ -436,9 +434,7 @@ class ReportService {
               _dash(),
 
               // ── Totals ──────────────────────────────────────────
-              _amountRow("Subtotal", "₹${subtotal.toStringAsFixed(2)}"),
-              _amountRow("CGST (2.5%)", "₹${cgst.toStringAsFixed(2)}"),
-              _amountRow("SGST (2.5%)", "₹${sgst.toStringAsFixed(2)}"),
+              _amountRow("Total Amount", "₹${subtotal.toStringAsFixed(2)}"),
               _thickDash(),
               pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
                 pw.Text("GRAND TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
@@ -447,7 +443,12 @@ class ReportService {
               _thickDash(),
 
               // ── Footer ──────────────────────────────────────────
-              pw.Text("Payment: $paymentMode", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+              pw.Center(
+                child: pw.Text("PAYMENT: ${paymentMode.toUpperCase()}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              ),
+              pw.Center(
+                child: pw.Text("STATUS: ${orderData['status'] == 'completed' ? 'PAID' : 'DRAFT / UNPAID'}", style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic)),
+              ),
               pw.SizedBox(height: 6),
               pw.Center(child: pw.Text("Thank you! Visit Again", style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 8))),
               pw.SizedBox(height: 5),
@@ -468,8 +469,174 @@ class ReportService {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(label, style: const pw.TextStyle(fontSize: 8)),
-            pw.Text(value, style: const pw.TextStyle(fontSize: 8)),
+            pw.Text(value, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
           ],
         ),
       );
+
+  // ── REVENUE SUMMARY REPORT ──────────────────────────────────────────────
+  static Future<void> printSummaryReport({
+    required String restaurantName,
+    required double netRevenue,
+    required int billCount,
+    required Map<String, double> revenueBySource,
+    required Map<String, int> orderStatuses,
+    required Map<String, double> categories,
+  }) async {
+    final pdf = pw.Document();
+    final dateStr = DateFormat('dd-MM-yyyy').format(DateTime.now());
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) => pw.Padding(
+          padding: const pw.EdgeInsets.all(40),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(child: pw.Text(restaurantName.toUpperCase(), style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
+              pw.Center(child: pw.Text("DAILY REVENUE SUMMARY", style: const pw.TextStyle(fontSize: 16))),
+              pw.Center(child: pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 12))),
+              pw.SizedBox(height: 30),
+
+              pw.Text("OVERALL PERFORMANCE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.Divider(),
+              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                pw.Text("Total Net Revenue:"),
+                pw.Text("INR ${netRevenue.toStringAsFixed(2)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              ]),
+              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                pw.Text("Total Bills Generated:"),
+                pw.Text("$billCount", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              ]),
+              pw.SizedBox(height: 20),
+
+              pw.Text("REVENUE BY SOURCE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.Divider(),
+              ...revenueBySource.entries.map((e) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Text(e.key),
+                    pw.Text("INR ${e.value.toStringAsFixed(2)}"),
+                  ])),
+              pw.SizedBox(height: 20),
+
+              pw.Text("ORDER STATUS SUMMARY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.Divider(),
+              ...orderStatuses.entries.map((e) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Text(e.key),
+                    pw.Text("${e.value}"),
+                  ])),
+              pw.SizedBox(height: 20),
+
+              if (categories.isNotEmpty) ...[
+                pw.Text("REVENUE BY CATEGORY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                pw.Divider(),
+                ...categories.entries.map((e) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                      pw.Text(e.key),
+                      pw.Text("INR ${e.value.toStringAsFixed(2)}"),
+                    ])),
+              ],
+
+              pw.Spacer(),
+              pw.Divider(),
+              pw.Center(child: pw.Text("Generated by YUG POS Solution", style: const pw.TextStyle(fontSize: 10))),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'Revenue_Summary_$dateStr.pdf');
+  }
+
+  // ── ORDER HISTORY REPORT ──────────────────────────────────────────────
+  static Future<void> printOrderHistoryReport({
+    required String restaurantName,
+    required List<Map<String, dynamic>> orders,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final pdf = pw.Document();
+    final startStr = DateFormat('dd-MM-yyyy').format(startDate);
+    final endStr = DateFormat('dd-MM-yyyy').format(endDate);
+    
+    // Split orders into chunks for multiple pages (approx 25 per page)
+    const int itemsPerPage = 28;
+    for (var i = 0; i < orders.length; i += itemsPerPage) {
+      final chunk = orders.sublist(i, i + itemsPerPage > orders.length ? orders.length : i + itemsPerPage);
+      
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) => pw.Padding(
+            padding: const pw.EdgeInsets.all(30),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                if (i == 0) ...[
+                  pw.Center(child: pw.Text(restaurantName.toUpperCase(), style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
+                  pw.Center(child: pw.Text("ORDER HISTORY REPORT", style: const pw.TextStyle(fontSize: 14))),
+                  pw.Center(child: pw.Text("Period: $startStr to $endStr", style: const pw.TextStyle(fontSize: 10))),
+                  pw.SizedBox(height: 20),
+                ],
+                
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                  children: [
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                      children: [
+                        _tableHeader("Date"),
+                        _tableHeader("Bill #"),
+                        _tableHeader("Type"),
+                        _tableHeader("Status"),
+                        _tableHeader("Amount", align: pw.TextAlign.right),
+                      ],
+                    ),
+                    ...chunk.map((order) {
+                      final dt = _getDateTime(order['createdAt']);
+                      return pw.TableRow(
+                        children: [
+                          _tableCell(DateFormat('dd/MM HH:mm').format(dt)),
+                          _tableCell(order['receiptNumber']?.toString() ?? 'N/A'),
+                          _tableCell(order['orderType']?.toString().toUpperCase() ?? 'N/A'),
+                          _tableCell(order['status']?.toString().toUpperCase() ?? 'N/A'),
+                          _tableCell("INR ${order['totalAmount'] ?? '0'}", align: pw.TextAlign.right),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+                
+                if (i + itemsPerPage >= orders.length) ...[
+                  pw.SizedBox(height: 20),
+                  pw.Divider(),
+                  pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Text("Total Orders: ${orders.length}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    pw.Text("Total Revenue: INR ${orders.fold(0.0, (sum, o) => sum + (o['totalAmount'] ?? 0))}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  ]),
+                ],
+                
+                pw.Spacer(),
+                pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text("Page ${(i/itemsPerPage).toInt() + 1}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey))),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save(), name: 'Order_History_Report.pdf');
+  }
+
+  static pw.Widget _tableHeader(String text, {pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
+    padding: const pw.EdgeInsets.all(5),
+    child: pw.Text(text, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: align),
+  );
+
+  static pw.Widget _tableCell(String text, {pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
+    padding: const pw.EdgeInsets.all(5),
+    child: pw.Text(text, style: const pw.TextStyle(fontSize: 8), textAlign: align),
+  );
 }

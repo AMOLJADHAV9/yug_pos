@@ -13,6 +13,7 @@ import 'tabs/orders_tab.dart';
 import 'tabs/analytics_tab.dart';
 import 'tabs/takeaway_tab.dart';
 import '../order/online_orders_screen.dart';
+import '../home/tables_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -25,7 +26,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
   bool _isExtended = true;
   final _debouncer = Debouncer(milliseconds: 1500);
-  Stream<QuerySnapshot>? _todayOrdersStream;
   String? _currentRestaurantId;
 
   @override
@@ -34,15 +34,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final auth = context.watch<AuthService>();
     if (_currentRestaurantId != auth.restaurantId) {
       _currentRestaurantId = auth.restaurantId;
-      if (_currentRestaurantId != null) {
-        final today = DateTime.now();
-        final startOfDay = DateTime(today.year, today.month, today.day);
-        _todayOrdersStream = FirebaseFirestore.instance.collection('orders')
-            .where('restaurantId', isEqualTo: _currentRestaurantId)
-            .snapshots();
-      } else {
-        _todayOrdersStream = null;
-      }
     }
   }
 
@@ -201,6 +192,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   late final List<Widget> _tabs = [
     RevenueTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+    const TablesScreen(isTab: true),
     const AnalyticsTab(),
     const UsersTab(),
     const MenuTab(),
@@ -212,6 +204,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   static const _navData = [
     {'icon': Icons.dashboard, 'label': 'Dashboard'},
+    {'icon': Icons.point_of_sale, 'label': 'POS'},
     {'icon': Icons.analytics, 'label': 'Analytics'},
     {'icon': Icons.people, 'label': 'Staff'},
     {'icon': Icons.restaurant_menu, 'label': 'Menu'},
@@ -222,7 +215,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   ];
 
   // Specific indices for the Bottom Navbar
-  static const List<int> _bottomBarIndices = [0, 2, 3, 5];
+  static const List<int> _bottomBarIndices = [0, 1, 3, 4, 6];
 
   @override
   Widget build(BuildContext context) {

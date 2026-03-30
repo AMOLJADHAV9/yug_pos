@@ -37,10 +37,17 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  FirebaseFirestore.instance.settings = Settings(
-    persistenceEnabled: !kIsWeb, // Disable ONLY on web to avoid assertion errors
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+  if (kIsWeb) {
+    // Web-specific settings to avoid assertion errors
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: false,
+    );
+  } else {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  }
 
   runApp(const WaiterPosApp());
 }

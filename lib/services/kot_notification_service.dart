@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/material.dart';
 
@@ -7,6 +8,7 @@ class KotNotificationService {
   bool _isListening = false;
 
   void startListening(String restaurantId) {
+    if (kIsWeb) return; // Disable background listener on web for stability
     if (_isListening) return;
     _isListening = true;
 

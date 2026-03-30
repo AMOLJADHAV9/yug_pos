@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = true);
     final auth = context.read<AuthService>();
     final error = await auth.loginWithEmail(_emailCtrl.text.trim(), _passCtrl.text.trim());
+    if (!mounted) return;
     setState(() => _loading = false);
     
     if (error != null && mounted) {
