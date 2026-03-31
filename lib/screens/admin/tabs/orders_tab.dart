@@ -8,6 +8,7 @@ import '../../../models/menu_item.dart';
 import '../../../models/table_model.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../services/report_service.dart';
+import '../../../services/usb_printer_service.dart';
 
 class OrdersTab extends StatefulWidget {
   const OrdersTab({super.key});
@@ -73,6 +74,7 @@ class _OrdersTabState extends State<OrdersTab> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "admin_orders_fab",
         onPressed: () => _showNewOrderDialog(),
         icon: const Icon(Icons.add_shopping_cart, color: Colors.black),
         label: const Text("New Order", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -225,8 +227,67 @@ class _OrdersTabState extends State<OrdersTab> {
                           height: 36,
                           child: PopupMenuButton<String>(
                             icon: const Icon(Icons.more_vert, size: 20),
-                            onSelected: (value) {
-                              if (value == 'print') ReportService.printOrderReceipt(data, doc.id);
+                            onSelected: (value) async {
+                               if (value == 'print') {
+                                 final printerService = context.read<UsbPrinterService>();
+                                 final hotelName = context.read<AuthService>().restaurantName ?? "YUG POS";
+                                 final paymentMode = data['status'] == 'billed'
+                                     ? (data['paymentMode'] ?? 'Cash')
+                                     : 'Cash';
+                                 final docId = doc.id;
+                                 final alreadyBilled = data['status'] == 'billed';
+
+                                 // ── STEP 1: Firestore first (main thread, no native plugins) ──
+                                 if (!alreadyBilled) {
+                                   try {
+                                     await ReportService.settleOrder(
+                                       docId: docId,
+                                       paymentMode: paymentMode,
+                                     );
+                                   } catch (e) {
+                                     debugPrint('Firestore settle error: $e');
+                                     if (mounted) {
+                                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                         content: Text('Failed to save bill: $e'),
+                                         backgroundColor: Colors.red,
+                                       ));
+                                     }
+                                     return; // abort — don't print if save failed
+                                   }
+                                 }
+
+                                 // ── STEP 2: Generate receipt bytes (pure Dart, safe) ──
+                                 final bytes = await ReportService.generateFinalBillBytes(
+                                   data: data,
+                                   total: (data['totalAmount'] ?? 0).toDouble(),
+                                   paymentMode: paymentMode,
+                                   hotelName: hotelName,
+                                 );
+
+                                 // ── STEP 3: Print (native USB — isolated via microtask) ──
+                                 // Using Future.microtask gives Flutter's event loop a clean
+                                 // boundary so the USB plugin's background thread callbacks
+                                 // cannot interfere with Firebase platform channels.
+                                 if (printerService.selectedDevice != null) {
+                                   Future.microtask(() async {
+                                     try {
+                                       await printerService.printRawBytes(bytes);
+                                     } catch (e) {
+                                       debugPrint('Print error (bill already saved): $e');
+                                     }
+                                   });
+                                 } else {
+                                   // PDF fallback — no native USB involved
+                                   await ReportService.printOrderReceipt(data, docId);
+                                 }
+
+                                 if (mounted) {
+                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                     content: Text('Bill Saved & Printing…'),
+                                     backgroundColor: Colors.green,
+                                   ));
+                                 }
+                               }
                               else if (value == 'cancel') _confirmCancelOrder(doc.id, data);
                               else if (value == 'delete') _confirmDeleteOrder(doc.id);
                             },
@@ -366,7 +427,20 @@ class _OrdersTabState extends State<OrdersTab> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () => ReportService.printOrderReceipt(data, orderId),
+                  onPressed: () async {
+                    final printerService = context.read<UsbPrinterService>();
+                    if (printerService.selectedDevice != null) {
+                      final bytes = await ReportService.generateFinalBillBytes(
+                        data: data, 
+                        total: (data['totalAmount'] ?? 0).toDouble(), 
+                        paymentMode: data['paymentMode'] ?? (data['status'] == 'billed' ? 'Paid' : 'Unpaid'),
+                        hotelName: context.read<AuthService>().restaurantName ?? "YUG POS"
+                      );
+                      await printerService.printRawBytes(bytes);
+                    } else {
+                      ReportService.printOrderReceipt(data, orderId);
+                    }
+                  },
                   icon: const Icon(Icons.print),
                   label: const Text("PRINT RECEIPT"),
                   style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),

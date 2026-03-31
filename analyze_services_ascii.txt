@@ -1,0 +1,28 @@
+flutter : Flutter assets will be downloaded 
+from https://storage.googleapis.com. Make sure 
+you trust this source!
+At line:1 char:1
++ flutter analyze 
+lib/services/usb_printer_service.dart 
+lib/services/re ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Fl 
+   utter assets ...st this source!:String) [],  
+   RemoteException
+    + FullyQualifiedErrorId : NativeCommandErro 
+   r
+ 
+Analyzing 2 items...                                            
+
+warning - The value of the field '_width75mm' isn't used - lib\services\report_service.dart:28:23 - unused_field
+   info - The parameter name 'sum' matches a visible type name - lib\services\report_service.dart:97:33 - avoid_types_as_parameter_names
+   info - Unnecessary use of 'toList' in a spread - lib\services\report_service.dart:340:18 - unnecessary_to_list_in_spreads
+  error - In constant expressions, operands of this operator must be of type 'bool', 'num', 'String' or 'null' - lib\services\report_service.dart:408:77 - const_eval_type_bool_num_string
+   info - The parameter name 'sum' matches a visible type name - lib\services\report_service.dart:618:69 - avoid_types_as_parameter_names
+  error - The named parameter 'italic' isn't defined - lib\services\report_service.dart:706:79 - undefined_named_parameter
+   info - The private field _devices could be 'final' - lib\services\usb_printer_service.dart:8:23 - prefer_final_fields
+warning - Dead code - lib\services\usb_printer_service.dart:70:59 - dead_code
+warning - The left operand can't be null, so the right operand is never executed - lib\services\usb_printer_service.dart:70:62 - dead_null_aware_expression
+
+9 issues found. (ran in 4.8s)

@@ -1,0 +1,48 @@
+flutter : Flutter assets will be downloaded 
+from https://storage.googleapis.com. Make sure 
+you trust this source!
+At line:1 char:1
++ flutter analyze 
+lib/services/report_service.dart 
+lib/services/usb_pri ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Fl 
+   utter assets ...st this source!:String) [],  
+   RemoteException
+    + FullyQualifiedErrorId : NativeCommandErro 
+   r
+ 
+Analyzing 3 items...                                            
+
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:143:52 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:205:48 - deprecated_member_use
+   info - 'MaterialStateProperty' is deprecated and shouldn't be used. Use WidgetStateProperty instead. Moved to the Widgets layer to make code available outside of Material. This feature was deprecated after v3.19.0-0.3.pre - lib\screens\admin\tabs\users_tab.dart:214:32 - deprecated_member_use
+   info - 'MaterialStateProperty' is deprecated and shouldn't be used. Use WidgetStateProperty instead. Moved to the Widgets layer to make code available outside of Material. This feature was deprecated after v3.19.0-0.3.pre - lib\screens\admin\tabs\users_tab.dart:215:29 - deprecated_member_use
+   info - 'dataRowHeight' is deprecated and shouldn't be used. Migrate to use dataRowMinHeight and dataRowMaxHeight instead. This feature was deprecated after v3.7.0-5.0.pre - lib\screens\admin\tabs\users_tab.dart:218:15 - deprecated_member_use
+warning - The value of the local variable 'currentUserUid' isn't used - lib\screens\admin\tabs\users_tab.dart:234:23 - unused_local_variable
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:283:68 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:289:53 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:302:46 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:302:137 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:312:46 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:312:137 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:381:126 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:387:92 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\admin\tabs\users_tab.dart:403:17 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:454:54 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\tabs\users_tab.dart:456:73 - deprecated_member_use
+warning - Dead code - lib\screens\admin\tabs\users_tab.dart:467:72 - dead_code
+warning - The left operand can't be null, so the right operand is never executed - lib\screens\admin\tabs\users_tab.dart:467:75 - dead_null_aware_expression
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\admin\tabs\users_tab.dart:481:53 - use_build_context_synchronously
+warning - Dead code - lib\screens\admin\tabs\users_tab.dart:514:51 - dead_code
+warning - The left operand can't be null, so the right operand is never executed - lib\screens\admin\tabs\users_tab.dart:514:54 - dead_null_aware_expression
+warning - The value of the field '_width75mm' isn't used - lib\services\report_service.dart:28:23 - unused_field
+   info - The parameter name 'sum' matches a visible type name - lib\services\report_service.dart:97:33 - avoid_types_as_parameter_names
+   info - Unnecessary use of 'toList' in a spread - lib\services\report_service.dart:340:18 - unnecessary_to_list_in_spreads
+   info - The parameter name 'sum' matches a visible type name - lib\services\report_service.dart:618:69 - avoid_types_as_parameter_names
+   info - The private field _devices could be 'final' - lib\services\usb_printer_service.dart:8:23 - prefer_final_fields
+warning - Dead code - lib\services\usb_printer_service.dart:70:59 - dead_code
+warning - The left operand can't be null, so the right operand is never executed - lib\services\usb_printer_service.dart:70:62 - dead_null_aware_expression
+
+29 issues found. (ran in 5.7s)

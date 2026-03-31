@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../models/menu_item.dart';
 import '../providers/cart_provider.dart';
 import '../services/report_service.dart';
+import '../services/usb_printer_service.dart';
 import '../utils/debouncer.dart';
 
 class TakeawayOrderDialog extends StatefulWidget {
@@ -596,14 +597,55 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
 
     await batch.commit();
     
-    // Print KOT
     final kotData = {
       'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
       'customerName': customerName,
       'waiterName': waiterName,
+      'totalAmount': total,
       'items': _selectedItems.map((i) => {'name': i.item.name, 'quantity': i.quantity, 'price': i.item.price}).toList(),
     };
-    await ReportService.printKOTReceipt(kotData, orderRef.id);
+
+    final printerService = context.read<UsbPrinterService>();
+    final paymentMode = _paymentMethod;
+    final hotelName = context.read<AuthService>().restaurantName ?? "YUG POS";
+
+    // STEP 1: Settle Firestore while main thread is clean (no USB calls yet)
+    await ReportService.settleOrder(docId: orderRef.id, paymentMode: paymentMode);
+
+    if (printerService.selectedDevice != null) {
+      // STEP 2: Generate all bytes (pure Dart, safe)
+      final kotBytes = await ReportService.generateKOTBytes(kotData);
+      final billBytes = await ReportService.generateFinalBillBytes(
+        data: kotData,
+        total: total,
+        paymentMode: paymentMode,
+        hotelName: hotelName,
+      );
+
+      // STEP 3: Fire USB prints isolated in microtask — keeps native USB
+      // background threads from interfering with Firebase platform channels
+      Future.microtask(() async {
+        try {
+          await ReportService.printBytesIsolated(printerService, kotBytes);
+          await ReportService.printBytesIsolated(printerService, billBytes);
+        } catch (e) {
+          debugPrint('Print error (order already saved): $e');
+        }
+      });
+    } else {
+      // PDF fallback — no native USB involved, safe to await inline
+      await ReportService.printKOTReceipt(kotData, orderRef.id);
+      await ReportService.printFinalBill(
+        orderData: kotData,
+        orderId: orderRef.id,
+        subtotal: total,
+        cgst: 0.0,
+        sgst: 0.0,
+        total: total,
+        paymentMode: paymentMode,
+        hotelName: hotelName,
+      );
+    }
 
     if (mounted) {
       Navigator.pop(context);

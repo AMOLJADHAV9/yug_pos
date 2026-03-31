@@ -2697,7 +2697,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
     }
   }
 
-  void _printBillForOrder(String orderId) async {
+  void _printBillForOrder(String orderId, {String? customPaymentMode}) async {
     try {
       final doc = await _firestore.collection('orders').doc(orderId).get();
       if (!doc.exists) {
@@ -2708,8 +2708,10 @@ class _CashierDashboardState extends State<CashierDashboard> {
       final orderData = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
       final restaurantId = orderData['restaurantId'];
       if (restaurantId == null) throw "Restaurant ID is missing in order data!";
-      
-      final subtotal = (orderData['totalAmount'] as num).toDouble();
+
+      // Safe cast: totalAmount can be int, double, or occasionally null
+      final rawTotal = orderData['totalAmount'];
+      final subtotal = rawTotal is num ? rawTotal.toDouble() : double.tryParse(rawTotal?.toString() ?? '') ?? 0.0;
       const cgst = 0.0;
       const sgst = 0.0;
       final total = subtotal;
@@ -2717,22 +2719,22 @@ class _CashierDashboardState extends State<CashierDashboard> {
       final auth = context.read<AuthService>();
       final restaurantName = auth.restaurantName ?? "YUG POS";
       
-      int assignedReceiptNo = orderData['receiptNumber'] ?? 0;
+      int assignedReceiptNo = (orderData['receiptNumber'] as num?)?.toInt() ?? 0;
       
       if (assignedReceiptNo == 0) {
         // Run a transaction to get the next receipt number sequentially
         final counterRef = _firestore.collection('receipt_counters').doc(restaurantId);
-        assignedReceiptNo = await _firestore.runTransaction((transaction) async {
+        final nextNo = await _firestore.runTransaction<int>((transaction) async {
           final counterDoc = await transaction.get(counterRef);
-          int nextNo = 1;
+          int next = 1;
           if (counterDoc.exists) {
-            nextNo = (counterDoc.data()?['lastReceiptNo'] ?? 0) + 1;
+            next = ((counterDoc.data()?['lastReceiptNo'] as num?)?.toInt() ?? 0) + 1;
           }
-          transaction.set(counterRef, {'lastReceiptNo': nextNo}, SetOptions(merge: true));
+          transaction.set(counterRef, {'lastReceiptNo': next}, SetOptions(merge: true));
           
-          // Also update the order during the same transaction if possible
+          // Also update the order during the same transaction
           transaction.update(_firestore.collection('orders').doc(orderId), {
-            'receiptNumber': nextNo,
+            'receiptNumber': next,
             'status': 'billed',
             'subtotal': subtotal,
             'cgst': cgst,
@@ -2741,15 +2743,15 @@ class _CashierDashboardState extends State<CashierDashboard> {
             'billedAt': FieldValue.serverTimestamp(),
           });
           
-          return nextNo;
+          return next;
         });
+        assignedReceiptNo = nextNo;
         orderData['receiptNumber'] = assignedReceiptNo;
       }
       
       final strReceiptNo = assignedReceiptNo.toString().padLeft(6, '0');
-
-      // Update only the basic bill info in Firestore via printBillForOrder transaction
-      // Revenue data will be recorded during _finalizeSettlement after payment mode selection
+      
+      final String pMode = customPaymentMode ?? orderData['paymentMode'] as String? ?? "Cash/Unpaid";
       
       // Print the Premium Final Bill
       await ReportService.printFinalBill(
@@ -2759,15 +2761,15 @@ class _CashierDashboardState extends State<CashierDashboard> {
         cgst: cgst,
         sgst: sgst,
         total: total,
-        paymentMode: "Cash/Unpaid",
+        paymentMode: pMode,
         hotelName: restaurantName,
       );
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bill #$strReceiptNo Printed!"), backgroundColor: Colors.blue));
       }
-    } catch (e) {
-      debugPrint("Billing Error: $e");
+    } catch (e, stack) {
+      debugPrint("Billing Error: $e\n$stack");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Billing Failed: $e"), backgroundColor: Colors.red));
       }
@@ -2840,6 +2842,9 @@ class _CashierDashboardState extends State<CashierDashboard> {
 
     // In case they skipped the BILL button and hit SETTLE directly
     await _recordRevenueAndUpdateStatus(orderId, data, paymentMode);
+
+    // Automatically print the final bill with the confirmed payment method
+    _printBillForOrder(orderId, customPaymentMode: paymentMode);
 
     // Physically clear the table
     if (!_hasCreatedTempTable && _selectedTableId != null) {

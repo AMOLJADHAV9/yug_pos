@@ -1,11 +1,31 @@
+import 'dart:io';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'usb_printer_service.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
 class ReportService {
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  /// On Windows, [Printing.layoutPdf] opens a blocking native dialog that
+  /// competes with Firestore's background-thread callbacks on the platform
+  /// channel, causing "non-platform thread" crashes. A short async gap allows
+  /// Flutter's event loop to drain before the native dialog takes the thread.
+  static Future<void> _safePrint({
+    required String name,
+    required Future<Uint8List> Function(PdfPageFormat) onLayout,
+  }) async {
+    if (!kIsWeb && Platform.isWindows) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    await Printing.layoutPdf(onLayout: onLayout, name: name);
+  }
+
   static Future<pw.ImageProvider> _loadLogo() async {
     final logoData = await rootBundle.load('lib/assets/img/yug_pos_logo.png');
     return pw.MemoryImage(logoData.buffer.asUint8List());
@@ -129,7 +149,7 @@ class ReportService {
                             fontSize: 16, color: PdfColors.grey700)),
                   ],
                 ),
-                pw.Image(logo, width: 60, height: 60),
+                pw.Image(logo, width: 80, height: 80),
               ],
             ),
             pw.SizedBox(height: 10),
@@ -228,7 +248,7 @@ class ReportService {
   static Future<void> printKOTReceipt(
       Map<String, dynamic> data, String orderId) async {
     final pdf = pw.Document();
-    final items = data['items'] as List;
+    final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
     final roboto = await PdfGoogleFonts.robotoRegular();
     final robotoBold = await PdfGoogleFonts.robotoBold();
@@ -241,7 +261,8 @@ class ReportService {
 
     final logo = await _loadLogo();
 
-    await Printing.layoutPdf(
+    await _safePrint(
+      name: 'KOT_${orderId.substring(0, 4).toUpperCase()}.pdf',
       onLayout: (PdfPageFormat format) async {
         pdf.addPage(
           pw.Page(
@@ -251,20 +272,33 @@ class ReportService {
               pw.Center(child: pw.Image(logo, width: 45, height: 45)),
               pw.SizedBox(height: 5),
               pw.Center(
-                child: pw.Text("KOT", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                child: pw.Text("KOT", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
               ),
               _thickDash(),
               pw.Center(
                 child: pw.Text(_formatOrderTypeDisplay(data),
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18)),
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
               ),
               _thickDash(),
-              ...items.map((item) {
-                final quantity = (item['quantity'] ?? 0).toInt();
+              // ── Column headers ──────────────────────────────────
+              pw.Row(children: [
+                pw.Expanded(child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.SizedBox(width: 30, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                pw.SizedBox(width: 40, child: pw.Text("RATE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+              ]),
+              _thickDash(),
+              // ── Items ───────────────────────────────────────────
+              ...items.map((rawItem) {
+                final item = Map<String, dynamic>.from(rawItem as Map);
+                final itemName = (item['name']?.toString() ?? '').toUpperCase();
+                final itemQty = (item['quantity'] as num?)?.toInt() ?? 1;
                 return pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                  child: pw.Text("${quantity}x  ${item['name']}",
-                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  child: pw.Row(children: [
+                    pw.Expanded(child: pw.Text(itemName, style: const pw.TextStyle(fontSize: 8))),
+                    pw.SizedBox(width: 30, child: pw.Text("$itemQty", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                    pw.SizedBox(width: 40, child: pw.Text("-", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                  ]),
                 );
               }),
               _dash(),
@@ -293,7 +327,8 @@ class ReportService {
 
     final logo = await _loadLogo();
 
-    await Printing.layoutPdf(
+    await _safePrint(
+      name: 'Order_${orderId.substring(0, 8)}.pdf',
       onLayout: (PdfPageFormat format) async {
         pdf.addPage(
           pw.Page(
@@ -370,7 +405,7 @@ class ReportService {
     String address = "Market Road, City",
   }) async {
     final pdf = pw.Document();
-    final items = orderData['items'] as List;
+    final items = (orderData['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final date = DateTime.now();
     final dateStr = DateFormat('dd-MM-yyyy  hh:mm a').format(date);
 
@@ -382,7 +417,8 @@ class ReportService {
     final receiptNum = orderData['receiptNumber'] ?? orderId.substring(0, 6);
     final logo = await _loadLogo();
 
-    await Printing.layoutPdf(
+    await _safePrint(
+      name: 'Invoice_$receiptNum.pdf',
       onLayout: (PdfPageFormat format) async {
         pdf.addPage(
           pw.Page(
@@ -404,7 +440,7 @@ class ReportService {
               ]),
               pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
                 pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 7)),
-                pw.Text("Token: ${orderData['kotNumber'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                pw.Text("Token: ${orderData['kotNumber'] ?? 'N/A'}", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
               ]),
               if (orderData['orderType'] == 'takeaway' && orderData['deliveryAddress'] != null)
                 pw.Text("Address: ${orderData['deliveryAddress']}", style: const pw.TextStyle(fontSize: 7)),
@@ -422,15 +458,21 @@ class ReportService {
               _dash(),
 
               // ── Items ───────────────────────────────────────────                  
-              ...items.map((item) => pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-                    child: pw.Row(children: [
-                      pw.Expanded(child: pw.Text(item['name'].toString().toUpperCase(), style: const pw.TextStyle(fontSize: 8))),
-                      pw.SizedBox(width: 20, child: pw.Text("${item['quantity']}", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                      pw.SizedBox(width: 35, child: pw.Text("${item['price']}", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
-                      pw.SizedBox(width: 40, child: pw.Text("₹${(item['price'] * item['quantity']).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
-                    ]),
-                  )),
+              ...items.map((rawItem) {
+                final item = Map<String, dynamic>.from(rawItem as Map);
+                final itemName = item['name']?.toString() ?? '';
+                final itemQty = (item['quantity'] as num?)?.toInt() ?? 1;
+                final itemPrice = (item['price'] as num?)?.toDouble() ?? 0.0;
+                return pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+                      child: pw.Row(children: [
+                        pw.Expanded(child: pw.Text(itemName.toUpperCase(), style: const pw.TextStyle(fontSize: 8))),
+                        pw.SizedBox(width: 20, child: pw.Text("$itemQty", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                        pw.SizedBox(width: 35, child: pw.Text("$itemPrice", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                        pw.SizedBox(width: 40, child: pw.Text("₹${(itemPrice * itemQty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                      ]),
+                    );
+              }),
               _dash(),
 
               // ── Totals ──────────────────────────────────────────
@@ -639,4 +681,147 @@ class ReportService {
     padding: const pw.EdgeInsets.all(5),
     child: pw.Text(text, style: const pw.TextStyle(fontSize: 8), textAlign: align),
   );
+
+  // ── ESC/POS GENERATORS (Thermal Printers) ──────────────────────────────
+  static Future<List<int>> generateKOTBytes(Map<String, dynamic> data, {PaperSize paperSize = PaperSize.mm58}) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(paperSize, profile);
+    List<int> bytes = [];
+
+    final kotNum = data['kotNumber'] ?? 'N/A';
+    final tableName = _formatOrderTypeDisplay(data);
+    final waiterName = data['waiterName'] ?? 'Staff';
+    final timeStr = DateFormat('hh:mm a').format(DateTime.now());
+    final note = data['note'] ?? '';
+
+    // Header: YUGPOS
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text("YUGPOS", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.text("KITCHEN TICKET", styles: const PosStyles(bold: true));
+    bytes += generator.hr();
+
+    // Details: size 8 (Font B)
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.text("KOT : $kotNum");
+    bytes += generator.text("Table : $tableName");
+    bytes += generator.text("Waiter : $waiterName");
+    bytes += generator.text("Time : $timeStr");
+    bytes += generator.hr();
+
+    // Column Headers
+    bytes += generator.text("QTY   ITEM", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+    bytes += generator.hr();
+
+    // Items
+    final items = data['items'] as List;
+    for (var item in items) {
+      final qty = item['quantity'] ?? 1;
+      final name = item['name'].toString().toUpperCase();
+      // Simple alignment: Qty followed by Name
+      bytes += generator.text("${qty.toString().padRight(5)} $name", styles: const PosStyles(fontType: PosFontType.fontB));
+    }
+
+    bytes += generator.hr();
+
+    // Note
+    if (note.isNotEmpty) {
+      bytes += generator.text("Note : $note", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+      bytes += generator.hr();
+    }
+
+    bytes += generator.feed(3);
+    bytes += generator.cut();
+    return bytes;
+  }
+
+  static Future<List<int>> generateFinalBillBytes({
+    required Map<String, dynamic> data,
+    required double total,
+    required String paymentMode,
+    String hotelName = "YUG POS",
+    PaperSize paperSize = PaperSize.mm58,
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(paperSize, profile);
+    List<int> bytes = [];
+
+    // Header: Title
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.text("INVOICE", styles: const PosStyles(bold: false));
+    bytes += generator.hr();
+
+    // Details: size 8 (Font B)
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.text("Table: ${_formatOrderTypeDisplay(data, isFinalBill: true)}");
+    bytes += generator.text("Date: ${DateFormat('dd/MM/yy hh:mm a').format(DateTime.now())}");
+    bytes += generator.hr();
+
+    // Column Headers
+    bytes += generator.row([
+      PosColumn(text: "ITEM", width: 7, styles: const PosStyles(bold: true, fontType: PosFontType.fontB)),
+      PosColumn(text: "QTY", width: 2, styles: const PosStyles(bold: true, align: PosAlign.center, fontType: PosFontType.fontB)),
+      PosColumn(text: "AMT", width: 3, styles: const PosStyles(bold: true, align: PosAlign.right, fontType: PosFontType.fontB)),
+    ]);
+    bytes += generator.hr();
+
+    // Items
+    final items = data['items'] as List;
+    for (var item in items) {
+      final qty = item['quantity'] ?? 1;
+      final price = (item['price'] ?? 0) as num;
+      bytes += generator.row([
+        PosColumn(text: "${item['name']}".toUpperCase(), width: 7, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB)),
+        PosColumn(text: "$qty", width: 2, styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB)),
+        PosColumn(text: "${(qty * price).toStringAsFixed(0)}", width: 3, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
+      ]);
+    }
+
+    bytes += generator.hr();
+
+    // Grand Total
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.right, bold: true));
+    bytes += generator.text("TOTAL: INR ${total.toStringAsFixed(0)}", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.hr(ch: '=');
+
+    // Footer
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center));
+    bytes += generator.text("PAYMENT: ${paymentMode.toUpperCase()}");
+    bytes += generator.text("Thank you! Visit Again", styles: const PosStyles(bold: true));
+    
+    bytes += generator.feed(3);
+    bytes += generator.cut();
+
+    return bytes;
+  }
+
+  /// Updates Firestore order status to 'billed' and adds timestamp.
+  /// Helper to isolate native USB printing from the main thread.
+  static Future<void> printBytesIsolated(
+      UsbPrinterService printerService, List<int> bytes) async {
+    Future.microtask(() async {
+      try {
+        await printerService.printRawBytes(bytes);
+      } catch (e) {
+        debugPrint('Print error (isolated): $e');
+      }
+    });
+  }
+
+  static Future<void> settleOrder({
+    required String docId,
+    required String paymentMode,
+  }) async {
+    try {
+      await _firestore.collection('orders').doc(docId).update({
+        'status': 'billed',
+        'paymentMode': paymentMode,
+        'billedAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint("Order $docId settled successfully.");
+    } catch (e) {
+      debugPrint("Error settling order: $e");
+      rethrow;
+    }
+  }
 }

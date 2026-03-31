@@ -7,6 +7,7 @@ import '../models/table_model.dart';
 import '../models/menu_item.dart';
 import '../providers/cart_provider.dart';
 import '../services/report_service.dart';
+import '../services/usb_printer_service.dart';
 import '../utils/debouncer.dart';
 
 class CommonOrderDialog extends StatefulWidget {
@@ -678,7 +679,13 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         }).toList(),
      };
      
-     await ReportService.printKOTReceipt(kotData, orderRef.id);
+     final printerService = context.read<UsbPrinterService>();
+     if (printerService.selectedDevice != null) {
+       final bytes = await ReportService.generateKOTBytes(kotData);
+       await ReportService.printBytesIsolated(printerService, bytes);
+     } else {
+       await ReportService.printKOTReceipt(kotData, orderRef.id);
+     }
 
      if (mounted) {
        Navigator.pop(context);

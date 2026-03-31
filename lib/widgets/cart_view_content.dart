@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
+import '../../services/usb_printer_service.dart';
 import '../providers/cart_provider.dart';
 
 class CartViewContent extends StatefulWidget {
@@ -350,20 +351,52 @@ class _CartViewContentState extends State<CartViewContent> {
           'price': i.item.price,
         }).toList(),
       };
-      await ReportService.printKOTReceipt(kotData, orderId);
+      final printerService = context.read<UsbPrinterService>();
+      final hasUsbPrinter = printerService.selectedDevice != null;
+
+      if (hasUsbPrinter) {
+        final bytes = await ReportService.generateKOTBytes(kotData);
+        await ReportService.printBytesIsolated(printerService, bytes);
+      } else {
+        await ReportService.printKOTReceipt(kotData, orderId);
+      }
       
-      // If BILL is pressed, print the Premium Final Bill (Invoice Style)
+      // If BILL is pressed, print the final bill and settle
       if (printBill) {
-        await ReportService.printFinalBill(
-          orderData: kotData,
-          orderId: orderId,
-          subtotal: cart.totalAmount,
-          cgst: 0.0,
-          sgst: 0.0,
-          total: cart.totalAmount,
-          paymentMode: "Cash/Unpaid",
-          hotelName: auth.restaurantName ?? "YUG POS",
-        );
+        final paymentMode = "Cash";
+
+        // STEP 1: Settle Firestore first (main thread, clean)
+        await ReportService.settleOrder(docId: orderId, paymentMode: paymentMode);
+
+        // STEP 2: Generate bytes (pure Dart)
+        if (hasUsbPrinter) {
+          final bytes = await ReportService.generateFinalBillBytes(
+            data: kotData,
+            total: cart.totalAmount,
+            paymentMode: paymentMode,
+            hotelName: auth.restaurantName ?? "YUG POS",
+          );
+          // STEP 3: Print isolated in microtask so USB native thread
+          // cannot corrupt Firebase's platform channel context
+          Future.microtask(() async {
+            try {
+              await ReportService.printBytesIsolated(printerService, bytes);
+            } catch (e) {
+              debugPrint('Print error (bill already saved): $e');
+            }
+          });
+        } else {
+          await ReportService.printFinalBill(
+            orderData: kotData,
+            orderId: orderId,
+            subtotal: cart.totalAmount,
+            cgst: 0.0,
+            sgst: 0.0,
+            total: cart.totalAmount,
+            paymentMode: paymentMode,
+            hotelName: auth.restaurantName ?? "YUG POS",
+          );
+        }
       }
 
         if (mounted) {

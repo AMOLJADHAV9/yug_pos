@@ -48,6 +48,8 @@ dependencies:
   intl: ^0.20.2
   file_picker: ^10.3.10
   http: ^1.2.1
+  esc_pos_utils_plus: any
+  flutter_pos_printer_platform_image_3: ^1.2.4
 
 dev_dependencies:
   flutter_test:
@@ -99,3 +101,6 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+ 
+dependency_overrides: 
+  image: ^4.2.0

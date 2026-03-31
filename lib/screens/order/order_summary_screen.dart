@@ -106,6 +106,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "order_summary_fab",
         onPressed: () {
           Navigator.push(context, MaterialPageRoute(builder: (_) => MenuScreen(table: widget.table)));
         },

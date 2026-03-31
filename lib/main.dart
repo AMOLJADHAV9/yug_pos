@@ -14,6 +14,7 @@ import 'providers/cart_provider.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/cashier/cashier_dashboard.dart';
 import 'screens/auth/unauthorized_screen.dart';
+import 'services/usb_printer_service.dart';
 
 class GlobalHttpOverrides extends HttpOverrides {
   @override
@@ -42,10 +43,22 @@ void main() async {
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: false,
     );
-  } else {
+    // Disable runtime font fetching on web — prevents google_fonts from
+    // making network requests during CanvasKit initialization which causes
+    // the engine to crash with unresolved JS promises.
+    GoogleFonts.config.allowRuntimeFetching = false;
+  } else if (Platform.isAndroid || Platform.isIOS) {
+    // Mobile: persistence is safe and useful
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: true,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } else {
+    // Desktop (Windows/Linux/macOS): Firestore's C++ SDK fires cache callbacks
+    // on background threads, violating Flutter's platform-channel threading rules
+    // and causing "Lost connection to device" crashes. Disable persistence entirely.
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: false,
     );
   }
 
@@ -61,6 +74,7 @@ class WaiterPosApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
+        ChangeNotifierProvider(create: (_) => UsbPrinterService()),
       ],
       child: MaterialApp(
         title: 'YUG POS',

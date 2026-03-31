@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/usb_printer_service.dart';
+import '../../../services/report_service.dart';
 
 class UsersTab extends StatefulWidget {
   const UsersTab({super.key});
@@ -37,6 +39,7 @@ class _UsersTabState extends State<UsersTab> {
             builder: (context, snapshot) => _buildUsersContent(context, snapshot, restaurantId),
           ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "admin_users_fab",
         onPressed: () => _showAddUserDialog(context),
         icon: const Icon(Icons.person_add_alt_1, color: Colors.black),
         label: const Text("Add Staff Member", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -75,6 +78,11 @@ class _UsersTabState extends State<UsersTab> {
                           onPressed: () => setState(() {}),
                           tooltip: "Refresh Staff",
                         ),
+                        IconButton(
+                          icon: const Icon(Icons.print, color: Color(0xFFE7FF12)),
+                          onPressed: () => _showPrinterSettings(context),
+                          tooltip: "Printer Setup",
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -95,7 +103,7 @@ class _UsersTabState extends State<UsersTab> {
                 ),
               const SizedBox(height: 32),
               
-              _buildSectionHeader("Active Staff Members", Icons.people, Colors.blue),
+              _buildSectionHeader("Staff Members List", Icons.people, Colors.blue),
               const SizedBox(height: 16),
 
               // Responsive List Layout
@@ -164,17 +172,18 @@ class _UsersTabState extends State<UsersTab> {
                           constraints: const BoxConstraints(),
                           padding: const EdgeInsets.all(8),
                         ),
-                        IconButton(
-                          icon: Icon(
-                            status == 'active' ? Icons.block : Icons.check_circle_outline, 
-                            size: 20, 
-                            color: status == 'active' ? Colors.red : Colors.green
+                        if (uid != context.read<AuthService>().currentUser?.uid)
+                          IconButton(
+                            icon: Icon(
+                              status == 'active' ? Icons.block : Icons.check_circle_outline, 
+                              size: 20, 
+                              color: status == 'active' ? Colors.red : Colors.green
+                            ),
+                            onPressed: () => _toggleUserStatus(context, uid, status == 'active'),
+                            tooltip: status == 'active' ? "Disable User" : "Enable User",
+                            constraints: const BoxConstraints(),
+                            padding: const EdgeInsets.all(8),
                           ),
-                          onPressed: () => _toggleUserStatus(context, uid, status == 'active'),
-                          tooltip: status == 'active' ? "Disable User" : "Enable User",
-                          constraints: const BoxConstraints(),
-                          padding: const EdgeInsets.all(8),
-                        ),
                       ],
                     ),
                   ],
@@ -204,8 +213,9 @@ class _UsersTabState extends State<UsersTab> {
             child: DataTable(
               headingRowColor: MaterialStateProperty.all(const Color(0xFF2C2C2C)),
               dataRowColor: MaterialStateProperty.all(const Color(0xFF1E1E1E)),
-              horizontalMargin: 20,
-              columnSpacing: 24,
+              horizontalMargin: 24,
+              columnSpacing: 40,
+              dataRowHeight: 64,
               columns: const [
                 DataColumn(label: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70))),
                 DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70))),
@@ -221,30 +231,41 @@ class _UsersTabState extends State<UsersTab> {
                 final email = data['email'] ?? 'N/A';
                 final uid = doc.id;
 
+                final currentUserUid = context.read<AuthService>().currentUser?.uid;
+
                 return DataRow(cells: [
                   DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white))),
                   DataCell(Text(email, style: const TextStyle(color: Colors.white70))),
                   DataCell(_buildRoleChip(role.toString())),
                   DataCell(_buildStatusChip(status)),
-                  DataCell(Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.mail_outline, size: 20, color: Color(0xFFE7FF12)),
-                        onPressed: () => _sendResetEmail(context, email),
-                        tooltip: "Reset Password",
+                  DataCell(
+                    SizedBox(
+                      width: 100,
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.mail_outline, size: 20, color: Color(0xFFE7FF12)),
+                            onPressed: () => _sendResetEmail(context, email),
+                            tooltip: "Reset Password",
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 16),
+                          IconButton(
+                            icon: Icon(
+                              status == 'active' ? Icons.block : Icons.check_circle_outline, 
+                              size: 20, 
+                              color: status == 'active' ? Colors.redAccent : const Color(0xFFE7FF12)
+                            ),
+                            onPressed: () => _toggleUserStatus(context, uid, status == 'active'),
+                            tooltip: status == 'active' ? "Disable User" : "Enable User",
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: Icon(
-                          status == 'active' ? Icons.block : Icons.check_circle_outline, 
-                          size: 20, 
-                          color: status == 'active' ? Colors.redAccent : const Color(0xFFE7FF12)
-                        ),
-                        onPressed: () => _toggleUserStatus(context, uid, status == 'active'),
-                        tooltip: status == 'active' ? "Disable User" : "Enable User",
-                      ),
-                    ],
-                  )),
+                    ),
+                  ),
                 ]);
               }).toList(),
             ),
@@ -304,6 +325,13 @@ class _UsersTabState extends State<UsersTab> {
   void _sendResetEmail(BuildContext context, String email) async {
     await context.read<AuthService>().sendResetEmail(email);
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Reset email sent!")));
+  }
+
+  void _showPrinterSettings(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const PrinterSettingsDialog(),
+    );
   }
 }
 
@@ -389,6 +417,169 @@ class _AddUserDialogState extends State<AddUserDialog> {
           child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text("Create User", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
+    );
+  }
+}
+
+class PrinterSettingsDialog extends StatefulWidget {
+  const PrinterSettingsDialog({super.key});
+
+  @override
+  State<PrinterSettingsDialog> createState() => _PrinterSettingsDialogState();
+}
+
+class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<UsbPrinterService>(
+      builder: (context, printerService, child) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Row(
+            children: [
+              Icon(Icons.print, color: Color(0xFFE7FF12)),
+              SizedBox(width: 10),
+              Text("USB Printer Setup", style: TextStyle(color: Colors.white)),
+            ],
+          ),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (printerService.selectedDevice != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE7FF12).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE7FF12).withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          printerService.isConnected ? Icons.check_circle : Icons.error_outline, 
+                          color: printerService.isConnected ? const Color(0xFFE7FF12) : Colors.redAccent
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text("Current Printer", style: TextStyle(color: Colors.white54, fontSize: 10)),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: printerService.isConnected ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      printerService.isConnected ? "CONNECTED" : "OFFLINE", 
+                                      style: TextStyle(
+                                        color: printerService.isConnected ? Colors.greenAccent : Colors.redAccent, 
+                                        fontSize: 8, 
+                                        fontWeight: FontWeight.bold
+                                      )
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(printerService.selectedDevice!.name ?? "Unknown", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              Text(printerService.selectedDevice!.address ?? "", style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => printerService.disconnect(),
+                          child: const Text("FORGET", style: TextStyle(color: Colors.white38, fontSize: 10)),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                             final bytes = await ReportService.generateKOTBytes({
+                               'tableName': 'TEST', 
+                               'items': [{'name': 'TEST PRINT', 'quantity': 1}]
+                             });
+                             final success = await printerService.printRawBytes(bytes);
+                             if (mounted) {
+                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                 content: Text(success ? "Test Page Sent!" : "Failed to print"),
+                                 backgroundColor: success ? Colors.green : Colors.red,
+                               ));
+                             }
+                          },
+                          child: const Text("TEST", style: TextStyle(color: Color(0xFFE7FF12))),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ] else if (printerService.isScanning) ...[
+                   Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    child: const Row(
+                      children: [
+                        SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE7FF12))),
+                        SizedBox(width: 12),
+                        Text("Looking for saved printer...", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                const Text("Select a USB printer from the list below:", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 10),
+                if (printerService.isScanning)
+                  const Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: CircularProgressIndicator(color: Color(0xFFE7FF12)),
+                  )
+                else if (printerService.devices.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Text("No USB printers found", style: TextStyle(color: Colors.white38)),
+                  )
+                else
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: printerService.devices.length,
+                      itemBuilder: (context, index) {
+                        final device = printerService.devices[index];
+                        return ListTile(
+                          title: Text(device.name ?? "Unknown Device", style: const TextStyle(color: Colors.white)),
+                          subtitle: Text(device.address ?? "", style: const TextStyle(color: Colors.white38)),
+                          trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white24),
+                          onTap: () {
+                            printerService.selectDevice(device);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("CLOSE", style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              onPressed: printerService.isScanning ? null : () => printerService.scan(),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12)),
+              child: const Text("SCAN", style: TextStyle(color: Colors.black)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

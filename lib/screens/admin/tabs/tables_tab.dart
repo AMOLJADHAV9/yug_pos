@@ -16,6 +16,7 @@ class TablesTab extends StatefulWidget {
 
 class _TablesTabState extends State<TablesTab> {
   final _firestore = FirebaseFirestore.instance;
+  String _selectedSectionFilter = 'All';
 
   @override
   Widget build(BuildContext context) {
@@ -142,12 +143,17 @@ class _TablesTabState extends State<TablesTab> {
 
   Widget _buildTablesContent(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot, String? restaurantId) {
     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-    final tables = snapshot.data!.docs;
+    final tablesDocs = snapshot.data!.docs;
+    
+    // Get unique section names from the tables for the filter bar
+    final sectionsList = tablesDocs.map((doc) => (doc.data() as Map<String, dynamic>)['section']?.toString() ?? 'General').toSet().toList();
+    sectionsList.sort();
+    final allFilters = ['All', ...sectionsList];
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -174,117 +180,219 @@ class _TablesTabState extends State<TablesTab> {
             ],
           ),
         ),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final gridWidth = constraints.maxWidth;
-              final isMobile = gridWidth < 600;
-              // REQ: 4 cards on mobile
-              final crossAxis = isMobile ? 4 : (gridWidth < 900 ? 5 : 8);
-              
-              return GridView.builder(
-                padding: const EdgeInsets.all(8),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxis, 
-                  crossAxisSpacing: 6, 
-                  mainAxisSpacing: 6,
-                  childAspectRatio: isMobile ? 0.55 : 1.0, 
-                ),
-                itemCount: tables.length,
-                itemBuilder: (context, index) {
-                  final table = TableModel.fromMap(tables[index].id, tables[index].data() as Map<String, dynamic>);
-                  final isOccupied = table.status == TableStatus.occupied || table.status == TableStatus.kotSent || table.status == TableStatus.billRequested;
-                  
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.05) : const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.5) : const Color(0xFFE7FF12).withOpacity(0.1), width: 0.8),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(child: Text(table.name, style: TextStyle(fontSize: isMobile ? 12 : 14, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis)),
-                              if (!isMobile) 
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)),
-                                    const SizedBox(width: 2),
-                                    IconButton(icon: const Icon(Icons.delete, size: 10, color: Colors.redAccent), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () {
-                                       _firestore.collection('tables').doc(table.id).delete();
-                                    }),
-                                  ],
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 1),
-                          _buildUltraMiniStatus(table.status),
-                          if (isMobile) ...[
-                            Text("Sec: ${table.section}", style: const TextStyle(color: Colors.white60, fontSize: 8), overflow: TextOverflow.ellipsis, maxLines: 1),
-                            // Removed capacity here, already at bottom
-                          ] else ...[
-                            Text("Sec: ${table.section}", style: const TextStyle(color: Colors.white60, fontSize: 8), overflow: TextOverflow.ellipsis),
-                            Text("Cap: ${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8)),
-                            const Spacer(),
-                          ],
-                          
-                          if (isOccupied) ...[
-                            if (isMobile) 
-                              Row(
-                                children: [
-                                  if (table.status != TableStatus.billRequested)
-                                    Expanded(child: _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table))),
-                                  if (table.status != TableStatus.billRequested) const SizedBox(width: 2),
-                                  Expanded(child: _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table))),
-                                ],
-                              )
-                            else ...[
-                              if (table.status != TableStatus.billRequested)
-                                _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table)),
-                              _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table)),
-                            ],
-                          ],
-                          
-                          _buildUltraCompactButton("ORDER", Icons.add_shopping_cart, Colors.green, () {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (context) => CommonOrderDialog(table: table),
-                            );
-                          }),
-                          
-                          if (isMobile) ...[
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), 
-                                  padding: EdgeInsets.zero, 
-                                  constraints: const BoxConstraints(), 
-                                  onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)
-                                ),
-                                Text("C:${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8), textAlign: TextAlign.right),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
+        
+        // Section Filter Bar
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: SizedBox(
+            height: 40,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: allFilters.length,
+              itemBuilder: (context, index) {
+                final filter = allFilters[index];
+                final isSelected = _selectedSectionFilter == filter;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: Text(filter, style: TextStyle(color: isSelected ? Colors.black : Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) setState(() => _selectedSectionFilter = filter);
+                    },
+                    selectedColor: const Color(0xFFE7FF12),
+                    backgroundColor: const Color(0xFF1E1E1E),
+                    side: BorderSide(color: isSelected ? const Color(0xFFE7FF12) : Colors.white12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    showCheckmark: false,
+                  ),
+                );
+              },
+            ),
           ),
+        ),
+
+        Expanded(
+          child: _selectedSectionFilter == 'All' 
+            ? _buildGroupedTables(tablesDocs, restaurantId)
+            : _buildSingleSectionGrid(tablesDocs, _selectedSectionFilter, restaurantId),
         ),
       ],
     );
   }
+
+  Widget _buildGroupedTables(List<QueryDocumentSnapshot> allTables, String? restaurantId) {
+    // Group tables by section
+    final Map<String, List<QueryDocumentSnapshot>> grouped = {};
+    for (var doc in allTables) {
+      final section = (doc.data() as Map<String, dynamic>)['section']?.toString() ?? 'General';
+      grouped.putIfAbsent(section, () => []).add(doc);
+    }
+    
+    final sortedSections = grouped.keys.toList()..sort();
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: sortedSections.length,
+      itemBuilder: (context, index) {
+        final sectionName = sortedSections[index];
+        final tables = grouped[sectionName]!;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border(left: BorderSide(color: const Color(0xFFE7FF12), width: 3)),
+                ),
+                child: Text(
+                  sectionName.toUpperCase(), 
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.2),
+                ),
+              ),
+            ),
+            _buildTablesGrid(tables, restaurantId),
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSingleSectionGrid(List<QueryDocumentSnapshot> allTables, String filter, String? restaurantId) {
+    final filteredTables = allTables.where((doc) {
+      final section = (doc.data() as Map<String, dynamic>)['section']?.toString() ?? 'General';
+       return section == filter;
+    }).toList();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Text(
+            filter.toUpperCase(), 
+            style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+        ),
+        Expanded(child: _buildTablesGrid(filteredTables, restaurantId)),
+      ],
+    );
+  }
+
+  Widget _buildTablesGrid(List<QueryDocumentSnapshot> tables, String? restaurantId) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gridWidth = constraints.maxWidth;
+        final isMobile = gridWidth < 600;
+        final crossAxis = isMobile ? 4 : (gridWidth < 900 ? 5 : 8);
+        
+        return StatefulBuilder(
+          builder: (context, setStateGrid) => GridView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxis, 
+              crossAxisSpacing: 6, 
+              mainAxisSpacing: 6,
+              childAspectRatio: isMobile ? 0.55 : 1.0, 
+            ),
+            itemCount: tables.length,
+            itemBuilder: (context, index) {
+              final tableDoc = tables[index];
+              final table = TableModel.fromMap(tableDoc.id, tableDoc.data() as Map<String, dynamic>);
+              final isOccupied = table.status == TableStatus.occupied || table.status == TableStatus.kotSent || table.status == TableStatus.billRequested;
+              
+              return Container(
+                decoration: BoxDecoration(
+                  color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.05) : const Color(0xFF1E1E1E),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.5) : const Color(0xFFE7FF12).withOpacity(0.1), width: 0.8),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: Text(table.name, style: TextStyle(fontSize: isMobile ? 12 : 14, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis)),
+                          if (!isMobile) 
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)),
+                                const SizedBox(width: 2),
+                                IconButton(icon: const Icon(Icons.delete, size: 10, color: Colors.redAccent), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () {
+                                   _firestore.collection('tables').doc(table.id).delete();
+                                }),
+                              ],
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 1),
+                      _buildUltraMiniStatus(table.status),
+                      if (!isMobile) ...[
+                        const Spacer(),
+                        Text("Cap: ${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8)),
+                      ],
+                      
+                      if (isOccupied) ...[
+                        if (isMobile) 
+                          Row(
+                            children: [
+                              if (table.status != TableStatus.billRequested)
+                                Expanded(child: _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table))),
+                              if (table.status != TableStatus.billRequested) const SizedBox(width: 2),
+                              Expanded(child: _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table))),
+                            ],
+                          )
+                        else ...[
+                          if (table.status != TableStatus.billRequested)
+                            _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table)),
+                          _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table)),
+                        ],
+                      ],
+                      
+                      _buildUltraCompactButton("ORDER", Icons.add_shopping_cart, Colors.green, () {
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => CommonOrderDialog(table: table),
+                        );
+                      }),
+                      
+                      if (isMobile) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), 
+                              padding: EdgeInsets.zero, 
+                              constraints: const BoxConstraints(), 
+                              onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)
+                            ),
+                            Text("C:${table.capacity}", style: const TextStyle(color: Colors.white60, fontSize: 8), textAlign: TextAlign.right),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
 
   Widget _buildUltraCompactButton(String label, IconData icon, Color color, VoidCallback onPressed) {
     return Padding(
@@ -430,73 +538,95 @@ class _TablesTabState extends State<TablesTab> {
   }
 
   void _showTableDialog({TableModel? table, String? restaurantId}) {
-    final nameCtrl = TextEditingController(text: table?.name);
-    final capCtrl = TextEditingController(text: table?.capacity.toString() ?? '4');
-    String? selectedSection = table?.section;
+     showDialog(context: context, builder: (context) => TableEditDialog(table: table, restaurantId: restaurantId));
+  }
+}
 
-    showDialog(context: context, builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          title: Text(table == null ? "Create New Table" : "Edit Table", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
-          content: Theme(
-            data: ThemeData.dark().copyWith(
-              inputDecorationTheme: InputDecorationTheme(
-                labelStyle: const TextStyle(color: Colors.white70),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
-                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Table Number/Name")),
-                TextField(controller: capCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Capacity"), keyboardType: TextInputType.number),
-                kIsWeb 
-                  ? FutureBuilder<QuerySnapshot>(
-                      future: _firestore.collection('sections').where('restaurantId', isEqualTo: restaurantId).get(),
-                      builder: (context, snap) => _buildSectionDropdown(snap, selectedSection, setDialogState),
-                    )
-                  : StreamBuilder<QuerySnapshot>(
-                      stream: _firestore.collection('sections').where('restaurantId', isEqualTo: restaurantId).snapshots(),
-                      builder: (context, snap) => _buildSectionDropdown(snap, selectedSection, setDialogState),
-                    ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
-            if (table != null)
-              TextButton(onPressed: () { _firestore.collection('tables').doc(table.id).delete(); Navigator.pop(context); }, child: const Text("Delete", style: TextStyle(color: Colors.red))),
-            ElevatedButton(
-              onPressed: () {
-                if (nameCtrl.text.isNotEmpty && selectedSection != null) {
-                  final data = {
-                    'name': nameCtrl.text.trim(),
-                    'capacity': int.tryParse(capCtrl.text) ?? 4,
-                    'section': selectedSection,
-                    'status': table?.status.name ?? TableStatus.available.name,
-                    'restaurantId': restaurantId,
-                  };
-                  if (table == null) {
-                    _firestore.collection('tables').add(data);
-                  } else {
-                    _firestore.collection('tables').doc(table.id).update(data);
-                  }
-                  Navigator.pop(context);
-                }
-              }, 
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
-              child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      }
-    ));
+class TableEditDialog extends StatefulWidget {
+  final TableModel? table;
+  final String? restaurantId;
+  const TableEditDialog({super.key, this.table, this.restaurantId});
+
+  @override
+  State<TableEditDialog> createState() => _TableEditDialogState();
+}
+
+class _TableEditDialogState extends State<TableEditDialog> {
+  final _firestore = FirebaseFirestore.instance;
+  late TextEditingController nameCtrl;
+  late TextEditingController capCtrl;
+  String? selectedSection;
+
+  @override
+  void initState() {
+    super.initState();
+    nameCtrl = TextEditingController(text: widget.table?.name);
+    capCtrl = TextEditingController(text: widget.table?.capacity.toString() ?? '4');
+    selectedSection = widget.table?.section;
   }
 
-  Widget _buildSectionDropdown(AsyncSnapshot<QuerySnapshot> snap, String? selectedSection, StateSetter setDialogState) {
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      title: Text(widget.table == null ? "Create New Table" : "Edit Table", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+      content: Theme(
+        data: ThemeData.dark().copyWith(
+          brightness: Brightness.dark,
+          inputDecorationTheme: InputDecorationTheme(
+            labelStyle: const TextStyle(color: Colors.white70),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Table Number/Name")),
+            TextField(controller: capCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Capacity"), keyboardType: TextInputType.number),
+            kIsWeb 
+              ? FutureBuilder<QuerySnapshot>(
+                  future: _firestore.collection('sections').where('restaurantId', isEqualTo: widget.restaurantId).get(),
+                  builder: (context, snap) => _buildSectionDropdown(snap),
+                )
+              : StreamBuilder<QuerySnapshot>(
+                  stream: _firestore.collection('sections').where('restaurantId', isEqualTo: widget.restaurantId).snapshots(),
+                  builder: (context, snap) => _buildSectionDropdown(snap),
+                ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+        if (widget.table != null)
+          TextButton(onPressed: () { _firestore.collection('tables').doc(widget.table!.id).delete(); Navigator.pop(context); }, child: const Text("Delete", style: TextStyle(color: Colors.red))),
+        ElevatedButton(
+          onPressed: () {
+            if (nameCtrl.text.isNotEmpty && selectedSection != null) {
+              final data = {
+                'name': nameCtrl.text.trim(),
+                'capacity': int.tryParse(capCtrl.text) ?? 4,
+                'section': selectedSection,
+                'status': widget.table?.status.name ?? TableStatus.available.name,
+                'restaurantId': widget.restaurantId,
+              };
+              if (widget.table == null) {
+                _firestore.collection('tables').add(data);
+              } else {
+                _firestore.collection('tables').doc(widget.table!.id).update(data);
+              }
+              Navigator.pop(context);
+            }
+          }, 
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+          child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionDropdown(AsyncSnapshot<QuerySnapshot> snap) {
     if (!snap.hasData) return const SizedBox();
     final sections = snap.data!.docs;
     return DropdownButtonFormField<String>(
@@ -504,8 +634,9 @@ class _TablesTabState extends State<TablesTab> {
       value: sections.any((s) => s['name'] == selectedSection) ? selectedSection : null,
       hint: const Text("Select Section", style: TextStyle(color: Colors.white54)),
       items: sections.map((s) => DropdownMenuItem(value: s['name'].toString(), child: Text(s['name'], style: const TextStyle(color: Colors.white)))).toList(),
-      onChanged: (v) => setDialogState(() => selectedSection = v),
+      onChanged: (v) => setState(() => selectedSection = v),
       decoration: const InputDecoration(labelText: "Section"),
     );
   }
 }
+
