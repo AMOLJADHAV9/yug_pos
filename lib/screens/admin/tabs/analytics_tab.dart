@@ -28,8 +28,8 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
 
     if (restaurantId == null) {
       return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+        backgroundColor: const Color(0xFF141615),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22))),
       );
     }
 
@@ -58,7 +58,8 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     if (snapshot.hasData) {
       for (var doc in snapshot.data!.docs) {
         final data = doc.data() as Map<String, dynamic>;
-        if (data['status'] != 'billed') continue;
+        final status = data['status']?.toString() ?? '';
+        if (status != 'billed' && status != 'completed') continue;
         if (data['createdAt'] == null) continue;
         
         final createdAt = (data['createdAt'] as Timestamp).toDate();
@@ -96,7 +97,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             children: [
               Text("Analytics & Reports", style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
               IconButton(
-                icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+                icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22)),
                 onPressed: () => setState(() {}),
                 tooltip: "Refresh Analytics",
               ),
@@ -118,7 +119,8 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                 onTap: () {
                   final thisMonthOrdersList = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
-                    if (data['status'] != 'billed' || data['createdAt'] == null) return false;
+                    final status = data['status']?.toString() ?? '';
+                    if ((status != 'billed' && status != 'completed') || data['createdAt'] == null) return false;
                     final createdAt = (data['createdAt'] as Timestamp).toDate();
                     return createdAt.isAfter(startOfThisMonth);
                   }).toList();
@@ -137,7 +139,8 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                 onTap: () {
                   final lastMonthOrdersList = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
-                    if (data['status'] != 'billed' || data['createdAt'] == null) return false;
+                    final status = data['status']?.toString() ?? '';
+                    if ((status != 'billed' && status != 'completed') || data['createdAt'] == null) return false;
                     final createdAt = (data['createdAt'] as Timestamp).toDate();
                     return createdAt.isAfter(startOfLastMonth) && createdAt.isBefore(startOfThisMonth);
                   }).toList();
@@ -154,7 +157,8 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                 onTap: () {
                   final thisMonthOrdersList = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
-                    if (data['status'] != 'billed' || data['createdAt'] == null) return false;
+                    final status = data['status']?.toString() ?? '';
+                    if ((status != 'billed' && status != 'completed') || data['createdAt'] == null) return false;
                     final createdAt = (data['createdAt'] as Timestamp).toDate();
                     return createdAt.isAfter(startOfThisMonth);
                   }).toList();
@@ -245,7 +249,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
       height: 300,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: const Color(0xFF141615),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
@@ -254,7 +258,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart, color: Color(0xFFE7FF12), size: 20),
+              const Icon(Icons.bar_chart, color: Color(0xFFFCDD22), size: 20),
               const SizedBox(width: 8),
               Text("${now.year} Revenue Column Chart", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
             ],
@@ -263,7 +267,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
           Expanded(
             child: BarChart(
               BarChartData(
-                backgroundColor: const Color(0xFF1E1E1E),
+                backgroundColor: const Color(0xFF141615),
                 maxY: maxRevenue > 0 ? maxRevenue * 1.2 : 100,
                 barGroups: List.generate(12, (i) {
                   final isCurrent = i == now.month - 1;
@@ -275,7 +279,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                         toY: monthlyRevenue[i] ?? 0,
                         width: 14,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                        color: isCurrent ? const Color(0xFFE7FF12) : (isPast ? const Color(0xFFE7FF12).withOpacity(0.4) : Colors.white.withOpacity(0.1)),
+                        color: isCurrent ? const Color(0xFFFCDD22) : (isPast ? const Color(0xFFFCDD22).withOpacity(0.4) : Colors.white.withOpacity(0.1)),
                       ),
                     ],
                   );
@@ -348,7 +352,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     return Container(
       height: MediaQuery.of(context).size.width < 600 ? 280 : 350,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
+      decoration: BoxDecoration(color: const Color(0xFF141615), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
       child: Column(
         children: [
           const Text("Category Distribution (%)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
@@ -434,7 +438,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     return Container(
       height: MediaQuery.of(context).size.width < 600 ? 280 : 350,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
+      decoration: BoxDecoration(color: const Color(0xFF141615), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
       child: Column(
         children: [
           const Text("Weekly Revenue Trend", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
@@ -442,7 +446,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
           Expanded(
             child: LineChart(
               LineChartData(
-                backgroundColor: const Color(0xFF1E1E1E),
+                backgroundColor: const Color(0xFF141615),
                 gridData: const FlGridData(show: false),
                 titlesData: FlTitlesData(
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -454,9 +458,9 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                   LineChartBarData(
                     spots: weeklyRevenue.entries.map((e) => FlSpot(e.key.toDouble(), e.value)).toList(),
                     isCurved: true,
-                    color: const Color(0xFFE7FF12),
+                    color: const Color(0xFFFCDD22),
                     barWidth: 3,
-                    belowBarData: BarAreaData(show: true, color: const Color(0xFFE7FF12).withOpacity(0.1)),
+                    belowBarData: BarAreaData(show: true, color: const Color(0xFFFCDD22).withOpacity(0.1)),
                     dotData: const FlDotData(show: false),
                   ),
                 ],
@@ -477,13 +481,13 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, color: const Color(0xFFE7FF12), size: 18),
+          decoration: BoxDecoration(color: const Color(0xFFFCDD22).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: const Color(0xFFFCDD22), size: 18),
         ),
         const SizedBox(width: 12),
         Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
         const SizedBox(width: 12),
-        Expanded(child: Divider(color: const Color(0xFFE7FF12).withOpacity(0.2), thickness: 1.5)),
+        Expanded(child: Divider(color: const Color(0xFFFCDD22).withOpacity(0.2), thickness: 1.5)),
       ],
     );
   }
@@ -491,12 +495,12 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   Widget _buildStatCard(String title, String value, IconData icon, Color color, {String? subtitle, Color? subtitleColor}) {
     final width = MediaQuery.of(context).size.width;
     final isMobile = width < 600;
-    final themeYellow = const Color(0xFFE7FF12);
+    final themeYellow = const Color(0xFFFCDD22);
 
     return Container(
       padding: EdgeInsets.all(isMobile ? 8 : 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: const Color(0xFF141615),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: themeYellow.withOpacity(0.05)),
       ),
@@ -523,7 +527,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: const Color(0xFF141615),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -553,8 +557,8 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                       contentPadding: EdgeInsets.zero,
                       leading: Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.receipt_long, color: Color(0xFFE7FF12), size: 20),
+                        decoration: BoxDecoration(color: const Color(0xFFFCDD22).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.receipt_long, color: Color(0xFFFCDD22), size: 20),
                       ),
                       title: Text("${data['tableName']} - ₹${amount.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
                       subtitle: Column(
@@ -565,7 +569,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                         ],
                       ),
                       trailing: IconButton(
-                        icon: const Icon(Icons.print, color: Color(0xFFE7FF12), size: 18),
+                        icon: const Icon(Icons.print, color: Color(0xFFFCDD22), size: 18),
                         onPressed: () => ReportService.printOrderReceipt(data, orders[index].id),
                       ),
                     );

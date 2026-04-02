@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
+import '../utils/navigator_utils.dart';
 import '../models/table_model.dart';
 import '../models/menu_item.dart';
 import '../providers/cart_provider.dart';
@@ -41,14 +42,14 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
     final isMobile = screenWidth < 700;
 
     return Dialog(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF141615),
       insetPadding: isMobile ? EdgeInsets.zero : const EdgeInsets.all(16),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(isMobile ? 0 : 16)),
       child: Container(
         width: isMobile ? screenWidth : screenWidth * 0.95,
         height: MediaQuery.of(context).size.height * (isMobile ? 1.0 : 0.95),
-        color: const Color(0xFF121212),
+        color: const Color(0xFF141615),
         child: isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
       ),
     );
@@ -101,12 +102,12 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                   label: Text(name, style: TextStyle(
                     fontSize: 10, // Reduced from 12
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? Colors.black : Colors.white70
+                    color: isSelected ? const Color(0xFF141615) : Colors.white70
                   )),
                   labelPadding: const EdgeInsets.symmetric(horizontal: 4), // Reduced padding
                   visualDensity: VisualDensity.compact, // Compact chip
                   selected: isSelected,
-                  selectedColor: const Color(0xFFE7FF12),
+                  selectedColor: const Color(0xFFFCDD22),
                   backgroundColor: Colors.white.withOpacity(0.05),
                   onSelected: (val) {
                     if (val) setState(() => _selectedCategory = name);
@@ -129,8 +130,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFFE7FF12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, -5))],
+          color: const Color(0xFFFCDD22),
+          boxShadow: [BoxShadow(color: const Color(0xFF141615).withOpacity(0.2), blurRadius: 10, offset: const Offset(0, -5))],
         ),
         child: SafeArea(
           top: false,
@@ -142,14 +143,14 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                    Text("$count ITEMS", style: const TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold)),
-                   Text("₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+                   Text("₹${total.toStringAsFixed(0)}", style: const TextStyle(color: const Color(0xFF141615), fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
               Row(
                 children: [
-                  const Text("VIEW CART", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  const Text("VIEW CART", style: TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
                   const SizedBox(width: 4),
-                  const Icon(Icons.arrow_right, color: Colors.black),
+                  const Icon(Icons.arrow_right, color: const Color(0xFF141615)),
                 ],
               ),
             ],
@@ -169,7 +170,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
           return Container(
             height: MediaQuery.of(context).size.height * 0.7,
             decoration: const BoxDecoration(
-              color: Color(0xFF1A1A1A),
+              color: Color(0xFF141615),
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Column(
@@ -219,7 +220,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         Container(
           width: 320,
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: const Color(0xFF141615),
             border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
           ),
           child: _buildCartPane(),
@@ -280,9 +281,9 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         height: 70, // Reduced from 90
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), // Reduced margin
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE7FF12) : Colors.transparent,
+          color: isSelected ? const Color(0xFFFCDD22) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isSelected ? const Color(0xFFE7FF12) : Colors.white.withOpacity(0.05)),
+          border: Border.all(color: isSelected ? const Color(0xFFFCDD22) : Colors.white.withOpacity(0.05)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -293,7 +294,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
                 child: imageUrl != null 
                   ? Image.network(imageUrl, fit: BoxFit.cover)
-                  : Icon(Icons.category, color: isSelected ? Colors.black : Colors.white24, size: 20), // Smaller icon
+                  : Icon(Icons.category, color: isSelected ? const Color(0xFF141615) : Colors.white24, size: 20), // Smaller icon
               ),
             ),
             Expanded(
@@ -305,7 +306,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                     style: TextStyle(
                       fontSize: 9, // Reduced from 10
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? Colors.black : Colors.white70,
+                      color: isSelected ? const Color(0xFF141615) : Colors.white70,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 1,
@@ -338,7 +339,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
             Row(
               children: [
                  Text("Total: ₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(0)}", 
-                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
+                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFFCDD22))),
                  const SizedBox(width: 16),
                  IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
               ],
@@ -368,11 +369,11 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         decoration: InputDecoration(
           hintText: 'Search items...',
           hintStyle: const TextStyle(color: Colors.white38),
-          prefixIcon: const Icon(Icons.search, color: Color(0xFFE7FF12), size: 20),
+          prefixIcon: const Icon(Icons.search, color: Color(0xFFFCDD22), size: 20),
           suffixIcon: _searchQuery.isNotEmpty
             ? IconButton(icon: const Icon(Icons.clear, size: 18, color: Colors.white54), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); })
             : null,
-          filled: true, fillColor: Colors.black,
+          filled: true, fillColor: const Color(0xFF141615),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
           contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
@@ -436,9 +437,9 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                 Container(
                                   width: double.infinity,
                                   decoration: BoxDecoration(
-                                    color: isSelected ? const Color(0xFFE7FF12).withOpacity(0.08) : const Color(0xFF1E1E1E),
+                                    color: isSelected ? const Color(0xFFFCDD22).withOpacity(0.08) : const Color(0xFF141615),
                                     borderRadius: BorderRadius.circular(8), // Smaller radius
-                                    border: Border.all(color: isSelected ? const Color(0xFFE7FF12) : Colors.white.withOpacity(0.05)),
+                                    border: Border.all(color: isSelected ? const Color(0xFFFCDD22) : Colors.white.withOpacity(0.05)),
                                     ),
                                     child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,7 +447,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                       Expanded(
                                         child: Container(
                                           decoration: BoxDecoration(
-                                            color: Colors.black.withOpacity(0.4),
+                                            color: const Color(0xFF141615).withOpacity(0.4),
                                             borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
                                           ),
                                           clipBehavior: Clip.antiAlias,
@@ -462,7 +463,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                           children: [
                                             Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
                                             const SizedBox(height: 2),
-                                            Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(color: isSelected ? const Color(0xFFE7FF12) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 10)),
+                                            Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(color: isSelected ? const Color(0xFFFCDD22) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 10)),
                                           ],
                                         ),
                                       ),
@@ -474,8 +475,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                     top: 2, right: 2,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                      decoration: BoxDecoration(color: const Color(0xFFE7FF12), borderRadius: BorderRadius.circular(8)),
-                                      child: Text("$count", style: const TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold)),
+                                      decoration: BoxDecoration(color: const Color(0xFFFCDD22), borderRadius: BorderRadius.circular(8)),
+                                      child: Text("$count", style: const TextStyle(color: const Color(0xFF141615), fontSize: 8, fontWeight: FontWeight.bold)),
                                     ),
                                   ),
                               ],
@@ -537,8 +538,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                 _selectedItems[index].quantity--;
                               } else {
                                 _selectedItems.removeAt(index);
-                                if (_selectedItems.isEmpty && Navigator.canPop(context)) {
-                                   Navigator.pop(context);
+                                if (_selectedItems.isEmpty) {
+                                  safePop(context);
                                 }
                               }
                               if (onChange != null) onChange(_selectedItems);
@@ -546,7 +547,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                           ),
                           Text("${i.quantity}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                           IconButton(
-                            icon: const Icon(Icons.add_circle, color: Color(0xFFE7FF12), size: 22),
+                            icon: const Icon(Icons.add_circle, color: Color(0xFFFCDD22), size: 22),
                             constraints: const BoxConstraints(),
                             padding: const EdgeInsets.all(4),
                             onPressed: () => setState(() {
@@ -566,7 +567,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
+            color: const Color(0xFF141615),
             border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
           ),
           child: Column(
@@ -578,7 +579,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                   const Text("Total:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   Text(
                     "₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(2)}",
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12)),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFFCDD22)),
                   ),
                 ],
               ),
@@ -586,8 +587,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
               ElevatedButton(
                 onPressed: _selectedItems.isEmpty ? null : () => _debouncer.run(() => _submitOrder()),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE7FF12),
-                  foregroundColor: Colors.black,
+                  backgroundColor: const Color(0xFFFCDD22),
+                  foregroundColor: const Color(0xFF141615),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -688,8 +689,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
      }
 
      if (mounted) {
-       Navigator.pop(context);
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order placed! KOT sent to kitchen."), backgroundColor: Colors.green));
+       safePop(context);
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order placed successfully!"), backgroundColor: Colors.green));
      }
   }
 }

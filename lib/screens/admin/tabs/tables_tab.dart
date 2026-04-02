@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../models/table_model.dart';
 import '../../../services/report_service.dart';
 import '../../../services/auth_service.dart';
 import '../../../widgets/order_dialog.dart';
+import '../../../utils/navigator_utils.dart';
 
 class TablesTab extends StatefulWidget {
-  const TablesTab({super.key});
+  final Function(int)? onTabRequested;
+  const TablesTab({super.key, this.onTabRequested});
 
   @override
   State<TablesTab> createState() => _TablesTabState();
@@ -25,9 +28,9 @@ class _TablesTabState extends State<TablesTab> {
       child: Column(
         children: [
           TabBar(
-            labelColor: const Color(0xFFE7FF12),
+            labelColor: const Color(0xFFFCDD22),
             unselectedLabelColor: Colors.white54,
-            indicatorColor: const Color(0xFFE7FF12),
+            indicatorColor: const Color(0xFFFCDD22),
             tabs: const [
               Tab(text: "Sections", icon: Icon(Icons.layers, size: 20)),
               Tab(text: "Tables", icon: Icon(Icons.table_bar, size: 20)),
@@ -51,7 +54,7 @@ class _TablesTabState extends State<TablesTab> {
     final restaurantId = auth.restaurantId;
 
     if (restaurantId == null) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22)));
     }
 
     return kIsWeb 
@@ -78,16 +81,16 @@ class _TablesTabState extends State<TablesTab> {
             children: [
                const Text("Room Sections", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                IconButton(
-                 icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12), size: 18),
+                 icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22), size: 18),
                  onPressed: () => setState(() {}),
                  tooltip: "Refresh Sections",
                ),
                ElevatedButton.icon(
                  onPressed: () => _showSectionDialog(restaurantId: restaurantId),
-                 icon: const Icon(Icons.add, size: 16, color: Colors.black),
-                 label: const Text("New Section", style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
+                 icon: const Icon(Icons.add, size: 16, color: const Color(0xFF141615)),
+                 label: const Text("New Section", style: TextStyle(fontSize: 12, color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE7FF12),
+                    backgroundColor: const Color(0xFFFCDD22),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                  ),
                ),
@@ -104,7 +107,7 @@ class _TablesTabState extends State<TablesTab> {
               return Card(
                 elevation: 0,
                 margin: const EdgeInsets.only(bottom: 8),
-                color: const Color(0xFF1E1E1E),
+                color: const Color(0xFF141615),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.white.withOpacity(0.05))),
                 child: ListTile(
                   dense: true,
@@ -127,7 +130,7 @@ class _TablesTabState extends State<TablesTab> {
     final restaurantId = auth.restaurantId;
 
     if (restaurantId == null) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22)));
     }
 
     return kIsWeb 
@@ -145,8 +148,12 @@ class _TablesTabState extends State<TablesTab> {
     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
     final tablesDocs = snapshot.data!.docs;
     
-    // Get unique section names from the tables for the filter bar
-    final sectionsList = tablesDocs.map((doc) => (doc.data() as Map<String, dynamic>)['section']?.toString() ?? 'General').toSet().toList();
+    // Convert to TableModel and sort naturally
+    final tables = tablesDocs.map((doc) => TableModel.fromMap(doc.id, doc.data() as Map<String, dynamic>)).toList();
+    tables.sort(TableModel.compareByName);
+    
+    // Get unique section names for the filter bar
+    final sectionsList = tables.map((t) => t.section.isEmpty ? 'General' : t.section).toSet().toList();
     sectionsList.sort();
     final allFilters = ['All', ...sectionsList];
 
@@ -161,17 +168,17 @@ class _TablesTabState extends State<TablesTab> {
                Row(
                  children: [
                    IconButton(
-                     icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12), size: 18),
+                     icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22), size: 18),
                      onPressed: () => setState(() {}),
                      tooltip: "Refresh Tables",
                    ),
                    const SizedBox(width: 8),
                    ElevatedButton.icon(
                      onPressed: () => _showTableDialog(restaurantId: restaurantId),
-                     icon: const Icon(Icons.add, size: 16, color: Colors.black),
-                     label: const Text("Create Table", style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
+                     icon: const Icon(Icons.add, size: 16, color: const Color(0xFF141615)),
+                     label: const Text("Create Table", style: TextStyle(fontSize: 12, color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE7FF12),
+                        backgroundColor: const Color(0xFFFCDD22),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                      ),
                    ),
@@ -196,14 +203,14 @@ class _TablesTabState extends State<TablesTab> {
                 return Padding(
                   padding: const EdgeInsets.only(right: 8.0),
                   child: ChoiceChip(
-                    label: Text(filter, style: TextStyle(color: isSelected ? Colors.black : Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                    label: Text(filter, style: TextStyle(color: isSelected ? const Color(0xFF141615) : Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
                     selected: isSelected,
                     onSelected: (selected) {
                       if (selected) setState(() => _selectedSectionFilter = filter);
                     },
-                    selectedColor: const Color(0xFFE7FF12),
-                    backgroundColor: const Color(0xFF1E1E1E),
-                    side: BorderSide(color: isSelected ? const Color(0xFFE7FF12) : Colors.white12),
+                    selectedColor: const Color(0xFFFCDD22),
+                    backgroundColor: const Color(0xFF141615),
+                    side: BorderSide(color: isSelected ? const Color(0xFFFCDD22) : Colors.white12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     showCheckmark: false,
                   ),
@@ -215,19 +222,19 @@ class _TablesTabState extends State<TablesTab> {
 
         Expanded(
           child: _selectedSectionFilter == 'All' 
-            ? _buildGroupedTables(tablesDocs, restaurantId)
-            : _buildSingleSectionGrid(tablesDocs, _selectedSectionFilter, restaurantId),
+            ? _buildGroupedTables(tables, restaurantId)
+            : _buildSingleSectionGrid(tables, _selectedSectionFilter, restaurantId),
         ),
       ],
     );
   }
 
-  Widget _buildGroupedTables(List<QueryDocumentSnapshot> allTables, String? restaurantId) {
+  Widget _buildGroupedTables(List<TableModel> allTables, String? restaurantId) {
     // Group tables by section
-    final Map<String, List<QueryDocumentSnapshot>> grouped = {};
-    for (var doc in allTables) {
-      final section = (doc.data() as Map<String, dynamic>)['section']?.toString() ?? 'General';
-      grouped.putIfAbsent(section, () => []).add(doc);
+    final Map<String, List<TableModel>> grouped = {};
+    for (var table in allTables) {
+      final section = table.section.isEmpty ? 'General' : table.section;
+      grouped.putIfAbsent(section, () => []).add(table);
     }
     
     final sortedSections = grouped.keys.toList()..sort();
@@ -247,7 +254,7 @@ class _TablesTabState extends State<TablesTab> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  border: Border(left: BorderSide(color: const Color(0xFFE7FF12), width: 3)),
+                  border: Border(left: BorderSide(color: const Color(0xFFFCDD22), width: 3)),
                 ),
                 child: Text(
                   sectionName.toUpperCase(), 
@@ -263,9 +270,9 @@ class _TablesTabState extends State<TablesTab> {
     );
   }
 
-  Widget _buildSingleSectionGrid(List<QueryDocumentSnapshot> allTables, String filter, String? restaurantId) {
-    final filteredTables = allTables.where((doc) {
-      final section = (doc.data() as Map<String, dynamic>)['section']?.toString() ?? 'General';
+  Widget _buildSingleSectionGrid(List<TableModel> allTables, String filter, String? restaurantId) {
+    final filteredTables = allTables.where((table) {
+      final section = table.section.isEmpty ? 'General' : table.section;
        return section == filter;
     }).toList();
     
@@ -276,7 +283,7 @@ class _TablesTabState extends State<TablesTab> {
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Text(
             filter.toUpperCase(), 
-            style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 14),
+            style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 14),
           ),
         ),
         Expanded(child: _buildTablesGrid(filteredTables, restaurantId)),
@@ -284,7 +291,7 @@ class _TablesTabState extends State<TablesTab> {
     );
   }
 
-  Widget _buildTablesGrid(List<QueryDocumentSnapshot> tables, String? restaurantId) {
+  Widget _buildTablesGrid(List<TableModel> tables, String? restaurantId) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final gridWidth = constraints.maxWidth;
@@ -304,15 +311,14 @@ class _TablesTabState extends State<TablesTab> {
             ),
             itemCount: tables.length,
             itemBuilder: (context, index) {
-              final tableDoc = tables[index];
-              final table = TableModel.fromMap(tableDoc.id, tableDoc.data() as Map<String, dynamic>);
+              final table = tables[index];
               final isOccupied = table.status == TableStatus.occupied || table.status == TableStatus.kotSent || table.status == TableStatus.billRequested;
               
               return Container(
                 decoration: BoxDecoration(
-                  color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.05) : const Color(0xFF1E1E1E),
+                  color: isOccupied ? const Color(0xFFFCDD22).withOpacity(0.05) : const Color(0xFF141615),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: isOccupied ? const Color(0xFFE7FF12).withOpacity(0.5) : const Color(0xFFE7FF12).withOpacity(0.1), width: 0.8),
+                  border: Border.all(color: isOccupied ? const Color(0xFFFCDD22).withOpacity(0.5) : const Color(0xFFFCDD22).withOpacity(0.1), width: 0.8),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(2),
@@ -327,7 +333,7 @@ class _TablesTabState extends State<TablesTab> {
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                IconButton(icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)),
+                                IconButton(icon: const Icon(Icons.edit, size: 10, color: Color(0xFFFCDD22)), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)),
                                 const SizedBox(width: 2),
                                 IconButton(icon: const Icon(Icons.delete, size: 10, color: Colors.redAccent), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () {
                                    _firestore.collection('tables').doc(table.id).delete();
@@ -349,14 +355,11 @@ class _TablesTabState extends State<TablesTab> {
                             children: [
                               if (table.status != TableStatus.billRequested)
                                 Expanded(child: _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table))),
-                              if (table.status != TableStatus.billRequested) const SizedBox(width: 2),
-                              Expanded(child: _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table))),
                             ],
                           )
                         else ...[
                           if (table.status != TableStatus.billRequested)
                             _buildUltraCompactButton("BILL", Icons.receipt_long, Colors.red, () => _requestBill(table)),
-                          _buildUltraCompactButton("CLR", Icons.cleaning_services, Colors.blue, () => _showClearTableDialog(table)),
                         ],
                       ],
                       
@@ -373,7 +376,7 @@ class _TablesTabState extends State<TablesTab> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.edit, size: 10, color: Color(0xFFE7FF12)), 
+                              icon: const Icon(Icons.edit, size: 10, color: Color(0xFFFCDD22)), 
                               padding: EdgeInsets.zero, 
                               constraints: const BoxConstraints(), 
                               onPressed: () => _showTableDialog(table: table, restaurantId: restaurantId)
@@ -458,49 +461,144 @@ class _TablesTabState extends State<TablesTab> {
       _processClearTable(table);
       return;
     }
+
+    String selectedPaymentMode = 'cash';
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: Text("Clear Table ${table.name}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: const Text("Would you like to print the final bill before clearing this table?", style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
-          OutlinedButton(onPressed: () { Navigator.pop(context); _processClearTable(table, printBill: false); }, style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.white24), foregroundColor: Colors.white), child: const Text("Clear Only")),
-          ElevatedButton.icon(
-            onPressed: () { Navigator.pop(context); _processClearTable(table, printBill: true); },
-            icon: const Icon(Icons.print, color: Colors.black),
-            label: const Text("Print & Clear", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12)),
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF141615),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text("Clear Table ${table.name}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Select payment method to finalize revenue and clear the table.", style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  _buildPaymentOption(
+                    title: "CASH", 
+                    icon: Icons.money, 
+                    isSelected: selectedPaymentMode == 'cash', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'cash')
+                  ),
+                  const SizedBox(width: 8),
+                  _buildPaymentOption(
+                    title: "UPI", 
+                    icon: Icons.qr_code, 
+                    isSelected: selectedPaymentMode == 'upi', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'upi')
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Text("Would you like to print the final bill?", style: TextStyle(color: Colors.white38, fontSize: 11)),
+            ],
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => safePop(c), child: const Text("Cancel", style: TextStyle(color: Colors.white38))),
+            OutlinedButton(
+              onPressed: () { 
+                safePop(c); 
+                _processClearTable(table, printBill: false, paymentMode: selectedPaymentMode); 
+              }, 
+              style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.white24), foregroundColor: Colors.white), 
+              child: const Text("Clear Only")
+            ),
+            ElevatedButton.icon(
+              onPressed: () { 
+                safePop(c); 
+                _processClearTable(table, printBill: true, paymentMode: selectedPaymentMode); 
+              },
+              icon: const Icon(Icons.print, color: const Color(0xFF141615), size: 18),
+              label: const Text("Print & Clear", style: TextStyle(fontWeight: FontWeight.bold, color: const Color(0xFF141615))),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22)),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _processClearTable(TableModel table, {bool printBill = false}) async {
+  Widget _buildPaymentOption({required String title, required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+    final color = isSelected ? const Color(0xFFFCDD22) : Colors.white10;
+    final textColor = isSelected ? const Color(0xFF141615) : Colors.white60;
+
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? color : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isSelected ? color : Colors.white10),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isSelected ? textColor : Colors.white38, size: 18),
+              const SizedBox(height: 4),
+              Text(title, style: TextStyle(color: textColor, fontSize: 9, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _processClearTable(TableModel table, {bool printBill = false, String paymentMode = 'cash'}) async {
     try {
       String? orderId = table.currentOrderId;
       if (orderId != null) {
         final orderDoc = await _firestore.collection('orders').doc(orderId).get();
         if (orderDoc.exists) {
-          final orderData = orderDoc.data() as Map<String, dynamic>;
-          if (printBill) await ReportService.printOrderReceipt(orderData, orderDoc.id);
+          final data = orderDoc.data() as Map<String, dynamic>;
+          
+          if (printBill) {
+            final printData = Map<String, dynamic>.from(data);
+            printData['paymentMode'] = paymentMode;
+            await ReportService.printOrderReceipt(printData, table.currentOrderId!);
+          }
+          
           await _firestore.collection('orders').doc(orderId).update({
-            'status': 'billed',
             'clearedAt': FieldValue.serverTimestamp(),
             'clearedBy': 'admin',
           });
+          
           final kots = await _firestore.collection('kots').where('orderId', isEqualTo: orderId).get();
           for (final kot in kots.docs) {
             await kot.reference.update({'status': 'Served', 'clearedAt': FieldValue.serverTimestamp()});
           }
+
+          // Record revenue to matches POS behavior
+          await _recordRevenue(orderId, data, paymentMode: paymentMode);
         }
       }
       await _firestore.collection('tables').doc(table.id).update({'status': TableStatus.available.name, 'currentOrderId': null});
+      
+      // Navigate to POS tab (index 1) after clearing
+      if (mounted && widget.onTabRequested != null) {
+        widget.onTabRequested!(1); // Go to TablesScreen (POS)
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
     }
+  }
+
+  Future<void> _recordRevenue(String orderId, Map<String, dynamic> data, {required String paymentMode}) async {
+    final restaurantId = data['restaurantId'];
+    if (restaurantId == null) return;
+    
+    await ReportService.recordRevenueAndSettle(
+      orderId: orderId,
+      restaurantId: restaurantId,
+      total: (data['totalAmount'] as num).toDouble(),
+      paymentMode: paymentMode,
+    );
   }
 
   void _deleteSection(String id) => _firestore.collection('sections').doc(id).delete();
@@ -508,15 +606,15 @@ class _TablesTabState extends State<TablesTab> {
   void _showSectionDialog({String? restaurantId}) {
     final nameCtrl = TextEditingController();
     showDialog(context: context, builder: (context) => AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFF141615),
       title: const Text("Add New Section", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
       content: Theme(
         data: ThemeData.dark().copyWith(
           inputDecorationTheme: InputDecorationTheme(
             labelStyle: const TextStyle(color: Colors.white70),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
-            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFCDD22))),
           ),
         ),
         child: TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: "e.g. Ground Floor")),
@@ -530,7 +628,7 @@ class _TablesTabState extends State<TablesTab> {
               Navigator.pop(context);
             }
           }, 
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
           child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
@@ -568,16 +666,16 @@ class _TableEditDialogState extends State<TableEditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFF141615),
       title: Text(widget.table == null ? "Create New Table" : "Edit Table", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
       content: Theme(
         data: ThemeData.dark().copyWith(
           brightness: Brightness.dark,
           inputDecorationTheme: InputDecorationTheme(
             labelStyle: const TextStyle(color: Colors.white70),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
-            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFCDD22))),
           ),
         ),
         child: Column(
@@ -619,7 +717,7 @@ class _TableEditDialogState extends State<TableEditDialog> {
               Navigator.pop(context);
             }
           }, 
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
           child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],

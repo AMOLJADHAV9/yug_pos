@@ -29,18 +29,18 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
 
     if (restaurantId == null) {
       return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+        backgroundColor: const Color(0xFF141615),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22))),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF141615),
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF141615),
         elevation: 0,
-        title: const Text('Active KOTs', style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
-        iconTheme: const IconThemeData(color: Color(0xFFE7FF12)),
+        title: const Text('Active KOTs', style: TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Color(0xFFFCDD22)),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -69,7 +69,7 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
 
   Widget _buildKotList(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
     if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
-    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22)));
     
     final kots = snapshot.data?.docs.toList() ?? [];
     kots.sort((a, b) {
@@ -94,9 +94,9 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
+                  color: const Color(0xFF141615),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE7FF12).withOpacity(0.1)),
+                  border: Border.all(color: const Color(0xFFFCDD22).withOpacity(0.1)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -110,7 +110,7 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text("KOT #${kots[index].id.substring(0, 6).toUpperCase()}", 
-                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFE7FF12))),
+                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFFCDD22))),
                               Text("Table: ${data['tableName'] ?? 'N/A'}", style: const TextStyle(color: Colors.white70)),
                             ],
                           ),
@@ -137,7 +137,7 @@ class _KotTrackingScreenState extends State<KotTrackingScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 4.0),
                           child: Row(
                             children: [
-                              Text('${item['quantity']}x', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
+                              Text('${item['quantity']}x', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFCDD22))),
                               const SizedBox(width: 8),
                               Expanded(child: Text(item['name'], style: const TextStyle(color: Colors.white))),
                             ],

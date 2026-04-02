@@ -27,6 +27,22 @@ service cloud.firestore {
       return getUserData().role == 'waiter';
     }
 
+    // For write operations:
+    // - create/update: `request.resource` exists
+    // - delete: `request.resource` is null; only `resource.data` exists
+    function getRestaurantIdForWrite() {
+      return (request.resource != null &&
+              request.resource.data != null &&
+              ('restaurantId' in request.resource.data))
+        ? request.resource.data.restaurantId
+        : (resource.data != null &&
+           ('restaurantId' in resource.data))
+          ? resource.data.restaurantId
+          // Legacy: if the document has no restaurantId at all, allow writes
+          // (matches `belongsToRestaurant()` behavior used for reads).
+          : getRestaurantId();
+    }
+
     // Multi-tenant rule: User must belong to the restaurant owning the data
     // During transition: Allow if restaurantId is missing (legacy) OR matches
     function belongsToRestaurant(resourceData) {
@@ -54,26 +70,37 @@ service cloud.firestore {
     // Menu: Read access for everyone in the restaurant, Write for Admin
     match /menu_categories/{catId} {
       allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow write: if isSignedIn() && isAdmin() && request.resource.data.restaurantId == getRestaurantId();
+      allow write: if isSignedIn() && isAdmin() && getRestaurantIdForWrite() == getRestaurantId();
     }
     match /menu_items/{itemId} {
       allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow write: if isSignedIn() && isAdmin() && request.resource.data.restaurantId == getRestaurantId();
+      allow write: if isSignedIn() && isAdmin() && getRestaurantIdForWrite() == getRestaurantId();
     }
 
     // Tables & Sections
     match /sections/{secId} {
       allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow write: if isSignedIn() && isAdmin() && request.resource.data.restaurantId == getRestaurantId();
+      allow write: if isSignedIn() && isAdmin() && getRestaurantIdForWrite() == getRestaurantId();
     }
     match /tables/{tableId} {
       allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow write: if isSignedIn() && (isAdmin() || isCashier() || isWaiter()) && request.resource.data.restaurantId == getRestaurantId();
+      allow write: if isSignedIn() && (isAdmin() || isCashier() || isWaiter()) && getRestaurantIdForWrite() == getRestaurantId();
     }
 
     // Orders & Items
     match /orders/{orderId} {
-      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      // Read order if the order doc belongs to the same restaurant.
+      // Also allow when the order references a table that belongs to the
+      // same restaurant (helps recover from legacy/data-mismatch where
+      // order.restaurantId is wrong but table.restaurantId is correct).
+      allow read: if isSignedIn() && (
+        belongsToRestaurant(resource.data) ||
+        (resource.data.tableId == null ? false :
+          belongsToRestaurant(
+            get(/databases/$(database)/documents/tables/$(resource.data.tableId)).data
+          )
+        )
+      );
       allow create: if isSignedIn() && request.resource.data.restaurantId == getRestaurantId();
       allow update: if isSignedIn() && belongsToRestaurant(resource.data);
       

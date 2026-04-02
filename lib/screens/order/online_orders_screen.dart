@@ -25,8 +25,8 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
 
     if (restaurantId == null) {
       return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+        backgroundColor: const Color(0xFF141615),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22))),
       );
     }
 
@@ -55,7 +55,7 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+                  icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22)),
                   onPressed: () => setState(() {}),
                   tooltip: "Refresh Online Orders",
                 ),
@@ -68,14 +68,14 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
     }
     
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF141615),
       appBar: AppBar(
         title: const Text("ZOMATO / SWIGGY ORDERS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF141615),
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+            icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22)),
             onPressed: () => setState(() {}),
             tooltip: "Refresh Online Orders",
           ),
@@ -137,7 +137,7 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: const Color(0xFF141615),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
@@ -218,7 +218,7 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text("Total: ₹${total.toStringAsFixed(2)}", 
-                  style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 16)),
+                  style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 16)),
                 Row(
                   children: [
                     if (status == 'pending')
@@ -236,7 +236,7 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
                     const SizedBox(width: 8),
                     if (status != 'cancelled')
                       IconButton(
-                        icon: const Icon(Icons.print, color: Color(0xFFE7FF12), size: 20),
+                        icon: const Icon(Icons.print, color: Color(0xFFFCDD22), size: 20),
                         onPressed: () {
                           // TODO: Call ReportService.printOnlineOrder(data);
                         },

@@ -49,14 +49,14 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
     final isMobile = screenWidth < 700;
 
     return Dialog(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF141615),
       insetPadding: isMobile ? EdgeInsets.zero : const EdgeInsets.all(16),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(isMobile ? 0 : 16)),
       child: Container(
         width: isMobile ? screenWidth : screenWidth * 0.95,
         height: MediaQuery.of(context).size.height * (isMobile ? 1.0 : 0.95),
-        color: const Color(0xFF121212),
+        color: const Color(0xFF141615),
         child: isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
       ),
     );
@@ -102,7 +102,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
         Container(
           width: 350,
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: const Color(0xFF141615),
             border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
           ),
           child: _buildCartPane(),
@@ -125,7 +125,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(widget.orderType == 'delivery' ? "New Delivery Order" : "New Takeaway Order", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                  Text(widget.orderType == 'delivery' ? "Home Delivery" : "Parcel / Pickup", style: const TextStyle(color: Color(0xFFE7FF12), fontSize: 11)),
+                  Text(widget.orderType == 'delivery' ? "Home Delivery" : "Parcel / Pickup", style: const TextStyle(color: Color(0xFFFCDD22), fontSize: 11)),
                 ],
               ),
               IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
@@ -173,7 +173,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
     return InputDecoration(
       hintText: label,
       hintStyle: const TextStyle(color: Colors.white38),
-      filled: true, fillColor: Colors.black,
+      filled: true, fillColor: const Color(0xFF141615),
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -189,9 +189,9 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
         ...['Cash', 'UPI', 'Card'].map((method) => Padding(
           padding: const EdgeInsets.only(right: 8.0),
           child: ChoiceChip(
-            label: Text(method, style: TextStyle(fontSize: 10, color: _paymentMethod == method ? Colors.black : Colors.white70)),
+            label: Text(method, style: TextStyle(fontSize: 10, color: _paymentMethod == method ? const Color(0xFF141615) : Colors.white70)),
             selected: _paymentMethod == method,
-            selectedColor: const Color(0xFFE7FF12),
+            selectedColor: const Color(0xFFFCDD22),
             backgroundColor: Colors.white.withOpacity(0.05),
             onSelected: (val) => setState(() => _paymentMethod = method),
           ),
@@ -210,11 +210,11 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
         decoration: InputDecoration(
           hintText: 'Search items...',
           hintStyle: const TextStyle(color: Colors.white38),
-          prefixIcon: const Icon(Icons.search, color: Color(0xFFE7FF12), size: 20),
+          prefixIcon: const Icon(Icons.search, color: Color(0xFFFCDD22), size: 20),
           suffixIcon: _searchQuery.isNotEmpty
             ? IconButton(icon: const Icon(Icons.clear, size: 18, color: Colors.white54), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); })
             : null,
-          filled: true, fillColor: Colors.black,
+          filled: true, fillColor: const Color(0xFF141615),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
           contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
@@ -258,12 +258,12 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                   label: Text(name, style: TextStyle(
                     fontSize: 10,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? Colors.black : Colors.white70
+                    color: isSelected ? const Color(0xFF141615) : Colors.white70
                   )),
                   labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                   visualDensity: VisualDensity.compact,
                   selected: isSelected,
-                  selectedColor: const Color(0xFFE7FF12),
+                  selectedColor: const Color(0xFFFCDD22),
                   backgroundColor: Colors.white.withOpacity(0.05),
                   onSelected: (val) {
                     if (val) setState(() => _selectedCategory = name);
@@ -323,9 +323,9 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                 children: [
                   Container(
                     decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFFE7FF12).withOpacity(0.08) : const Color(0xFF1E1E1E),
+                      color: isSelected ? const Color(0xFFFCDD22).withOpacity(0.08) : const Color(0xFF141615),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: isSelected ? const Color(0xFFE7FF12) : Colors.white.withOpacity(0.05)),
+                      border: Border.all(color: isSelected ? const Color(0xFFFCDD22) : Colors.white.withOpacity(0.05)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,7 +333,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.4),
+                              color: const Color(0xFF141615).withOpacity(0.4),
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
                             ),
                             clipBehavior: Clip.antiAlias,
@@ -348,7 +348,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-                              Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(color: isSelected ? const Color(0xFFE7FF12) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 10)),
+                              Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(color: isSelected ? const Color(0xFFFCDD22) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 10)),
                             ],
                           ),
                         ),
@@ -360,8 +360,8 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                       top: 2, right: 2,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(color: const Color(0xFFE7FF12), borderRadius: BorderRadius.circular(8)),
-                        child: Text("$count", style: const TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold)),
+                        decoration: BoxDecoration(color: const Color(0xFFFCDD22), borderRadius: BorderRadius.circular(8)),
+                        child: Text("$count", style: const TextStyle(color: const Color(0xFF141615), fontSize: 8, fontWeight: FontWeight.bold)),
                       ),
                     ),
                 ],
@@ -419,14 +419,14 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
         height: 60,
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE7FF12) : Colors.transparent,
+          color: isSelected ? const Color(0xFFFCDD22) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.category, color: isSelected ? Colors.black : Colors.white24, size: 20),
-            Text(name, style: TextStyle(fontSize: 9, color: isSelected ? Colors.black : Colors.white70), textAlign: TextAlign.center, maxLines: 1),
+            Icon(Icons.category, color: isSelected ? const Color(0xFF141615) : Colors.white24, size: 20),
+            Text(name, style: TextStyle(fontSize: 9, color: isSelected ? const Color(0xFF141615) : Colors.white70), textAlign: TextAlign.center, maxLines: 1),
           ],
         ),
       ),
@@ -468,7 +468,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                             if (i.quantity > 1) i.quantity--; else _selectedItems.removeAt(index);
                           })),
                           Text("${i.quantity}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          IconButton(icon: const Icon(Icons.add_circle, color: Color(0xFFE7FF12), size: 20), onPressed: () => setState(() => i.quantity++)),
+                          IconButton(icon: const Icon(Icons.add_circle, color: Color(0xFFFCDD22), size: 20), onPressed: () => setState(() => i.quantity++)),
                         ],
                       ),
                     ],
@@ -478,7 +478,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
         ),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: const BoxDecoration(color: Color(0xFF1E1E1E)),
+          decoration: const BoxDecoration(color: Color(0xFF141615)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -486,13 +486,13 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("Total:", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  Text("₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFE7FF12), fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text("₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFFCDD22), fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: _selectedItems.isEmpty ? null : () => _submitOrder(),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 14)),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615), padding: const EdgeInsets.symmetric(vertical: 14)),
                 child: Text(widget.orderType == 'delivery' ? "PLACE DELIVERY ORDER" : "PLACE TAKEAWAY ORDER", style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
@@ -506,14 +506,14 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
      final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
      return Container(
        padding: const EdgeInsets.all(16),
-       color: const Color(0xFFE7FF12),
+       color: const Color(0xFFFCDD22),
        child: SafeArea(top: false, child: Row(
          mainAxisAlignment: MainAxisAlignment.spaceBetween,
          children: [
-           Text("Total: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
+           Text("Total: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold, fontSize: 18)),
            ElevatedButton(
              onPressed: () => _submitOrder(),
-             style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF141615), foregroundColor: Colors.white),
              child: const Text("PLACE ORDER"),
            ),
          ],
@@ -613,8 +613,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
     await ReportService.settleOrder(docId: orderRef.id, paymentMode: paymentMode);
 
     if (printerService.selectedDevice != null) {
-      // STEP 2: Generate all bytes (pure Dart, safe)
-      final kotBytes = await ReportService.generateKOTBytes(kotData);
+      // STEP 2: Generate Bill bytes (pure Dart, safe)
       final billBytes = await ReportService.generateFinalBillBytes(
         data: kotData,
         total: total,
@@ -622,19 +621,16 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
         hotelName: hotelName,
       );
 
-      // STEP 3: Fire USB prints isolated in microtask — keeps native USB
-      // background threads from interfering with Firebase platform channels
+      // STEP 3: Fire USB print isolated in microtask
       Future.microtask(() async {
         try {
-          await ReportService.printBytesIsolated(printerService, kotBytes);
           await ReportService.printBytesIsolated(printerService, billBytes);
         } catch (e) {
           debugPrint('Print error (order already saved): $e');
         }
       });
     } else {
-      // PDF fallback — no native USB involved, safe to await inline
-      await ReportService.printKOTReceipt(kotData, orderRef.id);
+      // PDF fallback — only Final Bill
       await ReportService.printFinalBill(
         orderData: kotData,
         orderId: orderRef.id,

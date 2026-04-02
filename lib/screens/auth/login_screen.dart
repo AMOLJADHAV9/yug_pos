@@ -18,9 +18,9 @@ class _LoginScreenState extends State<LoginScreen> {
   String _pinInput = '';
 
   // Theme Colors
-  final Color _primaryYellow = const Color(0xFFE7FF12);
-  final Color _bgBlack = Colors.black;
-  final Color _surfaceGrey = const Color(0xFF1A1A1A);
+  final Color _primaryYellow = const Color(0xFFFCDD22);
+  final Color _bgBlack = const Color(0xFF141615);
+  final Color _surfaceGrey = const Color(0xFF141615);
 
   void _loginEmail() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) return;
@@ -73,11 +73,20 @@ class _LoginScreenState extends State<LoginScreen> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth < 800) {
-            return SafeArea(
-              child: SingleChildScrollView(
+            return SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _buildBrandingSection(isMobile: true),
+                    // Moving logo here for mobile
+                    Image.asset(
+                      'lib/assets/img/yug-poslogo.png', 
+                      width: 160, // Slightly smaller logo for more space
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => Icon(Icons.storefront, size: 80, color: _primaryYellow),
+                    ),
+                    const SizedBox(height: 20), // Reduced spacing
                     _buildLoginFormSection(isMobile: true),
                   ],
                 ),
@@ -99,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildBrandingSection({required bool isMobile}) {
     return Container(
       width: double.infinity,
-      height: isMobile ? 320 : double.infinity,
+      constraints: BoxConstraints(minHeight: isMobile ? 320 : double.infinity),
       decoration: const BoxDecoration(
         image: DecorationImage(
           image: AssetImage('lib/assets/img/poswelimg.jpg'),
@@ -112,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [_bgBlack, _bgBlack.withOpacity(0.7), _bgBlack.withOpacity(0.3)],
+                colors: [_bgBlack, _bgBlack.withOpacity(0.8), _bgBlack.withOpacity(0.4)],
                 begin: isMobile ? Alignment.bottomCenter : Alignment.centerRight,
                 end: isMobile ? Alignment.topCenter : Alignment.centerLeft,
               ),
@@ -121,95 +130,115 @@ class _LoginScreenState extends State<LoginScreen> {
           
           SafeArea(
             bottom: false,
-            child: Padding(
-              padding: EdgeInsets.all(isMobile ? 24.0 : 64.0),
-              child: Column(
-                crossAxisAlignment: isMobile ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Logo
-                  Image.asset(
-                    'lib/assets/img/yug_pos_logo.png', 
-                    width: isMobile ? 120 : 180,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => Icon(Icons.storefront, size: isMobile ? 60 : 80, color: _primaryYellow),
-                  ),
-                  const SizedBox(height: 32),
-                  Text(
-                    "Welcome to",
-                    style: GoogleFonts.inter(fontSize: isMobile ? 18 : 22, color: Colors.white.withOpacity(0.7)),
-                    textAlign: isMobile ? TextAlign.center : TextAlign.left,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "YUG POS",
-                    style: GoogleFonts.inter(fontSize: isMobile ? 40 : 64, fontWeight: FontWeight.w900, color: _primaryYellow, height: 1.0, letterSpacing: -1),
-                    textAlign: isMobile ? TextAlign.center : TextAlign.left,
-                  ),
-                  if (!isMobile) const SizedBox(height: 24),
-                  if (!isMobile)
-                    SizedBox(
-                      width: 400,
-                      child: Text(
-                        "The ultimate point-of-sale solution designed for efficiency, speed, and seamless management.",
-                        style: GoogleFonts.inter(fontSize: 16, color: Colors.white70, height: 1.6),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 24.0 : 64.0,
+                        vertical: constraints.maxHeight < 600 ? 32.0 : 64.0,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: isMobile ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Logo
+                          Image.asset(
+                            'lib/assets/img/yug-poslogo.png', 
+                            width: isMobile ? 180 : 400,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) => Icon(Icons.storefront, size: 80, color: _primaryYellow),
+                          ),
+                          const SizedBox(height: 12),
+                          // Slogan
+                          Container(
+                            height: 2, width: 40,
+                            color: _primaryYellow,
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: isMobile ? double.infinity : 400,
+                            child: Text(
+                              "The ultimate point-of-sale solution designed for efficiency, speed, and seamless management.",
+                              style: GoogleFonts.inter(
+                                fontSize: isMobile ? 14 : 18, 
+                                color: Colors.white.withOpacity(0.9), 
+                                height: 1.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              textAlign: isMobile ? TextAlign.center : TextAlign.left,
+                            ),
+                          ),
+                          if (!isMobile) ...[
+                            const SizedBox(height: 64),
+                            Text(
+                              "© ${DateTime.now().year} Yug POS. Premium Version.", 
+                              style: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                  if (!isMobile) const Spacer(),
-                  if (!isMobile)
-                    Text("© ${DateTime.now().year} Yug POS. Premium Version.", style: GoogleFonts.inter(color: Colors.white24, fontSize: 12)),
-                ],
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ],
       ),
     );
   }
-
+  
   Widget _buildLoginFormSection({required bool isMobile}) {
-    return Center(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.all(isMobile ? 24.0 : 48.0),
-          child: Consumer<AuthService>(
-            builder: (context, auth, _) {
-              if (auth.isLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
-              bool usePinMode = auth.currentUser != null && auth.hasSavedPin;
-              return Container(
-                constraints: const BoxConstraints(maxWidth: 400),
-                padding: EdgeInsets.all(isMobile ? 24 : 40),
-                decoration: BoxDecoration(
-                  color: _surfaceGrey,
-                  borderRadius: BorderRadius.circular(32),
-                  border: Border.all(color: Colors.white.withOpacity(0.05)),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40, offset: const Offset(0, 20))],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      usePinMode ? "Unlock Device" : "Sign In", 
-                      style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white), 
-                      textAlign: TextAlign.center
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      usePinMode ? "Enter your 4-digit security PIN" : "Enter your credentials below", 
-                      style: GoogleFonts.inter(fontSize: 14, color: Colors.white54), 
-                      textAlign: TextAlign.center
-                    ),
-                    const SizedBox(height: 40),
-                    _buildFormContent(auth, usePinMode),
-                  ],
-                ),
-              );
-            },
-          ),
+    return Padding(
+      padding: EdgeInsets.zero, // Remove additional padding for mobile
+      child: Consumer<AuthService>(
+        builder: (context, auth, _) {
+          bool usePinMode = auth.currentUser != null && auth.hasSavedPin;
+          return Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            padding: EdgeInsets.all(isMobile ? 24 : 40),
+            decoration: BoxDecoration(
+                color: _surfaceGrey,
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF141615).withOpacity(0.5), 
+                    blurRadius: 40, 
+                    offset: const Offset(0, 20)
+                  )
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    usePinMode ? "Unlock Device" : "Sign In", 
+                    style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white), 
+                    textAlign: TextAlign.center
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    usePinMode ? "Enter your 4-digit security PIN" : "Enter your credentials below", 
+                    style: GoogleFonts.inter(fontSize: 14, color: Colors.white54), 
+                    textAlign: TextAlign.center
+                  ),
+                  const SizedBox(height: 40),
+                  _buildFormContent(auth, usePinMode),
+                ],
+              ),
+            );
+          },
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildFormContent(AuthService auth, bool usePinMode) {
@@ -229,7 +258,7 @@ class _LoginScreenState extends State<LoginScreen> {
             labelStyle: GoogleFonts.inter(color: Colors.white60),
             prefixIcon: const Icon(Icons.mail_outline, color: Colors.white38),
             filled: true, 
-            fillColor: Colors.black,
+            fillColor: const Color(0xFF141615),
             contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: _primaryYellow, width: 1.5)),
@@ -245,7 +274,7 @@ class _LoginScreenState extends State<LoginScreen> {
             labelStyle: GoogleFonts.inter(color: Colors.white60),
             prefixIcon: const Icon(Icons.lock_outline, color: Colors.white38),
             filled: true, 
-            fillColor: Colors.black,
+            fillColor: const Color(0xFF141615),
             contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: _primaryYellow, width: 1.5)),
@@ -259,13 +288,13 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: _loading ? null : _loginEmail,
             style: ElevatedButton.styleFrom(
               backgroundColor: _primaryYellow,
-              foregroundColor: Colors.black,
+              foregroundColor: const Color(0xFF141615),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               elevation: 4,
               shadowColor: _primaryYellow.withOpacity(0.3),
             ),
             child: _loading
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: const Color(0xFF141615), strokeWidth: 3))
                 : Text("SIGN IN TO DASHBOARD", style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
           ),
         ),
@@ -290,7 +319,7 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        CircleAvatar(radius: 36, backgroundColor: Colors.black, child: Icon(Icons.person, size: 36, color: _primaryYellow)),
+        CircleAvatar(radius: 36, backgroundColor: const Color(0xFF141615), child: Icon(Icons.person, size: 36, color: _primaryYellow)),
         const SizedBox(height: 12),
         Text(auth.currentUser?.email ?? 'User', style: GoogleFonts.inter(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 40),
@@ -361,7 +390,7 @@ class _LoginScreenState extends State<LoginScreen> {
         height: 70,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.black,
+          color: const Color(0xFF141615),
           border: Border.all(color: Colors.white10),
         ),
         child: Center(

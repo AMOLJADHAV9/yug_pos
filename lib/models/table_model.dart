@@ -38,4 +38,27 @@ class TableModel {
       currentOrderId: data['currentOrderId'],
     );
   }
+
+  static int compareByName(TableModel a, TableModel b) {
+     final regExp = RegExp(r'(\d+)');
+     final aName = a.name;
+     final bName = b.name;
+     
+     final aParts = aName.split(regExp);
+     final bParts = bName.split(regExp);
+     final aMatches = regExp.allMatches(aName).toList();
+     final bMatches = regExp.allMatches(bName).toList();
+
+     for (int i = 0; i < aParts.length && i < bParts.length; i++) {
+        int res = aParts[i].toLowerCase().compareTo(bParts[i].toLowerCase());
+        if (res != 0) return res;
+
+        if (i < aMatches.length && i < bMatches.length) {
+           int aNum = int.tryParse(aMatches[i].group(1)!) ?? 0;
+           int bNum = int.tryParse(bMatches[i].group(1)!) ?? 0;
+           if (aNum != bNum) return aNum.compareTo(bNum);
+        }
+     }
+     return aName.toLowerCase().compareTo(bName.toLowerCase());
+  }
 }

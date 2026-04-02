@@ -33,9 +33,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
-        }
+        multiDexEnabled = true
     }
 
     buildTypes {

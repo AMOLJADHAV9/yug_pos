@@ -8,14 +8,14 @@ class UnauthorizedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF141615),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Container(
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
+              color: const Color(0xFF141615),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Colors.white.withOpacity(0.05)),
             ),
@@ -23,7 +23,7 @@ class UnauthorizedScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.lock_person, size: 80, color: Color(0xFFE7FF12)),
+                const Icon(Icons.lock_person, size: 80, color: Color(0xFFFCDD22)),
                 const SizedBox(height: 24),
                 const Text(
                   "Access Denied",
@@ -41,8 +41,8 @@ class UnauthorizedScreen extends StatelessWidget {
                   icon: const Icon(Icons.logout),
                   label: const Text("Logout and Switch Account"),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE7FF12),
-                    foregroundColor: Colors.black,
+                    backgroundColor: const Color(0xFFFCDD22),
+                    foregroundColor: const Color(0xFF141615),
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),

@@ -23,12 +23,12 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF141615),
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF141615),
         elevation: 0,
-        title: Text('Table ${widget.table.name} Order', style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
-        iconTheme: const IconThemeData(color: Color(0xFFE7FF12)),
+        title: Text('Table ${widget.table.name} Order', style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Color(0xFFFCDD22)),
         actions: [
           StreamBuilder<DocumentSnapshot>(
             stream: _firestore.collection('orders').doc(widget.orderId).snapshots(),
@@ -40,14 +40,14 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
               if (status == 'bill_requested') {
                 return const Padding(
                   padding: EdgeInsets.only(right: 16.0),
-                  child: Center(child: Text('Bill Requested', style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold))),
+                  child: Center(child: Text('Bill Requested', style: TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold))),
                 );
               }
 
               return TextButton.icon(
                 onPressed: () => _debouncer.run(() => _requestBill(context)),
-                icon: const Icon(Icons.receipt_long, color: Color(0xFFE7FF12)),
-                label: const Text('Request Bill', style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.receipt_long, color: Color(0xFFFCDD22)),
+                label: const Text('Request Bill', style: TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold)),
               );
             }
           )
@@ -87,7 +87,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF1A1A1A),
+                  color: Color(0xFF141615),
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, -5))]
                 ),
@@ -96,7 +96,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Total:', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-                      Text('₹${totalAmount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFE7FF12))),
+                      Text('₹${totalAmount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFFCDD22))),
                     ],
                   ),
                 ),
@@ -110,8 +110,8 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
         onPressed: () {
           Navigator.push(context, MaterialPageRoute(builder: (_) => MenuScreen(table: widget.table)));
         },
-        backgroundColor: const Color(0xFFE7FF12),
-        foregroundColor: Colors.black,
+        backgroundColor: const Color(0xFFFCDD22),
+        foregroundColor: const Color(0xFF141615),
         icon: const Icon(Icons.add),
         label: const Text('Add More', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
@@ -135,7 +135,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: const Color(0xFF1E1E1E),
+      color: const Color(0xFF141615),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.white.withOpacity(0.05)),
@@ -145,7 +145,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
         title: Row(
           children: [
             const Text('x', style: TextStyle(color: Colors.white38, fontSize: 14)),
-            Text('${data['quantity']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE7FF12), fontSize: 18)),
+            Text('${data['quantity']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFCDD22), fontSize: 18)),
             const SizedBox(width: 12),
             Expanded(child: Text(data['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white))),
           ],
@@ -174,15 +174,15 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: const Color(0xFF141615),
         title: const Text('Request Bill?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
         content: const Text('This will notify the cashier and lock the order from adding new items.', style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true), 
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
             child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold))
           ),
         ],

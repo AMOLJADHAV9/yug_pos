@@ -22,13 +22,13 @@ class _UsersTabState extends State<UsersTab> {
 
     if (restaurantId == null) {
       return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+        backgroundColor: const Color(0xFF141615),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22))),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF141615),
       body: kIsWeb 
         ? FutureBuilder<QuerySnapshot>(
             future: _firestore.collection('users').where('restaurantId', isEqualTo: restaurantId).get(),
@@ -41,9 +41,9 @@ class _UsersTabState extends State<UsersTab> {
       floatingActionButton: FloatingActionButton.extended(
         heroTag: "admin_users_fab",
         onPressed: () => _showAddUserDialog(context),
-        icon: const Icon(Icons.person_add_alt_1, color: Colors.black),
-        label: const Text("Add Staff Member", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFFE7FF12),
+        icon: const Icon(Icons.person_add_alt_1, color: const Color(0xFF141615)),
+        label: const Text("Add Staff Member", style: TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFFFCDD22),
       ),
     );
   }
@@ -74,12 +74,12 @@ class _UsersTabState extends State<UsersTab> {
                         Text("Staff Management", 
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
                         IconButton(
-                          icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+                          icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22)),
                           onPressed: () => setState(() {}),
                           tooltip: "Refresh Staff",
                         ),
                         IconButton(
-                          icon: const Icon(Icons.print, color: Color(0xFFE7FF12)),
+                          icon: const Icon(Icons.print, color: Color(0xFFFCDD22)),
                           onPressed: () => _showPrinterSettings(context),
                           tooltip: "Printer Setup",
                         ),
@@ -95,7 +95,7 @@ class _UsersTabState extends State<UsersTab> {
                     Text("Staff Management", 
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
                     IconButton(
-                      icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12)),
+                      icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22)),
                       onPressed: () => setState(() {}),
                       tooltip: "Refresh Staff",
                     ),
@@ -138,7 +138,7 @@ class _UsersTabState extends State<UsersTab> {
 
         return Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
+            color: const Color(0xFF141615),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.white.withOpacity(0.05)),
           ),
@@ -200,7 +200,7 @@ class _UsersTabState extends State<UsersTab> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: const Color(0xFF141615),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
@@ -212,7 +212,7 @@ class _UsersTabState extends State<UsersTab> {
             constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 48),
             child: DataTable(
               headingRowColor: MaterialStateProperty.all(const Color(0xFF2C2C2C)),
-              dataRowColor: MaterialStateProperty.all(const Color(0xFF1E1E1E)),
+              dataRowColor: MaterialStateProperty.all(const Color(0xFF141615)),
               horizontalMargin: 24,
               columnSpacing: 40,
               dataRowHeight: 64,
@@ -244,7 +244,7 @@ class _UsersTabState extends State<UsersTab> {
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.mail_outline, size: 20, color: Color(0xFFE7FF12)),
+                            icon: const Icon(Icons.mail_outline, size: 20, color: Color(0xFFFCDD22)),
                             onPressed: () => _sendResetEmail(context, email),
                             tooltip: "Reset Password",
                             padding: EdgeInsets.zero,
@@ -255,7 +255,7 @@ class _UsersTabState extends State<UsersTab> {
                             icon: Icon(
                               status == 'active' ? Icons.block : Icons.check_circle_outline, 
                               size: 20, 
-                              color: status == 'active' ? Colors.redAccent : const Color(0xFFE7FF12)
+                              color: status == 'active' ? Colors.redAccent : const Color(0xFFFCDD22)
                             ),
                             onPressed: () => _toggleUserStatus(context, uid, status == 'active'),
                             tooltip: status == 'active' ? "Disable User" : "Enable User",
@@ -280,8 +280,8 @@ class _UsersTabState extends State<UsersTab> {
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, color: const Color(0xFFE7FF12), size: 18),
+          decoration: BoxDecoration(color: const Color(0xFFFCDD22).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: const Color(0xFFFCDD22), size: 18),
         ),
         const SizedBox(width: 12),
         Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70)),
@@ -292,7 +292,7 @@ class _UsersTabState extends State<UsersTab> {
   }
 
   Widget _buildRoleChip(String role) {
-    Color color = const Color(0xFFE7FF12);
+    Color color = const Color(0xFFFCDD22);
     if (role == 'admin') color = Colors.purpleAccent;
     if (role == 'cashier') color = Colors.orangeAccent;
     
@@ -306,7 +306,7 @@ class _UsersTabState extends State<UsersTab> {
 
   Widget _buildStatusChip(String status) {
     bool active = status == 'active';
-    Color color = active ? const Color(0xFFE7FF12) : Colors.redAccent;
+    Color color = active ? const Color(0xFFFCDD22) : Colors.redAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.3))),
@@ -376,16 +376,16 @@ class _AddUserDialogState extends State<AddUserDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFF141615),
       title: const Text("Register New Staff Member", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
       content: Theme(
         data: Theme.of(context).copyWith(
           brightness: Brightness.dark,
           inputDecorationTheme: InputDecorationTheme(
             labelStyle: const TextStyle(color: Colors.white70),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
-            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFCDD22))),
           ),
         ),
         child: SingleChildScrollView(
@@ -413,8 +413,8 @@ class _AddUserDialogState extends State<AddUserDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
         ElevatedButton(
           onPressed: _loading ? null : _create, 
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
-          child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text("Create User", style: TextStyle(fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
+          child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: const Color(0xFF141615))) : const Text("Create User", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
     );
@@ -434,10 +434,10 @@ class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
     return Consumer<UsbPrinterService>(
       builder: (context, printerService, child) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
+          backgroundColor: const Color(0xFF141615),
           title: const Row(
             children: [
-              Icon(Icons.print, color: Color(0xFFE7FF12)),
+              Icon(Icons.print, color: Color(0xFFFCDD22)),
               SizedBox(width: 10),
               Text("USB Printer Setup", style: TextStyle(color: Colors.white)),
             ],
@@ -451,15 +451,15 @@ class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE7FF12).withValues(alpha: 0.1),
+                      color: const Color(0xFFFCDD22).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE7FF12).withValues(alpha: 0.3)),
+                      border: Border.all(color: const Color(0xFFFCDD22).withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           printerService.isConnected ? Icons.check_circle : Icons.error_outline, 
-                          color: printerService.isConnected ? const Color(0xFFE7FF12) : Colors.redAccent
+                          color: printerService.isConnected ? const Color(0xFFFCDD22) : Colors.redAccent
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -510,7 +510,7 @@ class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
                                ));
                              }
                           },
-                          child: const Text("TEST", style: TextStyle(color: Color(0xFFE7FF12))),
+                          child: const Text("TEST", style: TextStyle(color: Color(0xFFFCDD22))),
                         ),
                       ],
                     ),
@@ -526,7 +526,7 @@ class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
                     ),
                     child: const Row(
                       children: [
-                        SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE7FF12))),
+                        SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCDD22))),
                         SizedBox(width: 12),
                         Text("Looking for saved printer...", style: TextStyle(color: Colors.white70, fontSize: 12)),
                       ],
@@ -539,7 +539,7 @@ class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
                 if (printerService.isScanning)
                   const Padding(
                     padding: EdgeInsets.all(20.0),
-                    child: CircularProgressIndicator(color: Color(0xFFE7FF12)),
+                    child: CircularProgressIndicator(color: Color(0xFFFCDD22)),
                   )
                 else if (printerService.devices.isEmpty)
                   const Padding(
@@ -574,8 +574,8 @@ class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
             ),
             ElevatedButton(
               onPressed: printerService.isScanning ? null : () => printerService.scan(),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12)),
-              child: const Text("SCAN", style: TextStyle(color: Colors.black)),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22)),
+              child: const Text("SCAN", style: TextStyle(color: const Color(0xFF141615))),
             ),
           ],
         );

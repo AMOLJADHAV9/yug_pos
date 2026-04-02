@@ -24,9 +24,9 @@ class _MenuTabState extends State<MenuTab> {
       child: Column(
         children: [
           TabBar(
-            labelColor: const Color(0xFFE7FF12),
+            labelColor: const Color(0xFFFCDD22),
             unselectedLabelColor: Colors.white54,
-            indicatorColor: const Color(0xFFE7FF12),
+            indicatorColor: const Color(0xFFFCDD22),
             tabs: const [
               Tab(text: "Categories", icon: Icon(Icons.category, size: 20)),
               Tab(text: "Menu Items", icon: Icon(Icons.restaurant, size: 20)),
@@ -50,7 +50,7 @@ class _MenuTabState extends State<MenuTab> {
     final restaurantId = auth.restaurantId;
 
     if (restaurantId == null) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22)));
     }
 
     return kIsWeb 
@@ -90,17 +90,17 @@ class _MenuTabState extends State<MenuTab> {
                  mainAxisSize: MainAxisSize.min,
                  children: [
                    IconButton(
-                     icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12), size: 18),
+                     icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22), size: 18),
                      onPressed: () => setState(() {}),
                      tooltip: "Refresh Categories",
                    ),
                    const SizedBox(width: 8),
                    ElevatedButton.icon(
                      onPressed: () => _showCategoryDialog(restaurantId: restaurantId),
-                     icon: const Icon(Icons.add, size: 16, color: Colors.black),
-                     label: const Text("New Category", style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
+                     icon: const Icon(Icons.add, size: 16, color: const Color(0xFF141615)),
+                     label: const Text("New Category", style: TextStyle(fontSize: 12, color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE7FF12),
+                        backgroundColor: const Color(0xFFFCDD22),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                      ),
                    ),
@@ -124,7 +124,7 @@ class _MenuTabState extends State<MenuTab> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E),
+                      color: const Color(0xFF141615),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.white.withOpacity(0.05)),
                     ),
@@ -135,9 +135,9 @@ class _MenuTabState extends State<MenuTab> {
                           Container(
                             width: 40,
                             height: 40,
-                            decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                            decoration: BoxDecoration(color: const Color(0xFFFCDD22).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
                             child: Center(
-                              child: Text("${data['order'] ?? 0}", style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 16)),
+                              child: Text("${data['order'] ?? 0}", style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 16)),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -147,12 +147,12 @@ class _MenuTabState extends State<MenuTab> {
                               children: [
                                 Text(data['name'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
                                 const SizedBox(height: 2),
-                                Text(visible ? "VISIBLE" : "HIDDEN", style: TextStyle(color: visible ? const Color(0xFFE7FF12) : Colors.red, fontSize: 9, fontWeight: FontWeight.bold)),
+                                Text(visible ? "VISIBLE" : "HIDDEN", style: TextStyle(color: visible ? const Color(0xFFFCDD22) : Colors.red, fontSize: 9, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
                           IconButton(
-                            icon: Icon(Icons.edit_note, color: const Color(0xFFE7FF12).withOpacity(0.7), size: 20),
+                            icon: Icon(Icons.edit_note, color: const Color(0xFFFCDD22).withOpacity(0.7), size: 20),
                             onPressed: () => _showCategoryDialog(id: id, initialData: data, restaurantId: restaurantId),
                           ),
                           IconButton(
@@ -175,7 +175,7 @@ class _MenuTabState extends State<MenuTab> {
     final restaurantId = auth.restaurantId;
 
     if (restaurantId == null) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22)));
     }
 
     return kIsWeb 
@@ -213,7 +213,7 @@ class _MenuTabState extends State<MenuTab> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.refresh, color: Color(0xFFE7FF12), size: 18),
+                      icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22), size: 18),
                       onPressed: () => setState(() {}),
                       tooltip: "Refresh Items",
                     ),
@@ -222,10 +222,10 @@ class _MenuTabState extends State<MenuTab> {
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _showItemDialog(restaurantId: restaurantId),
-                      icon: const Icon(Icons.add_circle_outline, size: 16, color: Colors.black),
-                      label: const Text("Add Item", style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.bold)),
+                      icon: const Icon(Icons.add_circle_outline, size: 16, color: const Color(0xFF141615)),
+                      label: const Text("Add Item", style: TextStyle(fontSize: 12, color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
-                         backgroundColor: const Color(0xFFE7FF12),
+                         backgroundColor: const Color(0xFFFCDD22),
                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
@@ -252,11 +252,11 @@ class _MenuTabState extends State<MenuTab> {
                 itemBuilder: (context, index) {
                   final data = items[index].data() as Map<String, dynamic>;
                   final available = data['isAvailable'] ?? true;
-                  const Color accentColor = Color(0xFFE7FF12); // Yellow theme color
+                  const Color accentColor = Color(0xFFFCDD22); // Yellow theme color
 
                   return Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E),
+                      color: const Color(0xFF141615),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.white.withOpacity(0.05)),
                     ),
@@ -287,7 +287,7 @@ class _MenuTabState extends State<MenuTab> {
                                     ),
                                   ),
                                 ),
-                                Positioned(top: 2, right: 2, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(4)), child: Text("₹${data['price']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.white)))),
+                                Positioned(top: 2, right: 2, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: const Color(0xFF141615).withOpacity(0.7), borderRadius: BorderRadius.circular(4)), child: Text("₹${data['price']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.white)))),
                               ],
                             ),
                           ),
@@ -302,7 +302,7 @@ class _MenuTabState extends State<MenuTab> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    GestureDetector(onTap: () => _showItemDialog(id: items[index].id, initialData: data, restaurantId: restaurantId), child: Icon(Icons.edit, size: 14, color: const Color(0xFFE7FF12).withOpacity(0.7))),
+                                    GestureDetector(onTap: () => _showItemDialog(id: items[index].id, initialData: data, restaurantId: restaurantId), child: Icon(Icons.edit, size: 14, color: const Color(0xFFFCDD22).withOpacity(0.7))),
                                     const SizedBox(width: 12),
                                     GestureDetector(onTap: () => _firestore.collection('menu_items').doc(items[index].id).delete(), child: Icon(Icons.delete, size: 14, color: Colors.redAccent.withOpacity(0.7))),
                                   ],
@@ -330,16 +330,16 @@ class _MenuTabState extends State<MenuTab> {
 
     showDialog(context: context, builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: const Color(0xFF141615),
         title: Text(id == null ? "Add Category" : "Edit Category", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
         content: Theme(
           data: Theme.of(context).copyWith(
             brightness: Brightness.dark,
             inputDecorationTheme: InputDecorationTheme(
               labelStyle: const TextStyle(color: Colors.white70),
               enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
-              focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+              focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFCDD22))),
             ),
           ),
           child: Column(
@@ -351,7 +351,7 @@ class _MenuTabState extends State<MenuTab> {
                 title: const Text("Visible", style: TextStyle(color: Colors.white)), 
                 value: isVisible, 
                 onChanged: (v) => setDialogState(() => isVisible = v),
-                activeColor: const Color(0xFFE7FF12),
+                activeColor: const Color(0xFFFCDD22),
               ),
             ],
           ),
@@ -365,7 +365,7 @@ class _MenuTabState extends State<MenuTab> {
               else _firestore.collection('menu_categories').doc(id).update(data);
               Navigator.pop(context);
             }, 
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
             child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -380,7 +380,7 @@ class _MenuTabState extends State<MenuTab> {
   Widget _buildUrbanPiperSyncButton(String? restaurantId) {
     return IconButton(
       tooltip: "Sync Menu to Zomato/Swiggy (UrbanPiper)",
-      icon: const Icon(Icons.cloud_sync, color: Color(0xFFE7FF12)),
+      icon: const Icon(Icons.cloud_sync, color: Color(0xFFFCDD22)),
       onPressed: () => _showUrbanPiperConfigDialog(restaurantId),
     );
   }
@@ -394,7 +394,7 @@ class _MenuTabState extends State<MenuTab> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
+          backgroundColor: const Color(0xFF141615),
           title: const Text("UrbanPiper Action", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -432,7 +432,7 @@ class _MenuTabState extends State<MenuTab> {
                   );
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
               child: syncing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text("SYNC NOW"),
             ),
           ],
@@ -492,16 +492,16 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFF141615),
       title: Text(widget.id == null ? "Add Menu Item" : "Edit Item", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
       content: Theme(
         data: Theme.of(context).copyWith(
           brightness: Brightness.dark,
           inputDecorationTheme: InputDecorationTheme(
             labelStyle: const TextStyle(color: Colors.white70),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
-            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFCDD22))),
           ),
         ),
         child: SingleChildScrollView(
@@ -512,8 +512,8 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
                 ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(imageUrl!, height: 100, width: double.infinity, fit: BoxFit.cover)),
               TextButton.icon(
                 onPressed: _pickImage, 
-                icon: const Icon(Icons.image, color: Color(0xFFE7FF12)), 
-                label: Text(imageUrl == null ? "Upload Image" : "Change Image", style: const TextStyle(color: Color(0xFFE7FF12))),
+                icon: const Icon(Icons.image, color: Color(0xFFFCDD22)), 
+                label: Text(imageUrl == null ? "Upload Image" : "Change Image", style: const TextStyle(color: Color(0xFFFCDD22))),
               ),
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: "Item Name")),
               TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: "Price (INR)"), keyboardType: TextInputType.number),
@@ -534,7 +534,7 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
                 subtitle: const Text("Show/Hide in Table/Takeaway menu", style: TextStyle(fontSize: 11, color: Colors.white54)),
                 value: isAvailable, 
                 onChanged: (v) => setState(() => isAvailable = v),
-                activeColor: const Color(0xFFE7FF12),
+                activeColor: const Color(0xFFFCDD22),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
@@ -569,8 +569,8 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
             else FirebaseFirestore.instance.collection('menu_items').doc(widget.id).update(data);
             Navigator.pop(context);
           }, 
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
-          child: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text("Save", style: TextStyle(fontWeight: FontWeight.bold))
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
+          child: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: const Color(0xFF141615))) : const Text("Save", style: TextStyle(fontWeight: FontWeight.bold))
         ),
       ],
     );

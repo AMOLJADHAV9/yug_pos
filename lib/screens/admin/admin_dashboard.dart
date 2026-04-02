@@ -52,8 +52,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+          backgroundColor: const Color(0xFF141615),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
           title: const Text("Download Monthly Report", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -61,13 +61,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
               const Text("Select the month and year for the report:", style: TextStyle(color: Colors.white70)),
               const SizedBox(height: 16),
               Theme(
-                data: Theme.of(context).copyWith(canvasColor: const Color(0xFF1E1E1E)),
+                data: Theme.of(context).copyWith(canvasColor: const Color(0xFF141615)),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     DropdownButton<int>(
-                      dropdownColor: const Color(0xFF1E1E1E),
-                      style: const TextStyle(color: Color(0xFFE7FF12)),
+                      dropdownColor: const Color(0xFF141615),
+                      style: const TextStyle(color: Color(0xFFFCDD22)),
                       value: selectedYear,
                       items: List.generate(5, (i) => DateTime.now().year - i)
                           .map((y) => DropdownMenuItem(value: y, child: Text(y.toString())))
@@ -75,8 +75,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       onChanged: (v) => setDialogState(() => selectedYear = v!),
                     ),
                     DropdownButton<int>(
-                      dropdownColor: const Color(0xFF1E1E1E),
-                      style: const TextStyle(color: Color(0xFFE7FF12)),
+                      dropdownColor: const Color(0xFF141615),
+                      style: const TextStyle(color: Color(0xFFFCDD22)),
                       value: selectedMonth,
                       items: List.generate(12, (i) => i + 1)
                           .map((m) => DropdownMenuItem(value: m, child: Text(DateFormat('MMMM').format(DateTime(2022, m)))))
@@ -92,8 +92,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE7FF12),
-                foregroundColor: Colors.black,
+                backgroundColor: const Color(0xFFFCDD22),
+                foregroundColor: const Color(0xFF141615),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () {
@@ -196,8 +196,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
     const AnalyticsTab(),
     const UsersTab(),
     const MenuTab(),
-    const TablesTab(),
-    const OrdersTab(),
+    TablesTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+    OrdersTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
     const TakeawayTab(),
     const OnlineOrdersScreen(isTab: true),
   ];
@@ -229,7 +229,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           return Scaffold(
             appBar: AppBar(
               title: Text(_navData[_selectedIndex]['label'] as String, style: const TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.black,
+              backgroundColor: const Color(0xFF141615),
               elevation: 0,
               iconTheme: IconThemeData(color: theme.colorScheme.primary),
               actions: [
@@ -240,14 +240,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
               child: Column(
                 children: [
                    DrawerHeader(
-                    decoration: const BoxDecoration(color: Colors.black),
+                    decoration: const BoxDecoration(color: const Color(0xFF141615)),
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.restaurant, size: 48, color: const Color(0xFFE7FF12)),
+                          Icon(Icons.restaurant, size: 48, color: const Color(0xFFFCDD22)),
                           const SizedBox(height: 10),
-                          const Text("YUG POS", style: TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 18)),
+                          const Text("YUG POS", style: TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 18)),
                         ],
                       ),
                     ),
@@ -259,8 +259,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           final item = _navData[index];
                           final isSelected = _selectedIndex == index;
                           return ListTile(
-                            leading: Icon(item['icon'] as IconData, color: isSelected ? const Color(0xFFE7FF12) : Colors.grey),
-                            title: Text(item['label'] as String, style: TextStyle(color: isSelected ? const Color(0xFFE7FF12) : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                            leading: Icon(item['icon'] as IconData, color: isSelected ? const Color(0xFFFCDD22) : Colors.grey),
+                            title: Text(item['label'] as String, style: TextStyle(color: isSelected ? const Color(0xFFFCDD22) : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
                             selected: isSelected,
                             onTap: () {
                               setState(() => _selectedIndex = index);
@@ -274,7 +274,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           child: Text("REPORTS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
                         ),
                         ListTile(
-                          leading: const Icon(Icons.today, color: Color(0xFFE7FF12)),
+                          leading: const Icon(Icons.today, color: Color(0xFFFCDD22)),
                           title: const Text("Daily Report", style: TextStyle(color: Colors.white70)),
                           onTap: () {
                             Navigator.pop(context);
@@ -282,7 +282,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           },
                         ),
                         ListTile(
-                          leading: const Icon(Icons.summarize, color: Color(0xFFE7FF12)),
+                          leading: const Icon(Icons.summarize, color: Color(0xFFFCDD22)),
                           title: const Text("Monthly Report", style: TextStyle(color: Colors.white70)),
                           onTap: () {
                             Navigator.pop(context);
@@ -311,7 +311,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               type: BottomNavigationBarType.fixed,
               selectedItemColor: theme.colorScheme.primary,
               unselectedItemColor: Colors.grey,
-              backgroundColor: Colors.black,
+              backgroundColor: const Color(0xFF141615),
               items: _bottomBarIndices.map((i) => BottomNavigationBarItem(
                 icon: Icon(_navData[i]['icon'] as IconData), 
                 label: _navData[i]['label'] as String
@@ -329,7 +329,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 curve: Curves.easeInOut,
                 width: _isExtended ? 240 : 80,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF121212),
+                  color: const Color(0xFF141615),
                   border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
                 ),
                 child: Column(
@@ -344,7 +344,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           if (_isExtended)
                             const Expanded(
                               child: Text("YUG POS", 
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFE7FF12)),
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFFCDD22)),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -423,7 +423,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 child: Row(
                                   mainAxisAlignment: _isExtended ? MainAxisAlignment.start : MainAxisAlignment.center,
                                   children: [
-                                    const Icon(Icons.file_download, color: Color(0xFFE7FF12), size: 24),
+                                    const Icon(Icons.file_download, color: Color(0xFFFCDD22), size: 24),
                                     if (_isExtended) ...[
                                       const SizedBox(width: 12),
                                       const Expanded(
@@ -450,7 +450,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 child: Row(
                                   mainAxisAlignment: _isExtended ? MainAxisAlignment.start : MainAxisAlignment.center,
                                   children: [
-                                    const Icon(Icons.summarize, color: Color(0xFFE7FF12), size: 24),
+                                    const Icon(Icons.summarize, color: Color(0xFFFCDD22), size: 24),
                                     if (_isExtended) ...[
                                       const SizedBox(width: 12),
                                       const Expanded(
@@ -498,7 +498,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
               Expanded(
                 child: Container(
-                  color: Colors.black,
+                  color: const Color(0xFF141615),
                   child: IndexedStack(index: _selectedIndex, children: _tabs),
                 ),
               ),

@@ -15,6 +15,7 @@ import 'screens/admin/admin_dashboard.dart';
 import 'screens/cashier/cashier_dashboard.dart';
 import 'screens/auth/unauthorized_screen.dart';
 import 'services/usb_printer_service.dart';
+import 'utils/navigator_utils.dart';
 
 class GlobalHttpOverrides extends HttpOverrides {
   @override
@@ -77,34 +78,35 @@ class WaiterPosApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => UsbPrinterService()),
       ],
       child: MaterialApp(
+        navigatorKey: rootNavigatorKey,
         title: 'YUG POS',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
           brightness: Brightness.dark,
           colorScheme: const ColorScheme.dark(
-            primary: Color(0xFFE7FF12),
-            onPrimary: Colors.black,
-            secondary: Color(0xFFE7FF12),
-            surface: Color(0xFF121212),
-            background: Colors.black,
+            primary: Color(0xFFFCDD22),
+            onPrimary: Color(0xFF141615),
+            secondary: Color(0xFFFCDD22),
+            surface: Color(0xFF141615),
+            background: Color(0xFF141615),
             onSurface: Colors.white,
           ),
-          scaffoldBackgroundColor: Colors.black,
+          scaffoldBackgroundColor: Color(0xFF141615),
           cardTheme: CardThemeData(
-            color: const Color(0xFF1E1E1E),
+            color: const Color(0xFF1A1C1B), // Slightly lighter for cards
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
           appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.black,
+            backgroundColor: Color(0xFF141615),
             centerTitle: true,
             elevation: 0,
-            titleTextStyle: TextStyle(color: Color(0xFFE7FF12), fontSize: 20, fontWeight: FontWeight.bold),
+            titleTextStyle: TextStyle(color: Color(0xFFFCDD22), fontSize: 20, fontWeight: FontWeight.bold),
           ),
           bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-            backgroundColor: Colors.black,
-            selectedItemColor: Color(0xFFE7FF12),
+            backgroundColor: Color(0xFF141615),
+            selectedItemColor: Color(0xFFFCDD22),
             unselectedItemColor: Colors.grey,
           ),
           textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
@@ -127,7 +129,25 @@ class AuthWrapper extends StatelessWidget {
     return Consumer<AuthService>(
       builder: (context, auth, _) {
         if (auth.isLoading) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return Scaffold(
+            backgroundColor: const Color(0xFF141615),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'lib/assets/img/Yug pos logo1_page-0001.jpg',
+                    width: 250,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => 
+                        const Icon(Icons.storefront, size: 80, color: Color(0xFFFCDD22)),
+                  ),
+                  const SizedBox(height: 24),
+                  const CircularProgressIndicator(color: Color(0xFFFCDD22)),
+                ],
+              ),
+            ),
+          );
         }
         if (auth.isUnlocked) {
           if (auth.role == UserRole.admin) {

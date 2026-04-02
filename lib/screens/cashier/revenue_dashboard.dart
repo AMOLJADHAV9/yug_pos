@@ -28,7 +28,7 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
     final auth = context.read<AuthService>();
     if (auth.restaurantId == null) return;
 
-    final snapshot = await _firestore.collection('menu')
+    final snapshot = await _firestore.collection('menu_items')
         .where('restaurantId', isEqualTo: auth.restaurantId)
         .get();
     
@@ -56,32 +56,33 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
     final startOfToday = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF141615),
       appBar: AppBar(
         title: const Text("REVENUE ANALYTICS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF141615),
         elevation: 0,
         centerTitle: true,
         actions: [
           if (_isExporting)
-            const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE7FF12))))
+            const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCDD22))))
           else
             IconButton(
-              icon: const Icon(Icons.download_for_offline, color: Color(0xFFE7FF12)),
+              icon: const Icon(Icons.download_for_offline, color: Color(0xFFFCDD22)),
               onPressed: () => _handleExport(auth.restaurantName ?? "YUG POS", restaurantId, docId, startOfToday),
               tooltip: "Download PDF Report",
             ),
         ],
       ),
       body: restaurantId == null
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22)))
           : StreamBuilder<DocumentSnapshot>(
               stream: _firestore.collection('daily_collections').doc(docId).snapshots(),
               builder: (context, colSnap) {
                 return StreamBuilder<QuerySnapshot>(
                   stream: _firestore.collection('orders')
                       .where('restaurantId', isEqualTo: restaurantId)
-                      .where('createdAt', isGreaterThanOrEqualTo: startOfToday)
+                      .orderBy('createdAt', descending: true)
+                      .limit(200)
                       .snapshots(),
                   builder: (context, orderSnap) {
                     if (colSnap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -106,12 +107,24 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
                         final data = doc.data() as Map<String, dynamic>;
                         final status = data['status']?.toString().toLowerCase() ?? '';
                         final items = data['items'] as List<dynamic>? ?? [];
+                        
+                        final tsBilled = data['billedAt'] as Timestamp?;
+                        final tsCreated = data['createdAt'] as Timestamp?;
+                        
+                        final isBilledToday = tsBilled != null && tsBilled.toDate().isAfter(startOfToday);
+                        final isCreatedToday = tsCreated != null && tsCreated.toDate().isAfter(startOfToday);
+                        final isPending = status == 'active' || status == 'occupied' || status == 'bill_requested' || status == 'open' || status == 'kotSent' || status == 'preparing';
 
-                        if (status == 'active' || status == 'occupied' || status == 'bill_requested') pending++;
-                        else if (status == 'billed' || status == 'completed' || status == 'paid') billed++;
-                        else if (status == 'cancelled') cancelled++;
+                        if (isPending) {
+                          pending++;
+                        } else if (isBilledToday) {
+                          billed++;
+                        } else if (status == 'cancelled' && isCreatedToday) {
+                          cancelled++;
+                        }
 
-                        if (status != 'cancelled') {
+                        // Only count revenue for orders billed today
+                        if (isBilledToday && status != 'cancelled') {
                           for (var item in items) {
                             final name = item['name']?.toString() ?? '';
                             final qty = (item['quantity'] ?? 0).toDouble();
@@ -153,9 +166,9 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [const Color(0xFFE7FF12).withOpacity(0.2), Colors.black], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(colors: [const Color(0xFFFCDD22).withOpacity(0.2), const Color(0xFF141615)], begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE7FF12).withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFFFCDD22).withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,7 +178,7 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("₹${net.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFE7FF12), fontSize: 38, fontWeight: FontWeight.w900)),
+              Text("₹${net.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFFCDD22), fontSize: 38, fontWeight: FontWeight.w900)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(20)),
@@ -194,7 +207,7 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.1))),
+        decoration: BoxDecoration(color: const Color(0xFF141615), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.1))),
         child: Column(
           children: [
             Text(title, style: TextStyle(color: color.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.bold)),
@@ -215,14 +228,14 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: const Color(0xFF141615), borderRadius: BorderRadius.circular(16)),
           child: Row(
             children: [
               SizedBox(
                 width: 120, height: 120,
                 child: total == 0 ? const Center(child: Icon(Icons.pie_chart, color: Colors.white10)) : PieChart(
                   PieChartData(sectionsSpace: 2, centerSpaceRadius: 30, sections: [
-                    PieChartSectionData(color: const Color(0xFFE7FF12), value: table, title: '', radius: 20),
+                    PieChartSectionData(color: const Color(0xFFFCDD22), value: table, title: '', radius: 20),
                     PieChartSectionData(color: Colors.purpleAccent, value: takeaway, title: '', radius: 20),
                     PieChartSectionData(color: Colors.deepOrange, value: delivery, title: '', radius: 20),
                   ]),
@@ -232,7 +245,7 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
               Expanded(
                 child: Column(
                   children: [
-                    _legendItem("Dine-In", table, const Color(0xFFE7FF12), total),
+                    _legendItem("Dine-In", table, const Color(0xFFFCDD22), total),
                     _legendItem("Takeaway", takeaway, Colors.purpleAccent, total),
                     _legendItem("Delivery", delivery, Colors.deepOrange, total),
                   ],
@@ -269,7 +282,7 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
               LinearProgressIndicator(
                 value: e.value / total,
                 backgroundColor: Colors.white.withOpacity(0.05),
-                color: const Color(0xFFE7FF12).withOpacity(0.8),
+                color: const Color(0xFFFCDD22).withOpacity(0.8),
                 minHeight: 4,
                 borderRadius: BorderRadius.circular(2),
               ),
@@ -290,7 +303,7 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
         Container(
           height: 180,
           padding: const EdgeInsets.fromLTRB(10, 20, 10, 0),
-          decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: const Color(0xFF141615), borderRadius: BorderRadius.circular(16)),
           child: BarChart(
             BarChartData(
               maxY: maxVal,
@@ -346,7 +359,6 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
       final colDoc = await _firestore.collection('daily_collections').doc(docId).get();
       final orderSnap = await _firestore.collection('orders')
           .where('restaurantId', isEqualTo: restaurantId)
-          .where('createdAt', isGreaterThanOrEqualTo: startOfToday)
           .get();
 
       double net = 0, table = 0, takeaway = 0, delivery = 0;
@@ -362,7 +374,14 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
 
       int pending = 0, billed = 0, cancelled = 0;
       Map<String, double> categorySales = {};
-      for (var doc in orderSnap.docs) {
+      final validDocs = orderSnap.docs.where((doc) {
+        final data = doc.data();
+        final ts = data['billedAt'] as Timestamp?;
+        if (ts == null) return false; // Export only billed orders for revenue report
+        return ts.toDate().isAfter(startOfToday) || ts.toDate().isAtSameMomentAs(startOfToday);
+      }).toList();
+
+      for (var doc in validDocs) {
         final data = doc.data();
         final status = data['status']?.toString().toLowerCase() ?? '';
         final items = data['items'] as List<dynamic>? ?? [];

@@ -21,10 +21,11 @@ class _CartViewContentState extends State<CartViewContent> {
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
+    final auth = context.watch<AuthService>();
     
     Widget content = Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: const Color(0xFF141615),
         borderRadius: widget.isBottomSheet ? const BorderRadius.vertical(top: Radius.circular(24)) : null,
       ),
       child: SafeArea(
@@ -49,8 +50,8 @@ class _CartViewContentState extends State<CartViewContent> {
                           children: [
                             Container(
                               padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(color: const Color(0xFFE7FF12).withOpacity(0.1), shape: BoxShape.circle),
-                              child: const Icon(Icons.shopping_cart, color: Color(0xFFE7FF12), size: 16),
+                              decoration: BoxDecoration(color: const Color(0xFFFCDD22).withOpacity(0.1), shape: BoxShape.circle),
+                              child: const Icon(Icons.shopping_cart, color: Color(0xFFFCDD22), size: 16),
                             ),
                             const SizedBox(width: 12),
                             Column(
@@ -64,8 +65,8 @@ class _CartViewContentState extends State<CartViewContent> {
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(color: const Color(0xFFE7FF12), borderRadius: BorderRadius.circular(10)),
-                          child: Text("₹${cart.totalAmount.toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.black, fontSize: 16)),
+                          decoration: BoxDecoration(color: const Color(0xFFFCDD22), borderRadius: BorderRadius.circular(10)),
+                          child: Text("₹${cart.totalAmount.toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.w900, color: const Color(0xFF141615), fontSize: 16)),
                         ),
                       ],
                     ),
@@ -110,19 +111,20 @@ class _CartViewContentState extends State<CartViewContent> {
                         children: [
                           IconButton(
                             padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.remove_circle_outline, size: 16, color: Colors.white60),
+                            icon: const Icon(Icons.remove_circle_outline, size: 14, color: Colors.white60),
                             onPressed: () => cart.updateQuantity(cartItem, cartItem.quantity - 1),
                           ),
-                          const SizedBox(width: 8),
-                          Text('${cartItem.quantity}', style: const TextStyle(color: Colors.white, fontSize: 12)),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
+                          Text('${cartItem.quantity}', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                          const SizedBox(width: 6),
                           IconButton(
                             padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.add_circle_outline, size: 16, color: Color(0xFFE7FF12)),
+                            icon: const Icon(Icons.add_circle_outline, size: 14, color: Color(0xFFFCDD22)),
                             onPressed: () => cart.updateQuantity(cartItem, cartItem.quantity + 1),
                           ),
-                          const SizedBox(width: 12),
-                          Text('₹${cartItem.totalPrice.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 12)),
+                          const SizedBox(width: 10),
+                          Text('₹${cartItem.totalPrice.toStringAsFixed(0)}',
+                              style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 11)),
                         ],
                       ),
                     ),
@@ -130,76 +132,93 @@ class _CartViewContentState extends State<CartViewContent> {
                 },
               ),
               const Divider(color: Colors.white10),
+
+              if (widget.isBottomSheet)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: SizedBox(
+                    height: 44,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        // Close sheet so the cashier/waiter can continue ordering.
+                        if (Navigator.canPop(context)) Navigator.pop(context);
+                      },
+                      icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
+                      label: const Text(
+                        "ADD ITEMS",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.white.withOpacity(0.15)),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ),
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Row(
+                  children: [
+                    // --- CLEAR BUTTON ---
+                    Expanded(
+                      flex: 2,
+                      child: OutlinedButton(
+                        onPressed: () => cart.clearCart(),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: BorderSide(color: Colors.redAccent.withOpacity(0.5), width: 1),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('CLEAR', style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // --- KOT BUTTON ---
+                    Expanded(
+                      flex: 3,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : () => _placeOrder(cart, context, printBill: false),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Text('KOT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // --- ADMIN ACTIONS (SETTLE & CLEAR) ---
+              if (auth.role == UserRole.admin || auth.role == UserRole.cashier)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Row(
                     children: [
-                      // --- CLEAR BUTTON ---
+                      // --- SETTLE BUTTON ---
                       Expanded(
-                        flex: 2,
-                        child: OutlinedButton(
-                          onPressed: () => cart.clearCart(),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: BorderSide(color: Colors.redAccent.withOpacity(0.5), width: 1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: const Text('CLEAR', style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // --- CLEAR BUTTON ---
-                      Expanded(
-                        flex: 2,
-                        child: OutlinedButton(
-                          onPressed: () => cart.clearCart(),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: const BorderSide(color: Colors.white12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: const Text('CLEAR', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // --- KOT BUTTON ---
-                      Expanded(
-                        flex: 3,
-                        child: ElevatedButton(
-                          onPressed: _isSubmitting ? null : () => _placeOrder(cart, context, printBill: false),
+                        child: ElevatedButton.icon(
+                          onPressed: _isSubmitting ? null : () => _handleAdminSettle(cart, auth),
+                          icon: const Icon(Icons.check_circle_outline, size: 18),
+                          label: const Text('SETTLE', style: TextStyle(fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFCDD22),
+                            foregroundColor: const Color(0xFF141615),
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            backgroundColor: Colors.white10,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Colors.white10)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          child: _isSubmitting 
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                              : const Text('KOT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                         ),
                       ),
-                      // --- BILL BUTTON (Only for non-waiters) ---
-                      if (context.watch<AuthService>().role != UserRole.waiter) ...[
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 3,
-                          child: ElevatedButton(
-                            onPressed: _isSubmitting ? null : () => _placeOrder(cart, context, printBill: true),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              backgroundColor: const Color(0xFFE7FF12),
-                              foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: _isSubmitting 
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
-                                : const Text('BILL', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
-                )
+                ),
             ],
           ],
         ),
@@ -216,7 +235,7 @@ class _CartViewContentState extends State<CartViewContent> {
     return content;
   }
 
-  Future<void> _placeOrder(CartProvider cart, BuildContext context, {bool printBill = false}) async {
+  Future<void> _placeOrder(CartProvider cart, BuildContext context, {bool printBill = false, String paymentMode = "Cash"}) async {
     final isDineIn = cart.orderType == OrderType.dineIn;
     if (isDineIn && cart.tableId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a table for Dine-In orders")));
@@ -275,9 +294,13 @@ class _CartViewContentState extends State<CartViewContent> {
           'waiterName': waiterName,
           'customerName': customerName,
           'status': 'active',
+          'takeawayStatus': cart.orderType == OrderType.takeaway ? 'pending' : null,
+          'deliveryStatus': cart.orderType == OrderType.delivery ? 'pending' : null,
+          'isDelivered': false,
           'restaurantId': restaurantId,
           'createdAt': FieldValue.serverTimestamp(),
           'totalAmount': cartTotal,
+          'totalItems': cart.totalItems,
           'items': cartItemsSummary,
         });
         
@@ -336,7 +359,7 @@ class _CartViewContentState extends State<CartViewContent> {
       // Fetch cashier name for receipt
       final cashierName = auth.userName ?? 'Staff';
 
-      // Auto-Print KOT for Waiter
+      // Prepare data for printing (needed for both KOT and Final Bill)
       final kotData = {
         'tableName': tableName ?? 'Unknown',
         'customerName': customerName,
@@ -354,45 +377,67 @@ class _CartViewContentState extends State<CartViewContent> {
       final printerService = context.read<UsbPrinterService>();
       final hasUsbPrinter = printerService.selectedDevice != null;
 
-      if (hasUsbPrinter) {
-        final bytes = await ReportService.generateKOTBytes(kotData);
-        await ReportService.printBytesIsolated(printerService, bytes);
-      } else {
-        await ReportService.printKOTReceipt(kotData, orderId);
+      // Auto-Print KOT for Waiter (only if NOT printing the final bill/settling)
+      if (!printBill) {
+        if (hasUsbPrinter) {
+          final bytes = await ReportService.generateKOTBytes(kotData);
+          await ReportService.printBytesIsolated(printerService, bytes);
+        } else {
+          await ReportService.printKOTReceipt(kotData, orderId);
+        }
       }
       
       // If BILL is pressed, print the final bill and settle
       if (printBill) {
-        final paymentMode = "Cash";
+        // STEP 1: Settle Firestore and Record Revenue
+        // Fetch full order total (previous + new items) for settlement
+        final orderDoc = await firestore.collection('orders').doc(orderId).get();
+        final finalTotal = (orderDoc.data()?['totalAmount'] as num).toDouble();
 
-        // STEP 1: Settle Firestore first (main thread, clean)
-        await ReportService.settleOrder(docId: orderId, paymentMode: paymentMode);
+        int newReceiptNumber = await ReportService.recordRevenueAndSettle(
+          orderId: orderId,
+          restaurantId: restaurantId!,
+          total: finalTotal,
+          paymentMode: paymentMode,
+        );
+
+        // STEP 1.5: Clear table if Dine-In
+        if (isDineIn && cart.tableId != null) {
+          await firestore.collection('tables').doc(cart.tableId).update({
+            'status': 'available',
+            'currentOrderId': null,
+          });
+        }
+
+        // Add receipt number for printing
+        final printData = Map<String, dynamic>.from(kotData);
+        printData['receiptNumber'] = newReceiptNumber;
+        printData['paymentMode'] = paymentMode;
 
         // STEP 2: Generate bytes (pure Dart)
         if (hasUsbPrinter) {
           final bytes = await ReportService.generateFinalBillBytes(
-            data: kotData,
-            total: cart.totalAmount,
+            data: printData,
+            total: finalTotal,
             paymentMode: paymentMode,
             hotelName: auth.restaurantName ?? "YUG POS",
           );
-          // STEP 3: Print isolated in microtask so USB native thread
-          // cannot corrupt Firebase's platform channel context
+          // STEP 3: Print isolated in microtask
           Future.microtask(() async {
             try {
               await ReportService.printBytesIsolated(printerService, bytes);
             } catch (e) {
-              debugPrint('Print error (bill already saved): $e');
+              debugPrint('Print error: $e');
             }
           });
         } else {
           await ReportService.printFinalBill(
-            orderData: kotData,
+            orderData: printData,
             orderId: orderId,
-            subtotal: cart.totalAmount,
+            subtotal: finalTotal,
             cgst: 0.0,
             sgst: 0.0,
-            total: cart.totalAmount,
+            total: finalTotal,
             paymentMode: paymentMode,
             hotelName: auth.restaurantName ?? "YUG POS",
           );
@@ -419,6 +464,205 @@ class _CartViewContentState extends State<CartViewContent> {
           backgroundColor: Colors.red,
         ));
       }
+    }
+  }
+
+  Future<void> _handleAdminSettle(CartProvider cart, AuthService auth) async {
+    // Determine if there is something to settle
+    bool hasCartItems = cart.items.isNotEmpty;
+    bool hasTableOrder = false;
+    String? currentOrderId;
+    Map<String, dynamic>? tableOrderData;
+
+    if (cart.orderType == OrderType.dineIn && cart.tableId != null) {
+      final tableDoc = await FirebaseFirestore.instance.collection('tables').doc(cart.tableId).get();
+      currentOrderId = tableDoc.data()?['currentOrderId'];
+      if (currentOrderId != null) {
+        hasTableOrder = true;
+        final orderDoc = await FirebaseFirestore.instance.collection('orders').doc(currentOrderId).get();
+        if (orderDoc.exists) {
+          tableOrderData = orderDoc.data() as Map<String, dynamic>;
+        }
+      }
+    }
+
+    if (!hasCartItems && !hasTableOrder) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No items or active order to settle.")));
+      return;
+    }
+
+    // Step 1: Prompt for payment method
+    String selectedPaymentMode = 'cash';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF141615),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Settle & Clear?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Select payment method to finalize revenue.", style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  _buildPaymentOption(
+                    title: "CASH", 
+                    icon: Icons.money, 
+                    isSelected: selectedPaymentMode == 'cash', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'cash')
+                  ),
+                  const SizedBox(width: 8),
+                  _buildPaymentOption(
+                    title: "UPI", 
+                    icon: Icons.qr_code, 
+                    isSelected: selectedPaymentMode == 'upi', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'upi')
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text("Cancel")),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(c, true),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
+              child: const Text("SETTLE & CLEAR"),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      if (hasCartItems) {
+        // Scenario A: Items in cart - first place KOT then settle
+        await _placeOrder(cart, context, printBill: true, paymentMode: selectedPaymentMode);
+      } else if (hasTableOrder && currentOrderId != null && tableOrderData != null) {
+        // Scenario B: Cart is empty but table has an existing order
+        final firestore = FirebaseFirestore.instance;
+
+        final restaurantIdRaw = tableOrderData['restaurantId'] ?? auth.restaurantId;
+        final restaurantId = restaurantIdRaw?.toString();
+        if (restaurantId == null || restaurantId.isEmpty) {
+          throw Exception('Missing restaurantId for settlement');
+        }
+
+        // Finalize settlement and record revenue
+        int newReceiptNumber = await ReportService.recordRevenueAndSettle(
+          orderId: currentOrderId,
+          restaurantId: restaurantId,
+          total: (tableOrderData['totalAmount'] as num).toDouble(),
+          paymentMode: selectedPaymentMode,
+        );
+        
+        final printData = Map<String, dynamic>.from(tableOrderData);
+        printData['receiptNumber'] = newReceiptNumber;
+        printData['paymentMode'] = selectedPaymentMode;
+
+        // Print bill
+        await ReportService.printFinalBill(
+          orderData: printData,
+          orderId: currentOrderId,
+          subtotal: (tableOrderData['totalAmount'] as num).toDouble(),
+          cgst: 0, sgst: 0,
+          total: (tableOrderData['totalAmount'] as num).toDouble(),
+          paymentMode: selectedPaymentMode,
+          hotelName: auth.restaurantName ?? "YUG POS",
+        );
+
+        // Clear table
+        await firestore.collection('tables').doc(cart.tableId).update({
+          'status': 'available',
+          'currentOrderId': null,
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Table Settled! Mode: ${selectedPaymentMode.toUpperCase()}"), backgroundColor: Colors.green));
+          cart.clearCart();
+          if (widget.isBottomSheet) Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Widget _buildPaymentOption({required String title, required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+    final color = isSelected ? const Color(0xFFFCDD22) : Colors.white10;
+    final textColor = isSelected ? const Color(0xFF141615) : Colors.white60;
+
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? color : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isSelected ? color : Colors.white10),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isSelected ? textColor : Colors.white38, size: 20),
+              const SizedBox(height: 4),
+              Text(title, style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAdminClearTable(CartProvider cart) async {
+    if (cart.orderType == OrderType.dineIn && cart.tableId != null) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF141615),
+          title: const Text("Clear Table?", style: TextStyle(color: Colors.white)),
+          content: const Text("This will reset the table status without recording revenue. Continue?", style: TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              child: const Text("CLEAR"),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        setState(() => _isSubmitting = true);
+        try {
+          await FirebaseFirestore.instance.collection('tables').doc(cart.tableId).update({
+            'status': 'available',
+            'currentOrderId': null,
+          });
+          cart.clearCart();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Table cleared successfully.")));
+            if (widget.isBottomSheet) Navigator.pop(context);
+          }
+        } catch (e) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+        } finally {
+          if (mounted) setState(() => _isSubmitting = false);
+        }
+      }
+    } else {
+      cart.clearCart();
     }
   }
 }

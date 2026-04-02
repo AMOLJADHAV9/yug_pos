@@ -36,12 +36,12 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF141615),
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF141615),
         elevation: 0,
-        title: Text('Table ${widget.table.name} Menu', style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold)),
-        iconTheme: const IconThemeData(color: Color(0xFFE7FF12)),
+        title: Text('Table ${widget.table.name} Menu', style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Color(0xFFFCDD22)),
       ),
       body: Column(
         children: [
@@ -81,24 +81,24 @@ class _MenuScreenState extends State<MenuScreen> {
                 },
                 child: Container(
                   padding: const EdgeInsets.all(16),
-                  color: const Color(0xFFE7FF12),
+                  color: const Color(0xFFFCDD22),
                   child: SafeArea(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
-                          child: Text('${cart.totalItems}', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+                          decoration: BoxDecoration(color: const Color(0xFF141615).withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                          child: Text('${cart.totalItems}', style: const TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
                         const Row(
                           children: [
-                            Text('View Cart', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text('View Cart', style: TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold, fontSize: 16)),
                             SizedBox(width: 8),
-                            Icon(Icons.shopping_cart_outlined, color: Colors.black)
+                            Icon(Icons.shopping_cart_outlined, color: const Color(0xFF141615))
                           ],
                         ),
-                        Text('₹${cart.totalAmount.toStringAsFixed(0)}', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text('₹${cart.totalAmount.toStringAsFixed(0)}', style: const TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold, fontSize: 16)),
                       ],
                     ),
                   ),
@@ -142,11 +142,11 @@ class _MenuScreenState extends State<MenuScreen> {
                 child: ChoiceChip(
                   label: Text(cat, style: TextStyle(
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? Colors.black : Colors.white70
+                    color: isSelected ? const Color(0xFF141615) : Colors.white70
                   )),
                   selected: isSelected,
-                  selectedColor: const Color(0xFFE7FF12),
-                  backgroundColor: const Color(0xFF1E1E1E),
+                  selectedColor: const Color(0xFFFCDD22),
+                  backgroundColor: const Color(0xFF141615),
                   onSelected: (val) {
                     if (val) setState(() => _selectedCategory = cat);
                   },
@@ -215,10 +215,10 @@ class _MenuScreenState extends State<MenuScreen> {
         Card(
           elevation: isSelected ? 4 : 1,
           clipBehavior: Clip.antiAlias,
-          color: const Color(0xFF1E1E1E),
+          color: const Color(0xFF141615),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: isSelected ? const BorderSide(color: Color(0xFFE7FF12), width: 1.5) : BorderSide(color: Colors.white.withOpacity(0.05)),
+            side: isSelected ? const BorderSide(color: Color(0xFFFCDD22), width: 1.5) : BorderSide(color: Colors.white.withOpacity(0.05)),
           ),
           child: InkWell(
             onTap: item.isAvailable ? () {
@@ -230,7 +230,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 Expanded(
                   flex: 3,
                   child: Container(
-                    color: Colors.black.withOpacity(0.2),
+                    color: const Color(0xFF141615).withOpacity(0.2),
                     child: item.imageUrl != null && item.imageUrl!.isNotEmpty
                         ? Image.network(item.imageUrl!, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.fastfood, size: 28, color: Colors.white24))
                         : const Icon(Icons.fastfood, size: 28, color: Colors.white24),
@@ -245,7 +245,7 @@ class _MenuScreenState extends State<MenuScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('₹${item.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFE7FF12), fontWeight: FontWeight.bold, fontSize: 9)),
+                          Text('₹${item.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 9)),
                           if (!item.isAvailable)
                             const Text('Out', style: TextStyle(color: Colors.red, fontSize: 8, fontWeight: FontWeight.bold)),
                         ],
@@ -262,8 +262,8 @@ class _MenuScreenState extends State<MenuScreen> {
             top: 4, right: 4,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(color: const Color(0xFFE7FF12), borderRadius: BorderRadius.circular(8)),
-              child: Text("$quantity", style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+              decoration: BoxDecoration(color: const Color(0xFFFCDD22), borderRadius: BorderRadius.circular(8)),
+              child: Text("$quantity", style: const TextStyle(color: const Color(0xFF141615), fontSize: 10, fontWeight: FontWeight.bold)),
             ),
           ),
       ],
@@ -280,8 +280,8 @@ class _MenuScreenState extends State<MenuScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              backgroundColor: const Color(0xFF1E1E1E),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFE7FF12).withOpacity(0.1))),
+              backgroundColor: const Color(0xFF141615),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
               title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -290,14 +290,14 @@ class _MenuScreenState extends State<MenuScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.remove_circle_outline, size: 32, color: Color(0xFFE7FF12)),
+                        icon: const Icon(Icons.remove_circle_outline, size: 32, color: Color(0xFFFCDD22)),
                         onPressed: quantity > 1 ? () => setState(() => quantity--) : null,
                       ),
                       const SizedBox(width: 16),
                       Text('$quantity', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
                       const SizedBox(width: 16),
                       IconButton(
-                        icon: const Icon(Icons.add_circle_outline, size: 32, color: Color(0xFFE7FF12)),
+                        icon: const Icon(Icons.add_circle_outline, size: 32, color: Color(0xFFFCDD22)),
                         onPressed: () => setState(() => quantity++),
                       ),
                     ],
@@ -308,7 +308,7 @@ class _MenuScreenState extends State<MenuScreen> {
                       inputDecorationTheme: InputDecorationTheme(
                         labelStyle: const TextStyle(color: Colors.white70),
                         enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
-                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE7FF12))),
+                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFCDD22))),
                       ),
                     ),
                     child: TextField(
@@ -331,8 +331,8 @@ class _MenuScreenState extends State<MenuScreen> {
                     Navigator.pop(context);
                   }, 
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE7FF12),
-                    foregroundColor: Colors.black,
+                    backgroundColor: const Color(0xFFFCDD22),
+                    foregroundColor: const Color(0xFF141615),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
                   ),
                   child: const Text('Add to Cart', style: TextStyle(fontWeight: FontWeight.bold))

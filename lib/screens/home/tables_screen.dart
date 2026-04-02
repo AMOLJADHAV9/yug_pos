@@ -13,6 +13,7 @@ import '../order/menu_screen.dart';
 import '../order/takeaway_list_screen.dart';
 import 'package:intl/intl.dart';
 import '../../services/report_service.dart';
+import '../../utils/navigator_utils.dart';
 import '../../models/menu_item.dart';
 import '../../widgets/cart_view_content.dart';
 
@@ -97,8 +98,8 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
 
     if (restaurantId == null) {
       return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12))),
+        backgroundColor: const Color(0xFF141615),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22))),
       );
     }
     
@@ -118,7 +119,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
               Container(
                 width: 300,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
+                  color: const Color(0xFF141615),
                   border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
                 ),
                 child: _buildTableZone(restaurantId, isWide: true),
@@ -140,7 +141,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
               Container(
                 width: 350,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
+                  color: const Color(0xFF141615),
                   border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
                 ),
                 child: _buildCartZone(restaurantId),
@@ -151,7 +152,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           if (widget.isTab) return content;
 
           return Scaffold(
-            backgroundColor: Colors.black,
+            backgroundColor: const Color(0xFF141615),
             appBar: AppBar(
               title: Text("${restaurantName.toUpperCase()} (WAITER)", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               actions: [
@@ -170,9 +171,9 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
             children: [
               TabBar(
                 controller: _tabController!,
-                labelColor: const Color(0xFFE7FF12),
+                labelColor: const Color(0xFFFCDD22),
                 unselectedLabelColor: Colors.white54,
-                indicatorColor: const Color(0xFFE7FF12),
+                indicatorColor: const Color(0xFFFCDD22),
                 tabs: const [
                   Tab(text: 'Menu', icon: Icon(Icons.grid_view, size: 20)),
                   Tab(text: 'Tables', icon: Icon(Icons.table_bar, size: 20)),
@@ -203,7 +204,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
         }
 
         return Scaffold(
-          backgroundColor: Colors.black,
+          backgroundColor: const Color(0xFF141615),
           appBar: AppBar(
             title: Text(restaurantName.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             actions: [
@@ -232,8 +233,8 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           bottomNavigationBar: BottomNavigationBar(
             currentIndex: _currentIndex,
             onTap: (val) => setState(() => _currentIndex = val),
-            backgroundColor: const Color(0xFF1A1A1A),
-            selectedItemColor: const Color(0xFFE7FF12),
+            backgroundColor: const Color(0xFF141615),
+            selectedItemColor: const Color(0xFFFCDD22),
             unselectedItemColor: Colors.grey,
             type: BottomNavigationBarType.fixed,
             items: const [
@@ -248,18 +249,18 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
 
   Widget _buildDrawer(String restaurantName, AuthService auth) {
     return Drawer(
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: const Color(0xFF141615),
       child: Column(
         children: [
           DrawerHeader(
-            decoration: const BoxDecoration(color: Color(0xFFE7FF12)),
+            decoration: const BoxDecoration(color: Color(0xFFFCDD22)),
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.restaurant_menu, size: 40, color: Colors.black),
+                  const Icon(Icons.restaurant_menu, size: 40, color: const Color(0xFF141615)),
                   const SizedBox(height: 8),
-                  Text(restaurantName, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  Text(restaurantName, style: const TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
                   const Text("WAITER DASHBOARD", style: TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold)),
                 ],
               ),
@@ -316,9 +317,9 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           setState(() {});
         },
         style: SegmentedButton.styleFrom(
-          backgroundColor: const Color(0xFF1A1A1A),
-          selectedBackgroundColor: const Color(0xFFE7FF12),
-          selectedForegroundColor: Colors.black,
+          backgroundColor: const Color(0xFF141615),
+          selectedBackgroundColor: const Color(0xFFFCDD22),
+          selectedForegroundColor: const Color(0xFF141615),
           side: const BorderSide(color: Colors.white10),
           visualDensity: VisualDensity.compact,
         ),
@@ -338,7 +339,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                child: Column(
                  mainAxisAlignment: MainAxisAlignment.center,
                  children: [
-                   Icon(cart.orderType == OrderType.takeaway ? Icons.shopping_bag : Icons.delivery_dining, size: 64, color: const Color(0xFFE7FF12).withOpacity(0.5)),
+                   Icon(cart.orderType == OrderType.takeaway ? Icons.shopping_bag : Icons.delivery_dining, size: 64, color: const Color(0xFFFCDD22).withOpacity(0.5)),
                    const SizedBox(height: 16),
                    Text("START NEW ${cart.orderType.name.toUpperCase()}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
                    const SizedBox(height: 24),
@@ -347,8 +348,8 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                      icon: const Icon(Icons.add),
                      label: Text("NEW ${cart.orderType.name.toUpperCase()} ORDER"),
                      style: ElevatedButton.styleFrom(
-                       backgroundColor: const Color(0xFFE7FF12),
-                       foregroundColor: Colors.black,
+                       backgroundColor: const Color(0xFFFCDD22),
+                       foregroundColor: const Color(0xFF141615),
                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                      ),
@@ -367,6 +368,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                 final tables = snapshot.data!.docs
                     .map((doc) => TableModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                     .toList();
+                tables.sort(TableModel.compareByName);
 
                 // Extract unique sections (Floors)
                 final floorSections = tables.map((t) => (t.section ?? 'General').trim()).toSet().toList();
@@ -402,9 +404,9 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                               padding: const EdgeInsets.only(right: 6.0),
                               child: ChoiceChip(
                                 label: Text(section.toUpperCase(), 
-                                  style: TextStyle(color: isSelected ? Colors.black : Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
+                                  style: TextStyle(color: isSelected ? const Color(0xFF141615) : Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
                                 selected: isSelected,
-                                selectedColor: const Color(0xFFE7FF12),
+                                selectedColor: const Color(0xFFFCDD22),
                                 backgroundColor: const Color(0xFF2A2A2A),
                                 visualDensity: VisualDensity.compact,
                                 onSelected: (val) => setState(() => _selectedTableSection = section),
@@ -437,17 +439,17 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                             width: double.infinity,
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: isSelected ? const Color(0xFFE7FF12).withOpacity(0.1) : const Color(0xFF252525),
+                              color: isSelected ? const Color(0xFFFCDD22).withOpacity(0.1) : const Color(0xFF141615),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: isSelected ? const Color(0xFFE7FF12) : (isOccupied ? Colors.green.withOpacity(0.5) : Colors.white10),
+                                color: isSelected ? const Color(0xFFFCDD22) : (isOccupied ? Colors.green.withOpacity(0.5) : Colors.white10),
                                 width: 1,
                               ),
                             ),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(table.name, style: TextStyle(color: isSelected ? const Color(0xFFE7FF12) : Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                Text(table.name, style: TextStyle(color: isSelected ? const Color(0xFFFCDD22) : Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                                 const SizedBox(height: 2),
                                 FittedBox(
                                   child: Text(isOccupied ? "OCCUPIED" : "AVAILABLE", 
@@ -556,10 +558,10 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: ChoiceChip(
-              label: Text(label, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontSize: 12)),
+              label: Text(label, style: TextStyle(color: isSelected ? const Color(0xFF141615) : Colors.white, fontSize: 12)),
               selected: isSelected,
-              selectedColor: const Color(0xFFE7FF12),
-              backgroundColor: const Color(0xFF1E1E1E),
+              selectedColor: const Color(0xFFFCDD22),
+              backgroundColor: const Color(0xFF141615),
               onSelected: (val) => setState(() => _selectedCategory = label == "All" ? null : label),
             ),
           );
@@ -578,7 +580,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           hintText: "Search items...",
           hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
           prefixIcon: const Icon(Icons.search, color: Colors.white38, size: 20),
-          fillColor: const Color(0xFF1A1A1A),
+          fillColor: const Color(0xFF141615),
           filled: true,
           contentPadding: const EdgeInsets.all(0),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
@@ -589,7 +591,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
   }
 
   Widget _buildItemsZone(String restaurantId, bool isWide) {
-    if (_isMenuLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFFE7FF12)));
+    if (_isMenuLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22)));
     
     final items = _cachedItems?.where((item) {
       final matchesSearch = item.name.toLowerCase().contains(_searchController.text.toLowerCase());
@@ -624,9 +626,9 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           onTap: () => _addItemToCart(item),
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF252525),
+              color: const Color(0xFF141615),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isInCart ? const Color(0xFFE7FF12) : Colors.white10, width: isInCart ? 2 : 1),
+              border: Border.all(color: isInCart ? const Color(0xFFFCDD22) : Colors.white10, width: isInCart ? 2 : 1),
             ),
             child: Stack(
               children: [
@@ -640,7 +642,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          Text("₹${item.price.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFE7FF12), fontSize: 9, fontWeight: FontWeight.bold)),
+                          Text("₹${item.price.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFFCDD22), fontSize: 9, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -651,8 +653,8 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                     top: 4, right: 4,
                     child: Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Color(0xFFE7FF12), shape: BoxShape.circle),
-                      child: Text("$qty", style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+                      decoration: const BoxDecoration(color: Color(0xFFFCDD22), shape: BoxShape.circle),
+                      child: Text("$qty", style: const TextStyle(color: const Color(0xFF141615), fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
               ],
@@ -667,7 +669,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: const Color(0xFF141615),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Start New Takeaway?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         content: const Column(
@@ -692,7 +694,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
             child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -705,7 +707,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: const Color(0xFF141615),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Start New Delivery?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         content: SingleChildScrollView(
@@ -744,7 +746,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE7FF12), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
             child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -772,10 +774,10 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
       children: [
         Container(
           padding: const EdgeInsets.all(16),
-          color: Colors.black,
+          color: const Color(0xFF141615),
           child: Row(
             children: [
-              const Icon(Icons.shopping_cart, color: Color(0xFFE7FF12)),
+              const Icon(Icons.shopping_cart, color: Color(0xFFFCDD22)),
               const SizedBox(width: 8),
               Text(
                 cart.orderType == OrderType.dineIn 
@@ -791,84 +793,135 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
   }
 
   void _promptClearTable(String tableId, String currentOrderId) {
+    String selectedPaymentMode = 'cash'; // Default
+
     showDialog(
       context: context,
-      builder: (c) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text("Settle & Clear Table?", style: TextStyle(color: Colors.white)),
-        content: const Text("This will finalize the bill, record the revenue, and clear the table.", style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () async {
-              Navigator.pop(c);
-              
-              final doc = await _firestore.collection('orders').doc(currentOrderId).get();
-              if (doc.exists) {
-                final data = doc.data() as Map<String, dynamic>;
-                await _recordRevenueAndUpdateStatus(currentOrderId, data);
-                await ReportService.printOrderReceipt(data, currentOrderId);
-              }
-
-              await _firestore.collection('tables').doc(tableId).update({
-                'status': 'available',
-                'currentOrderId': null,
-              });
-              
-              if (_selectedTableId == tableId) {
-                setState(() {
-                  _selectedTableId = null;
-                  _selectedOrderData = null;
-                });
-              }
-              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Table Cleared & Revenue Saved!"), backgroundColor: Colors.green));
-            },
-            child: const Text("Settle & Clear"),
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF141615),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Settle & Clear Table?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Select payment method to finalize revenue and clear the table.", style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  _buildPaymentOption(
+                    title: "CASH", 
+                    icon: Icons.money, 
+                    isSelected: selectedPaymentMode == 'cash', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'cash')
+                  ),
+                  const SizedBox(width: 8),
+                  _buildPaymentOption(
+                    title: "UPI", 
+                    icon: Icons.qr_code, 
+                    isSelected: selectedPaymentMode == 'upi', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'upi')
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => safePop(c), 
+              child: const Text("Cancel", style: TextStyle(color: Colors.white38))
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFCDD22),
+                foregroundColor: const Color(0xFF141615),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () async {
+                safePop(c);
+
+                try {
+                  final doc = await _firestore.collection('orders').doc(currentOrderId).get();
+                  if (doc.exists) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    data['paymentMode'] = selectedPaymentMode; // Inject selected mode
+                    await _recordRevenueAndUpdateStatus(currentOrderId, data, paymentMode: selectedPaymentMode);
+                    await ReportService.printOrderReceipt(data, currentOrderId);
+                  }
+
+                  await _firestore.collection('tables').doc(tableId).update({
+                    'status': 'available',
+                    'currentOrderId': null,
+                  });
+                  
+                  if (_selectedTableId == tableId) {
+                    setState(() {
+                      _selectedTableId = null;
+                      _selectedOrderData = null;
+                    });
+                  }
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text("Table Cleared! Payment: ${selectedPaymentMode.toUpperCase()}"), 
+                      backgroundColor: Colors.green
+                    ));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text("Settle failed: $e"),
+                      backgroundColor: Colors.redAccent,
+                    ));
+                  }
+                }
+              },
+              child: const Text("SETTLE & CLEAR", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Future<void> _recordRevenueAndUpdateStatus(String orderId, Map<String, dynamic> data) async {
+  Widget _buildPaymentOption({required String title, required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+    final color = isSelected ? const Color(0xFFFCDD22) : Colors.white10;
+    final textColor = isSelected ? const Color(0xFF141615) : Colors.white60;
+
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? color : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isSelected ? color : Colors.white10),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isSelected ? textColor : Colors.white38, size: 20),
+              const SizedBox(height: 4),
+              Text(title, style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  Future<void> _recordRevenueAndUpdateStatus(String orderId, Map<String, dynamic> data, {String? paymentMode}) async {
     if (data['status'] == 'completed' || data['status'] == 'paid') return;
     
-    final restaurantId = data['restaurantId'];
-    final total = (data['totalAmount'] as num).toDouble();
-    
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final collRef = _firestore.collection('daily_collections').doc("${restaurantId}_$today");
-    
-    await _firestore.runTransaction((transaction) async {
-      final collDoc = await transaction.get(collRef);
-      
-      Map<String, dynamic> updates = {
-        'netCollection': FieldValue.increment(total),
-        'grossCollection': FieldValue.increment(total),
-        'billCount': FieldValue.increment(1),
-        'tableCollection': FieldValue.increment(total),
-        'tableCount': FieldValue.increment(1),
-        'lastUpdatedAt': FieldValue.serverTimestamp(),
-      };
-
-      if (!collDoc.exists) {
-        updates['restaurantId'] = restaurantId;
-        updates['netCollection'] = total;
-        updates['grossCollection'] = total;
-        updates['billCount'] = 1;
-        updates['tableCollection'] = total;
-        updates['tableCount'] = 1;
-        transaction.set(collRef, updates);
-      } else {
-        transaction.update(collRef, updates);
-      }
-    });
-
-    await _firestore.collection('orders').doc(orderId).update({
-      'status': 'completed',
-    });
+    await ReportService.recordRevenueAndSettle(
+      orderId: orderId,
+      restaurantId: data['restaurantId'],
+      total: (data['totalAmount'] as num).toDouble(),
+      paymentMode: paymentMode ?? 'cash',
+    );
   }
+
 
   Widget _buildFloatingCartDrawer() {
     return Consumer<CartProvider>(
@@ -884,16 +937,16 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           builder: (context, scrollController) {
             return Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
+                color: const Color(0xFF141615),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.6),
+                    color: const Color(0xFF141615).withOpacity(0.6),
                     blurRadius: 15,
                     offset: const Offset(0, -5),
                   ),
                 ],
-                border: Border.all(color: const Color(0xFFE7FF12).withOpacity(0.15), width: 1),
+                border: Border.all(color: const Color(0xFFFCDD22).withOpacity(0.15), width: 1),
               ),
               child: CartViewContent(isBottomSheet: true, scrollController: scrollController),
             );
