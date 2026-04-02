@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/navigator_utils.dart';
@@ -18,6 +19,80 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  Future<List<QueryDocumentSnapshot>> _fetchTodayBills(String? restaurantId) async {
+    if (restaurantId == null) return [];
+
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 1));
+
+    // Query 1: Last 50 bills by billedAt (Standard)
+    final billedSnap = await _firestore
+        .collection('orders')
+        .where('restaurantId', isEqualTo: restaurantId)
+        .where('status', isEqualTo: 'billed')
+        .orderBy('billedAt', descending: true)
+        .limit(50)
+        .get();
+
+    // Query 2: Last 50 bills by completedAt (Alternative)
+    final completedSnap = await _firestore
+        .collection('orders')
+        .where('restaurantId', isEqualTo: restaurantId)
+        .where('status', isEqualTo: 'completed')
+        .orderBy('completedAt', descending: true)
+        .limit(50)
+        .get();
+
+    final Map<String, QueryDocumentSnapshot> merged = {};
+    for (final d in billedSnap.docs) {
+      merged[d.id] = d;
+    }
+    for (final d in completedSnap.docs) {
+      merged.putIfAbsent(d.id, () => d);
+    }
+    
+    // Fallback: If list is still small, add legacy or today's results that might be mismatching status
+    if (merged.length < 10) {
+       final createdSnap = await _firestore
+          .collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .where('createdAt', isGreaterThanOrEqualTo: start)
+          .where('createdAt', isLessThan: end)
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .get();
+       for (final d in createdSnap.docs) {
+         merged.putIfAbsent(d.id, () => d);
+       }
+    }
+
+    final list = merged.values.toList();
+    // Sort by most recent settlement time across all possible fields
+    list.sort((a, b) {
+      final ad = a.data() as Map<String, dynamic>;
+      final bd = b.data() as Map<String, dynamic>;
+      
+      final aTs = (ad['billedAt'] as Timestamp?) ?? 
+                  (ad['completedAt'] as Timestamp?) ?? 
+                  (ad['createdAt'] as Timestamp?);
+      final bTs = (bd['billedAt'] as Timestamp?) ?? 
+                  (bd['completedAt'] as Timestamp?) ?? 
+                  (bd['createdAt'] as Timestamp?);
+                  
+      final aDt = aTs?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDt = bTs?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDt.compareTo(aDt);
+    });
+
+    return list;
+  }
+
+  double _orderTotal(Map<String, dynamic> data) {
+    final raw = data['totalAmount'] ?? data['grandTotal'] ?? data['subtotal'] ?? 0;
+    return raw is num ? raw.toDouble() : double.tryParse(raw.toString()) ?? 0.0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthService>();
@@ -30,6 +105,11 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
         elevation: 0,
         title: const Text("RECENT BILLS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf, color: Colors.blueAccent),
+            onPressed: () => _downloadHistoryPdf(restaurantId),
+            tooltip: "Download PDF History",
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(() {}),
@@ -48,8 +128,36 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
 
   Widget _buildHeader(String? restaurantId) {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final ref = _firestore.collection('daily_collections').doc("${restaurantId}_$today");
+
+    // Windows workaround: avoid Firestore streams due to platform-thread violations
+    // in older firebase plugins on Windows desktop.
+    if (Platform.isWindows) {
+      return FutureBuilder<DocumentSnapshot>(
+        future: ref.get(),
+        builder: (context, snapshot) {
+          final data = snapshot.data?.data() as Map<String, dynamic>?;
+          final totalBills = data?['billCount'] ?? 0;
+          final netRevenue = data?['netCollection'] ?? 0.0;
+
+          return Container(
+            padding: const EdgeInsets.all(20),
+            color: const Color(0xFF141615),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem("TODAY'S BILLS", "$totalBills", Icons.receipt_long, const Color(0xFFFCDD22)),
+                Container(width: 1, height: 40, color: Colors.white10),
+                _buildStatItem("NET REVENUE", "₹${(netRevenue as num).toDouble().toStringAsFixed(0)}", Icons.payments, Colors.greenAccent),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
     return StreamBuilder<DocumentSnapshot>(
-      stream: _firestore.collection('daily_collections').doc("${restaurantId}_$today").snapshots(),
+      stream: ref.snapshots(),
       builder: (context, snapshot) {
         final data = snapshot.data?.data() as Map<String, dynamic>?;
         final totalBills = data?['billCount'] ?? 0;
@@ -63,7 +171,7 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
             children: [
               _buildStatItem("TODAY'S BILLS", "$totalBills", Icons.receipt_long, const Color(0xFFFCDD22)),
               Container(width: 1, height: 40, color: Colors.white10),
-              _buildStatItem("NET REVENUE", "₹${netRevenue.toStringAsFixed(0)}", Icons.payments, Colors.greenAccent),
+              _buildStatItem("NET REVENUE", "₹${(netRevenue as num).toDouble().toStringAsFixed(0)}", Icons.payments, Colors.greenAccent),
             ],
           ),
         );
@@ -108,36 +216,23 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
   }
 
   Widget _buildBillsList() {
-    final now = DateTime.now();
-    final todayMidnight = DateTime(now.year, now.month, now.day);
-    
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('orders')
-          .where('status', whereIn: ['completed', 'billed']) // Include both statuses
-          .orderBy('billedAt', descending: true)
-          .limit(50)
-          .snapshots(),
+    final restaurantId = context.read<AuthService>().restaurantId;
+
+    // Windows plugin issue affects streams; we use Future fetch for all platforms
+    // and rely on the refresh icon to re-fetch.
+    return FutureBuilder<List<QueryDocumentSnapshot>>(
+      future: _fetchTodayBills(restaurantId),
       builder: (context, snapshot) {
         if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Color(0xFFFCDD22)));
 
-        final allOrders = snapshot.data?.docs ?? [];
-        
-        // Debugging for index/query issues
-        if (allOrders.isEmpty && !snapshot.hasError && snapshot.connectionState == ConnectionState.active) {
-            // If the header shows bills but we have 0, there might be a property mismatch
-        }
+        final allOrders = snapshot.data ?? [];
 
         final filteredOrders = allOrders.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
 
-          // "Recent Bills" is meant to show today's billed orders.
-          final billedAtTs = data['billedAt'] as Timestamp?;
-          if (billedAtTs == null) return false;
-          final billedAt = billedAtTs.toDate();
-          final isToday = billedAt.year == todayMidnight.year && billedAt.month == todayMidnight.month && billedAt.day == todayMidnight.day;
-          if (!isToday) return false;
+          final status = (data['status'] ?? '').toString().toLowerCase();
+          if (status != 'billed' && status != 'completed') return false;
 
           final receiptNum = data['receiptNumber']?.toString() ?? '';
           final tableName = data['tableName']?.toString().toLowerCase() ?? '';
@@ -162,11 +257,21 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
     );
   }
 
+  /*
+  // Old stream-based implementation kept for reference.
+  Widget _buildBillsListStream() {
+    // ...
+  }
+  */
+
   Widget _buildBillCard(String orderId, Map<String, dynamic> data) {
-    final timestamp = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final total = (data['totalAmount'] as num).toDouble();
+    final timestamp = (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                      (data['completedAt'] as Timestamp?)?.toDate() ?? 
+                      (data['createdAt'] as Timestamp?)?.toDate() ?? 
+                      DateTime.now();
+    final total = _orderTotal(data);
     final receiptNum = data['receiptNumber'] ?? orderId.substring(orderId.length - 6).toUpperCase();
-    final paymentMode = data['paymentMode']?.toString().toUpperCase() ?? 'CASH';
+    final paymentMode = (data['paymentMode'] ?? data['paymentMethod'] ?? 'CASH').toString().toUpperCase();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -247,7 +352,7 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
               children: [
                 _buildDetailRow("Table", data['tableName'] ?? 'N/A'),
                 _buildDetailRow("Customer", data['customerName'] ?? 'Walk-in'),
-                _buildDetailRow("Payment", data['paymentMode']?.toString().toUpperCase() ?? 'CASH'),
+                _buildDetailRow("Payment", (data['paymentMode'] ?? data['paymentMethod'] ?? 'CASH').toString().toUpperCase()),
                 const Divider(color: Colors.white10, height: 24),
                 const Text("ITEMS", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
@@ -308,6 +413,73 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Print Error: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  void _downloadHistoryPdf(String? restaurantId) async {
+    if (restaurantId == null) return;
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Generating Bill History PDF..."), duration: Duration(seconds: 2))
+      );
+    }
+
+    try {
+      final allOrdersDocs = await _fetchTodayBills(restaurantId);
+      
+      // Filter orders to match what's currently shown on screen (search query included)
+      final filtered = allOrdersDocs.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        if (status != 'billed' && status != 'completed') return false;
+
+        final receiptNum = data['receiptNumber']?.toString() ?? '';
+        final tableName = data['tableName']?.toString().toLowerCase() ?? '';
+        final billId = doc.id.toLowerCase();
+        return receiptNum.contains(_searchQuery) || tableName.contains(_searchQuery) || billId.contains(_searchQuery);
+      }).toList();
+
+      if (filtered.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No orders found to export."), backgroundColor: Colors.orange));
+        return;
+      }
+
+      // Convert to List of Maps for the ReportService
+      final ordersData = filtered.map((doc) {
+        final d = Map<String, dynamic>.from(doc.data() as Map);
+        d['id'] = doc.id;
+        return d;
+      }).toList();
+
+      final auth = context.read<AuthService>();
+      
+      // Calculate start/end dates from the list for the report header
+      DateTime start = DateTime.now();
+      DateTime end = DateTime.now();
+      
+      if (ordersData.isNotEmpty) {
+        final sorted = List<Map<String, dynamic>>.from(ordersData);
+        sorted.sort((a,b) {
+          final da = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+          final db = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+          return da.compareTo(db);
+        });
+        start = (sorted.first['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+        end = (sorted.last['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+      }
+
+      await ReportService.printOrderHistoryReport(
+        restaurantName: auth.restaurantName ?? "YUG POS",
+        orders: ordersData,
+        startDate: start,
+        endDate: end,
+      );
+    } catch (e) {
+      debugPrint("PDF Export Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Export Failed: $e"), backgroundColor: Colors.red));
       }
     }
   }

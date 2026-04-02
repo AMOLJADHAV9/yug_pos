@@ -442,8 +442,9 @@ class _TakeawayListScreenState extends State<TakeawayListScreen> with SingleTick
         final updateData = <String, dynamic>{
           'isDelivered': true,
           'status': 'billed',
-          'paymentMethod': paymentMode,
+          'paymentMode': paymentMode, // standardized from paymentMethod
           'billedAt': FieldValue.serverTimestamp(),
+          'completedAt': FieldValue.serverTimestamp(), // for consistency
           'receiptNumber': newReceiptNumber,
         };
 

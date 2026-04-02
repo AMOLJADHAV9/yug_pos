@@ -2634,15 +2634,34 @@ class _CashierDashboardState extends State<CashierDashboard> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(item['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
-                            Text("₹${item['price']} x ${item['quantity']}", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                            const SizedBox(height: 2),
+                            Text("₹${item['price']}", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                           ],
                         ),
                       ),
-                      Text("₹${(item['price'] * item['quantity']).toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      // +/- Quantity Controls
+                      Row(
+                        children: [
+                          _buildQtyBtn(Icons.remove, () => _decreaseItemQuantity(item['name'])),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text("${item['quantity']}", style: const TextStyle(color: Colors.white, fontSize: 14)),
+                          ),
+                          _buildQtyBtn(Icons.add, () => _increaseItemQuantity(item['name'])),
+                        ],
+                      ),
+                      const SizedBox(width: 24),
+                      SizedBox(
+                        width: 60,
+                        child: Text("₹${(item['price'] * item['quantity']).toStringAsFixed(0)}", 
+                          style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.right),
+                      ),
                     ],
                   );
                 },
               ),
+
         ),
         if (_selectedOrderData != null) ...[
           Container(
@@ -2885,7 +2904,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
       'status': 'completed',
       'paymentMode': paymentMode,
       'orderType': _selectedOrderType,
-      'completedAt': FieldValue.serverTimestamp(),
+      'billedAt': FieldValue.serverTimestamp(), // standardizing on billedAt
+      'completedAt': FieldValue.serverTimestamp(), // keeping for compatibility
     });
     
     if (_selectedOrderData != null && _selectedOrderData!['id'] == orderId) {

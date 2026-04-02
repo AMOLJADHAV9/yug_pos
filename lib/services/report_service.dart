@@ -700,7 +700,8 @@ class ReportService {
     final startStr = DateFormat('dd-MM-yyyy').format(startDate);
     final endStr = DateFormat('dd-MM-yyyy').format(endDate);
     
-    await Printing.layoutPdf(
+    await _safePrint(
+      name: 'Order_History_Report.pdf',
       onLayout: (PdfPageFormat format) async {
         final pdf = pw.Document();
         const int itemsPerPage = 28;
@@ -740,12 +741,12 @@ class ReportService {
                           final dt = _getDateTime(order['createdAt']);
                           return pw.TableRow(
                             children: [
-                              _tableCell(DateFormat('dd/MM HH:mm').format(dt)),
-                              _tableCell((order['id']?.toString() ?? 'N/A').toUpperCase()),
-                              _tableCell(order['receiptNumber']?.toString() ?? 'N/A'),
-                              _tableCell(order['orderType']?.toString().toUpperCase() ?? 'N/A'),
-                              _tableCell(order['status']?.toString().toUpperCase() ?? 'N/A'),
-                              _tableCell("INR ${order['totalAmount'] ?? '0'}", align: pw.TextAlign.right),
+                               _tableCell(DateFormat('dd/MM HH:mm').format(dt)),
+                               _tableCell((order['id']?.toString() ?? 'N/A').substring(0, 8).toUpperCase()),
+                               _tableCell(order['receiptNumber']?.toString() ?? 'N/A'),
+                               _tableCell(order['orderType']?.toString().toUpperCase() ?? 'N/A'),
+                               _tableCell(order['status']?.toString().toUpperCase() ?? 'N/A'),
+                               _tableCell("INR ${order['totalAmount'] ?? '0'}", align: pw.TextAlign.right),
                             ],
                           );
                         }),
@@ -770,8 +771,7 @@ class ReportService {
           );
         }
         return pdf.save();
-      }, 
-      name: 'Order_History_Report.pdf'
+      }
     );
   }
 
@@ -1038,7 +1038,7 @@ class ReportService {
       'status': 'billed',
       'paymentMode': paymentMode,
       'receiptNumber': newReceiptNumber,
-      'billedAt': FieldValue.serverTimestamp(),
+      'billedAt': Timestamp.now(),
     });
 
     return newReceiptNumber;
@@ -1052,7 +1052,7 @@ class ReportService {
       await _firestore.collection('orders').doc(docId).update({
         'status': 'billed', // Keep 'billed' for intermediate settlement if needed
         'paymentMode': paymentMode,
-        'billedAt': FieldValue.serverTimestamp(),
+        'billedAt': Timestamp.now(),
       });
       debugPrint("Order $docId settled successfully.");
     } catch (e) {

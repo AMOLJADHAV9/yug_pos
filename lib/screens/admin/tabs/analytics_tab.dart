@@ -194,6 +194,24 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             ],
           ),
           const SizedBox(height: 40),
+
+          _buildSectionHeader("Product Performance", Icons.trending_up, Colors.orange),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 24,
+            runSpacing: 24,
+            children: [
+              SizedBox(
+                width: width > 1200 ? (width - 100) / 2 : double.infinity,
+                child: _buildTrendingMenuSection(snapshot),
+              ),
+              SizedBox(
+                width: width > 1200 ? (width - 100) / 2 : double.infinity,
+                child: _buildCategoryColumnChart(snapshot),
+              ),
+            ],
+          ),
+          const SizedBox(height: 40),
         ],
       ),
     );
@@ -576,6 +594,183 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                   },
                 ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTrendingMenuSection(AsyncSnapshot<QuerySnapshot> snapshot) {
+    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+    
+    Map<String, int> itemCounts = {};
+    for (var doc in snapshot.data!.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['status'] == 'cancelled') continue;
+      final items = data['items'] as List? ?? [];
+      for (var it in items) {
+        final name = it['name'] ?? 'Unknown';
+        itemCounts[name] = (itemCounts[name] ?? 0) + ((it['quantity'] ?? 1) as num).toInt();
+      }
+    }
+
+    final sortedItems = itemCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    final topItems = sortedItems.take(6).toList();
+    final maxCount = topItems.isNotEmpty ? topItems.first.value : 1;
+
+    return Container(
+      height: 350,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141615),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.star, color: Color(0xFFFCDD22), size: 20),
+              const SizedBox(width: 8),
+              const Text("Top Trending Menu Items", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (topItems.isEmpty)
+            const Center(child: Text("No trending items found", style: TextStyle(color: Colors.white24)))
+          else
+            Expanded(
+              child: ListView.separated(
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: topItems.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 16),
+                itemBuilder: (context, index) {
+                  final item = topItems[index];
+                  final progress = item.value / maxCount;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(item.key, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                          Text("${item.value} Sold", style: const TextStyle(color: Color(0xFFFCDD22), fontSize: 12, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor: Colors.white.withOpacity(0.05),
+                          valueColor: AlwaysStoppedAnimation<Color>(const Color(0xFFFCDD22).withOpacity(0.8)),
+                          minHeight: 6,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryColumnChart(AsyncSnapshot<QuerySnapshot> snapshot) {
+    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+    
+    Map<String, double> catRevenue = {};
+    for (var doc in snapshot.data!.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['status'] == 'cancelled') continue;
+      final items = data['items'] as List? ?? [];
+      for (var it in items) {
+        final cat = it['category'] ?? 'General';
+        catRevenue[cat] = (catRevenue[cat] ?? 0) + ((it['price'] ?? 0) * (it['quantity'] ?? 1));
+      }
+    }
+
+    final topCats = catRevenue.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    final displayCats = topCats.take(6).toList();
+    final maxRevenue = displayCats.isNotEmpty ? displayCats.first.value : 100;
+
+    return Container(
+      height: 350,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141615),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.pie_chart, color: Color(0xFFFCDD22), size: 20),
+              const SizedBox(width: 8),
+              const Text("Category Sales Column Chart", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (displayCats.isEmpty)
+             const Center(child: Text("No category data found", style: TextStyle(color: Colors.white24)))
+          else
+            Expanded(
+              child: BarChart(
+                BarChartData(
+                  backgroundColor: const Color(0xFF141615),
+                  maxY: maxRevenue * 1.2,
+                  barGroups: List.generate(displayCats.length, (i) {
+                    return BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: displayCats[i].value,
+                          width: 25,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          color: Colors.primaries[i % Colors.primaries.length].withOpacity(0.8),
+                        ),
+                      ],
+                    );
+                  }),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 40,
+                        getTitlesWidget: (v, meta) {
+                          if (v >= 1000) return Text('₹${(v / 1000).toStringAsFixed(0)}k', style: const TextStyle(fontSize: 8, color: Colors.white54));
+                          return Text('₹${v.toStringAsFixed(0)}', style: const TextStyle(fontSize: 8, color: Colors.white54));
+                        },
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (v, meta) {
+                          final i = v.toInt();
+                          if (i < 0 || i >= displayCats.length) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(displayCats[i].key, style: const TextStyle(fontSize: 8, color: Colors.white54)),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.05))),
+                  borderData: FlBorderData(show: false),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -119,22 +119,44 @@ class _AdminDashboardState extends State<AdminDashboard> {
       final restaurantId = context.read<AuthService>().restaurantId;
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day);
-      final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
 
+      // Fetch the last 1000 orders to ensure we cover today's settlement activity
       final snapshot = await FirebaseFirestore.instance.collection('orders')
           .where('restaurantId', isEqualTo: restaurantId)
-          .where('createdAt', isGreaterThanOrEqualTo: startOfDay)
-          .where('createdAt', isLessThanOrEqualTo: endOfDay)
+          .orderBy('createdAt', descending: true)
+          .limit(1000)
           .get();
       
       if (mounted) Navigator.pop(context);
       
-      if (snapshot.docs.isEmpty) {
+      var orders = snapshot.docs.where((doc) {
+        final data = doc.data();
+        DateTime? orderDate = (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                              (data['createdAt'] as Timestamp?)?.toDate();
+        if (orderDate == null) return false;
+        
+        return orderDate.year == startOfDay.year && 
+               orderDate.month == startOfDay.month && 
+               orderDate.day == startOfDay.day;
+      }).toList();
+      
+      // --- FALLBACK ---
+      // If "today" is empty, look for recently billed orders in the last 24 hours
+      if (orders.isEmpty) {
+        final last24H = DateTime.now().subtract(const Duration(hours: 24));
+        orders = snapshot.docs.where((doc) {
+          final data = doc.data();
+          DateTime? orderDate = (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                                (data['createdAt'] as Timestamp?)?.toDate();
+          return orderDate != null && orderDate.isAfter(last24H);
+        }).toList();
+      }
+      
+      if (orders.isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records available for today")));
         return;
       }
 
-      final orders = snapshot.docs.toList();
       final dateStr = DateFormat('dd MMM yyyy').format(today);
       await ReportService.generatePeriodReport("Daily Revenue Report", "Date: $dateStr", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
     } catch (e) {
@@ -158,20 +180,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     try {
       final restaurantId = context.read<AuthService>().restaurantId;
+      // Fetch broadly for the month
       final snapshot = await FirebaseFirestore.instance.collection('orders')
           .where('restaurantId', isEqualTo: restaurantId)
+          .orderBy('createdAt', descending: true)
+          .limit(2000)
           .get();
       
       final orders = snapshot.docs.where((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        // We want to show everything in the report, but usually only billed/active.
-        // For a revenue report, we strictly want billed. 
+        final data = doc.data();
         if (data['status'] == 'cancelled') return false;
-        if (data['createdAt'] == null) return false;
         
-        final createdAt = (data['createdAt'] as Timestamp).toDate();
-        return createdAt.isAfter(startOfMonth.subtract(const Duration(seconds: 1))) && 
-               createdAt.isBefore(endOfMonth.add(const Duration(seconds: 1)));
+        DateTime? orderDate = (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                              (data['createdAt'] as Timestamp?)?.toDate();
+        if (orderDate == null) return false;
+        
+        return orderDate.isAfter(startOfMonth.subtract(const Duration(seconds: 1))) && 
+               orderDate.isBefore(endOfMonth.add(const Duration(seconds: 1)));
       }).toList();
       
       if (mounted) Navigator.pop(context);

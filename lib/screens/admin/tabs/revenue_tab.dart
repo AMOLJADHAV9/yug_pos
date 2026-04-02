@@ -186,9 +186,15 @@ class _RevenueTabState extends State<RevenueTab> {
     final endOfToday = startOfToday.add(const Duration(days: 1));
 
     return StreamBuilder<QuerySnapshot>(
-      stream: firestore.collection('orders').where('restaurantId', isEqualTo: restaurantId).snapshots(),
+      // Optimization: Fetch the latest 1000 orders globally and filter in-memory.
+      // This avoids composite index requirements and handles orders with missing restaurantId.
+      stream: firestore.collection('orders')
+          .orderBy('createdAt', descending: true)
+          .limit(1000)
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
+          debugPrint("Analytics Stream Error: ${snapshot.error}");
           return Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -197,34 +203,38 @@ class _RevenueTabState extends State<RevenueTab> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.red.withOpacity(0.3)),
             ),
-            child: Text("Error loading analytics: ${snapshot.error}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            child: Text("Error loading analytics. Please check connection.", style: const TextStyle(color: Colors.white70, fontSize: 12)),
           );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: SizedBox(height: 48, width: 48, child: CircularProgressIndicator(color: Color(0xFFFCDD22))));
+          return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFFFCDD22))));
         }
 
         final docs = snapshot.data?.docs ?? [];
 
-        // Filter billed/completed orders and normalize their date.
+        // Filter and normalize orders in-memory
         List<Map<String, dynamic>> todayOrders = [];
         final Map<int, double> revenueByDay = {for (int i = 0; i < 7; i++) i: 0};
 
-        final Map<String, int> itemQty = {};
-        final Map<String, double> itemRevenue = {};
-
-        final Map<String, double> categoryRevenue = {};
-
         DateTime? getOrderDate(Map<String, dynamic> data) {
-          return (data['billedAt'] as Timestamp?)?.toDate() ?? (data['createdAt'] as Timestamp?)?.toDate();
+          return (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                 (data['createdAt'] as Timestamp?)?.toDate();
         }
 
         for (final doc in docs) {
           final data = doc.data() as Map<String, dynamic>;
+          
+          // 0. Filter Restaurant (Safe Fallback)
+          if (restaurantId != null && data['restaurantId'] != null) {
+            if (data['restaurantId'] != restaurantId) continue;
+          }
+
+          // 1. Filter Status
           final status = data['status']?.toString() ?? '';
           if (status != 'billed' && status != 'completed') continue;
 
+          // 2. Filter Date
           final orderDate = getOrderDate(data);
           if (orderDate == null) continue;
 
@@ -239,8 +249,10 @@ class _RevenueTabState extends State<RevenueTab> {
             revenueByDay[dayIndex] = (revenueByDay[dayIndex] ?? 0) + totalDouble;
           }
 
-          final isToday = orderDay.year == startOfToday.year && orderDay.month == startOfToday.month && orderDay.day == startOfToday.day;
-          if (!isToday) continue;
+          // For the "Recent Orders" table, we include everything from the last 24 hours
+          // This prevents orders from disappearing due to midnight rollovers or clock drift.
+          final isRecent = orderDate.isAfter(DateTime.now().subtract(const Duration(hours: 24)));
+          if (!isRecent) continue;
 
           todayOrders.add({
             'id': doc.id,
@@ -252,58 +264,19 @@ class _RevenueTabState extends State<RevenueTab> {
             'billedAt': orderDate,
             'items': data['items'] as List?,
           });
-
-          // Top trending items + category distribution (today only)
-          final items = (data['items'] as List?) ?? [];
-          for (final it in items) {
-            if (it is! Map) continue;
-            final name = (it['name']?.toString() ?? 'Unknown').trim();
-            final qtyRaw = it['quantity'];
-            final qty = qtyRaw is num ? qtyRaw.toInt() : int.tryParse(qtyRaw?.toString() ?? '') ?? 1;
-            final priceRaw = it['price'];
-            final price = priceRaw is num ? priceRaw.toDouble() : double.tryParse(priceRaw?.toString() ?? '') ?? 0;
-            final lineRevenue = price * qty;
-
-            itemQty[name] = (itemQty[name] ?? 0) + qty;
-            itemRevenue[name] = (itemRevenue[name] ?? 0) + lineRevenue;
-
-            final catRaw = it['category'];
-            final cat = catRaw == null
-                ? 'General'
-                : catRaw.toString().trim().isNotEmpty
-                    ? catRaw.toString().trim()
-                    : 'General';
-            categoryRevenue[cat] = (categoryRevenue[cat] ?? 0) + lineRevenue;
-          }
         }
 
-        if (todayOrders.isEmpty && itemQty.isEmpty && categoryRevenue.isEmpty) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader("Top Trending Items", Icons.trending_up, const Color(0xFF141615)),
-              const SizedBox(height: 12),
-              const Text("No billed orders found for today.", style: TextStyle(color: Colors.white38, fontSize: 12)),
-            ],
+        if (todayOrders.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Text("No billed orders found for today.", style: TextStyle(color: Colors.white38, fontSize: 12)),
+            ),
           );
         }
 
-        final topItems = itemQty.entries
-            .map((e) => {'name': e.key, 'qty': e.value, 'revenue': itemRevenue[e.key] ?? 0.0})
-            .toList()
-          ..sort((a, b) => (b['qty'] as int).compareTo(a['qty'] as int));
-
-        final topCategories = categoryRevenue.entries
-            .map((e) => {'name': e.key, 'revenue': e.value})
-            .toList()
-          ..sort((a, b) => (b['revenue'] as double).compareTo(a['revenue'] as double));
-
-        topItems.length = topItems.length > 6 ? 6 : topItems.length;
-        topCategories.length = topCategories.length > 5 ? 5 : topCategories.length;
-
         final labels = List.generate(7, (i) {
           final d = startOf7DaysAgo.add(Duration(days: i));
-          // short day name; keeps it compact
           return DateFormat('EEE').format(d);
         });
         final weekRevenue = List.generate(7, (i) => revenueByDay[i] ?? 0.0);
@@ -311,103 +284,10 @@ class _RevenueTabState extends State<RevenueTab> {
           ..sort((a, b) => (b['billedAt'] as DateTime).compareTo(a['billedAt'] as DateTime));
         topRecentOrders.length = topRecentOrders.length > 10 ? 10 : topRecentOrders.length;
 
-        final width = MediaQuery.of(context).size.width;
-        final trendingCrossAxisCount = width > 1000 ? 3 : (width > 700 ? 2 : 2);
-
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(child: _buildSectionHeader("Top Trending Items", Icons.trending_up, const Color(0xFFFCDD22))),
-              ],
-            ),
-            const SizedBox(height: 16),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: trendingCrossAxisCount,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: width > 700 ? 1.45 : 1.2,
-              children: topItems.map((t) {
-                final name = t['name'] as String;
-                final qty = t['qty'] as int;
-                final revenue = t['revenue'] as double;
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF141615),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFFCDD22).withOpacity(0.05)),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                      const SizedBox(height: 6),
-                      Text("Qty: $qty", style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                      const SizedBox(height: 4),
-                      Text("Revenue: ₹${revenue.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 12)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _buildCategoryPieChartContainer(topCategories, categoryRevenue.values.fold(0.0, (a, b) => a + b)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSalesTrendLineChartContainer(labels, weekRevenue),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(child: _buildSectionHeader("Category Chart", Icons.category, const Color(0xFF800000))),
-              ],
-            ),
-            const SizedBox(height: 16),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: width > 900 ? 3 : (width > 600 ? 2 : 2),
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.45,
-              children: topCategories.map((c) {
-                final name = c['name'] as String;
-                final revenue = c['revenue'] as double;
-                final totalRevenue = categoryRevenue.values.fold(0.0, (a, b) => a + b);
-                final percent = totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0.0;
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF141615),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                      const SizedBox(height: 6),
-                      Text("${percent.toStringAsFixed(0)}%", style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                      const SizedBox(height: 4),
-                      Text("₹${revenue.toStringAsFixed(0)}", style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 12)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+            _buildSalesTrendLineChartContainer(labels, weekRevenue),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -513,7 +393,12 @@ class _RevenueTabState extends State<RevenueTab> {
               LineChartData(
                 maxY: maxY > 0 ? maxY * 1.15 : 100,
                 minY: 0,
-                gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: (maxY > 0 ? maxY / 4 : 25), getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1)),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: (maxY > 0 ? maxY / 4 : 25),
+                  getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
+                ),
                 titlesData: FlTitlesData(
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -522,10 +407,14 @@ class _RevenueTabState extends State<RevenueTab> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 24,
+                      interval: 1, // FIX: Prevents repeated day labels
                       getTitlesWidget: (v, meta) {
                         final i = v.toInt();
                         if (i < 0 || i >= labels.length) return const SizedBox.shrink();
-                        return Text(labels[i], style: const TextStyle(color: Colors.white54, fontSize: 10));
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(labels[i], style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                        );
                       },
                     ),
                   ),
@@ -535,17 +424,41 @@ class _RevenueTabState extends State<RevenueTab> {
                   LineChartBarData(
                     spots: List.generate(revenue.length, (i) => FlSpot(i.toDouble(), revenue[i])).toList(),
                     isCurved: true,
+                    curveSmoothness: 0.35,
                     color: const Color(0xFFFCDD22),
                     barWidth: 3,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(show: true, color: const Color(0xFFFCDD22).withOpacity(0.12)),
+                    dotData: const FlDotData(show: true),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          const Color(0xFFFCDD22).withOpacity(0.2),
+                          const Color(0xFFFCDD22).withOpacity(0),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (spot) => const Color(0xFF1A1D1C),
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        return LineTooltipItem(
+                          "₹${spot.y.toStringAsFixed(0)}",
+                          const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 8),
-          Text("Max: ₹${maxY.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white38, fontSize: 11)),
+          Text("Max Point: ₹${maxY.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white38, fontSize: 11)),
         ],
       ),
     );
@@ -885,15 +798,13 @@ class _RevenueTabState extends State<RevenueTab> {
       Query query = FirebaseFirestore.instance.collection('orders');
       
       if (type == 'Pending') {
-        query = query.where('status', whereIn: ['open', 'kotSent', 'Preparing']);
+        query = query.where('status', whereIn: ['open', 'kotSent', 'Preparing'])
+                     .orderBy('createdAt', descending: true)
+                     .limit(500);
       } else {
-        // Don't rely on strict Firestore equality for orderType because your data
-        // can be "Dine In" (orderType) and "dine_in" (orderSource).
-        // We'll filter today + card type in-memory after fetching.
-        query = query.where('status', whereIn: ['completed', 'billed']);
-        // Avoid requiring composite indexes for `whereIn + orderBy`.
-        // We'll filter "today" in-memory using `billedAt`.
-        query = query.limit(2000);
+        // Fetch the 1000 most recently CREATED orders to ensure we cover today's activity,
+        // then filter by status and settlement/creation date in-memory.
+        query = query.orderBy('createdAt', descending: true).limit(1000);
       }
 
       final snapshot = await query.get();
@@ -903,22 +814,35 @@ class _RevenueTabState extends State<RevenueTab> {
           if (mounted) {
             List<QueryDocumentSnapshot> docs = snapshot.docs;
 
-            if (type != 'Pending' && type != 'Total') {
-              // Normalize values like:
-              // - "Dine In" -> "dine_in"
-              // - "dine_in" -> "dine_in"
+            if (type != 'Pending') {
               String norm(Object? v) =>
                   (v?.toString() ?? '').trim().toLowerCase().replaceAll(' ', '_');
 
               docs = snapshot.docs.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
 
-                final billedAtTs = data['billedAt'] as Timestamp?;
-                if (billedAtTs == null) return false;
-                final billedAt = billedAtTs.toDate();
-                final isToday = billedAt.year == startOfDay.year && billedAt.month == startOfDay.month && billedAt.day == startOfDay.day;
+                // 0. Filter Restaurant (Safe Fallback)
+                if (restaurantId != null && data['restaurantId'] != null) {
+                  if (data['restaurantId'] != restaurantId) return false;
+                }
+
+                // 1. Filter Status
+                final status = data['status']?.toString() ?? '';
+                if (status != 'billed' && status != 'completed') return false;
+
+                // 2. Normalize and Filter Date (Match Dashboard logic)
+                DateTime? orderDate = (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                                      (data['createdAt'] as Timestamp?)?.toDate();
+                if (orderDate == null) return false;
+                
+                final isToday = orderDate.year == startOfDay.year && 
+                                orderDate.month == startOfDay.month && 
+                                orderDate.day == startOfDay.day;
                 if (!isToday) return false;
 
+                if (type == 'Total') return true;
+
+                // 3. Filter Category/Type mapping
                 final orderType = norm(data['orderType']);
                 final orderSource = norm(data['orderSource']);
 
@@ -944,18 +868,33 @@ class _RevenueTabState extends State<RevenueTab> {
 
                 return true;
               }).toList();
-            } else if (type != 'Pending' && type == 'Total') {
-              // Total card: show all today's billed/completed orders.
-              docs = snapshot.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final billedAtTs = data['billedAt'] as Timestamp?;
-                if (billedAtTs == null) return false;
-                final billedAt = billedAtTs.toDate();
-                return billedAt.year == startOfDay.year && billedAt.month == startOfDay.month && billedAt.day == startOfDay.day;
-              }).toList();
-            } else {
-              // Pending: no date filtering (shows active pending orders).
-              // Keep docs as-is.
+
+              // --- FALLBACK LOGIC ---
+              // If "today" is empty, but the card showed revenue, it may be a date mismatch.
+              // We'll show the most recent orders from the last 24 hours as a fallback.
+              if (docs.isEmpty && type != 'Pending') {
+                final last24H = DateTime.now().subtract(const Duration(hours: 24));
+                docs = snapshot.docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final status = data['status']?.toString() ?? '';
+                  if (status != 'billed' && status != 'completed') return false;
+                  
+                  DateTime? orderDate = (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                                        (data['createdAt'] as Timestamp?)?.toDate();
+                  if (orderDate == null || orderDate.isBefore(last24H)) return false;
+                  
+                  if (type == 'Total') return true;
+                  
+                  final orderType = norm(data['orderType']);
+                  final orderSource = norm(data['orderSource']);
+                  // Re-apply type filtering
+                  if (type == 'table') return orderType == 'dine_in' || orderSource == 'dine_in';
+                  if (type == 'takeaway') return orderType == 'takeaway' || orderSource == 'takeaway';
+                  if (type == 'delivery') return orderType == 'delivery' || orderSource == 'delivery';
+                  if (type == 'online') return orderType == 'online' || ['zomato', 'swiggy'].contains(orderSource);
+                  return true;
+                }).toList();
+              }
             }
 
             _showOrderDetailDialog(
