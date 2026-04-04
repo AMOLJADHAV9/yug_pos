@@ -25,4 +25,15 @@ class MenuItem {
       isAvailable: data['isAvailable'] ?? true,
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'category': category,
+      'price': price,
+      'imageUrl': imageUrl,
+      'isAvailable': isAvailable,
+    };
+  }
 }

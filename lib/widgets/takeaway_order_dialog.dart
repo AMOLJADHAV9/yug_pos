@@ -29,6 +29,8 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
   final Debouncer _debouncer = Debouncer(milliseconds: 1000);
 
   // Removed _phoneController
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _deliveryBoyController = TextEditingController();
   String _paymentMethod = 'Cash';
@@ -37,6 +39,8 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
   void dispose() {
     _searchController.dispose();
 
+    _nameController.dispose();
+    _phoneController.dispose();
     _addressController.dispose();
     _deliveryBoyController.dispose();
     _debouncer.dispose();
@@ -147,20 +151,41 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                 ],
               ),
               const SizedBox(height: 8),
-              TextField(
-                controller: _addressController,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: _inputDecoration(widget.orderType == 'delivery' ? "Delivery Address *" : "Delivery Address (Optional for Pickup)"),
-              ),
-              if (widget.orderType == 'delivery') ...[
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _deliveryBoyController,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: _inputDecoration("Delivery Boy / Rider (Optional)"),
-                ),
-              ],
-              const SizedBox(height: 8),
+               Row(
+                 children: [
+                   Expanded(
+                     child: TextField(
+                       controller: _nameController,
+                       style: const TextStyle(color: Colors.white, fontSize: 13),
+                       decoration: _inputDecoration("Customer Name"),
+                     ),
+                   ),
+                   const SizedBox(width: 8),
+                   Expanded(
+                     child: TextField(
+                       controller: _phoneController,
+                       keyboardType: TextInputType.phone,
+                       style: const TextStyle(color: Colors.white, fontSize: 13),
+                       decoration: _inputDecoration("Contact Number"),
+                     ),
+                   ),
+                 ],
+               ),
+               const SizedBox(height: 8),
+               TextField(
+                 controller: _addressController,
+                 style: const TextStyle(color: Colors.white, fontSize: 13),
+                 decoration: _inputDecoration(widget.orderType == 'delivery' ? "Delivery Address *" : "Delivery Address (Optional)"),
+               ),
+               if (widget.orderType == 'delivery') ...[
+                 const SizedBox(height: 8),
+                 TextField(
+                   controller: _deliveryBoyController,
+                   style: const TextStyle(color: Colors.white, fontSize: 13),
+                   decoration: _inputDecoration("Delivery Boy / Rider (Optional)"),
+                 ),
+               ],
+               const SizedBox(height: 8),
               _buildPaymentMethodSelector(),
             ],
           ),
@@ -528,6 +553,8 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
     
     final address = _addressController.text.trim();
     final deliveryBoy = _deliveryBoyController.text.trim();
+    final cName = _nameController.text.trim();
+    final cPhone = _phoneController.text.trim();
 
     // Validation for Delivery (Address only now)
     if (widget.orderType == 'delivery' && address.isEmpty) {
@@ -537,7 +564,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
       return;
     }
 
-    final customerName = widget.orderType == 'delivery' ? "Delivery Customer" : "Takeaway";
+    final customerName = cName.isNotEmpty ? cName : (widget.orderType == 'delivery' ? "Delivery Customer" : "Takeaway");
     final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
 
     final firestore = FirebaseFirestore.instance;
@@ -549,6 +576,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
       'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
       'tableId': widget.orderType,
       'customerName': customerName,
+      'customerPhone': cPhone.isNotEmpty ? cPhone : null,
       'deliveryAddress': address,
       'deliveryBoy': deliveryBoy.isEmpty ? null : deliveryBoy,
       'deliveryStatus': widget.orderType == 'delivery' ? 'pending' : null,
@@ -612,7 +640,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
     // STEP 1: Settle Firestore while main thread is clean (no USB calls yet)
     await ReportService.settleOrder(docId: orderRef.id, paymentMode: paymentMode);
 
-    if (printerService.selectedDevice != null) {
+    if (printerService.hasSavedPrinter) {
       // STEP 2: Generate Bill bytes (pure Dart, safe)
       final billBytes = await ReportService.generateFinalBillBytes(
         data: kotData,

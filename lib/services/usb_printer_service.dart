@@ -14,12 +14,16 @@ class UsbPrinterService extends ChangeNotifier {
 
   String? _savedName;
   String? _savedAddress;
+  String? _savedVendorId;
+  String? _savedProductId;
 
   bool _isScanning = false;
   bool get isScanning => _isScanning;
 
   bool _isConnected = false;
   bool get isConnected => _isConnected;
+  
+  bool get hasSavedPrinter => _savedName != null || _savedVendorId != null;
 
   StreamSubscription? _scanSubscription;
   Timer? _heartbeatTimer;
@@ -41,6 +45,8 @@ class UsbPrinterService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _savedAddress = prefs.getString('usb_printer_address');
     _savedName = prefs.getString('usb_printer_name');
+    _savedVendorId = prefs.getString('usb_printer_vendor_id');
+    _savedProductId = prefs.getString('usb_printer_product_id');
     
     // Ensure we start disconnected in state
     _isConnected = false;
@@ -70,8 +76,9 @@ class UsbPrinterService extends ChangeNotifier {
       }
       
       // Auto-reconnect if we found our saved device and nothing is selected
-      if (_selectedDevice == null && _savedName != null && _savedAddress != null) {
-        if (event.name == _savedName || event.address == _savedAddress) {
+      if (_selectedDevice == null && (_savedName != null || _savedVendorId != null)) {
+        if (event.name == _savedName || event.address == _savedAddress || 
+            (event.vendorId == _savedVendorId && event.productId == _savedProductId)) {
            debugPrint("Automatically re-discovered printer: ${event.name}");
            await selectDevice(event);
         }
@@ -101,6 +108,13 @@ class UsbPrinterService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('usb_printer_address', device.address ?? '');
     await prefs.setString('usb_printer_name', device.name ?? '');
+    await prefs.setString('usb_printer_vendor_id', device.vendorId ?? '');
+    await prefs.setString('usb_printer_product_id', device.productId ?? '');
+    
+    _savedAddress = device.address;
+    _savedName = device.name;
+    _savedVendorId = device.vendorId;
+    _savedProductId = device.productId;
     
     // Explicitly connect when selected
     try {
@@ -138,13 +152,14 @@ class UsbPrinterService extends ChangeNotifier {
 
   Future<bool> printRawBytes(List<int> bytes, {bool isRetry = false}) async {
     // 1. Discovery recovery
-    if (_selectedDevice == null && _savedName != null) {
+    if (_selectedDevice == null && (_savedName != null || _savedVendorId != null)) {
       debugPrint("No active printer object. Re-scanning...");
       scan(silent: true);
       await Future.delayed(const Duration(seconds: 2));
       
       for (final p in _devices) {
-        if (p.name == _savedName || p.address == _savedAddress) {
+        if (p.name == _savedName || p.address == _savedAddress || 
+            (p.vendorId == _savedVendorId && p.productId == _savedProductId)) {
           _selectedDevice = p;
           break;
         }

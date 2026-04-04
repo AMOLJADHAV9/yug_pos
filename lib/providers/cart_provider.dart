@@ -22,8 +22,12 @@ class CartProvider extends ChangeNotifier {
   String? _tableId;
   String? _tableName;
   String? _customerName;
+  String? _customerContact;
+  String? _deliveryAddress;
   String? _waiterName;
   OrderType _orderType = OrderType.dineIn;
+  String? _activeOrderId;
+  int? _activeTokenNo;
 
   List<CartItem> get items => _items;
   double get totalAmount => _items.fold(0, (sum, item) => sum + item.totalPrice);
@@ -31,8 +35,12 @@ class CartProvider extends ChangeNotifier {
   String? get tableId => _tableId;
   String? get tableName => _tableName;
   String? get customerName => _customerName;
+  String? get customerContact => _customerContact;
+  String? get deliveryAddress => _deliveryAddress;
   String? get waiterName => _waiterName;
   OrderType get orderType => _orderType;
+  String? get activeOrderId => _activeOrderId;
+  int? get activeTokenNo => _activeTokenNo;
 
   void setOrderType(OrderType type) {
     if (_orderType != type) {
@@ -47,18 +55,43 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setCustomerContact(String? contact) {
+    _customerContact = contact;
+    notifyListeners();
+  }
+
+  void setDeliveryAddress(String? address) {
+    _deliveryAddress = address;
+    notifyListeners();
+  }
+
   void setWaiterInfo(String name) {
     _waiterName = name;
     notifyListeners();
   }
 
   void setTable(String tableId, String tableName) {
-    if (_tableId != tableId) {
-      _tableId = tableId;
+    _tableId = tableId;
+    _tableName = tableName;
+    _items.clear();
+    _activeOrderId = null; // New table session
+    _activeTokenNo = null;
+    _customerName = "Walk-in";
+    notifyListeners();
+  }
+
+  void setActiveOrder(String id, {int? token, OrderType? type, String? tableName, String? tableId}) {
+    _activeOrderId = id;
+    _activeTokenNo = token;
+    if (type != null) _orderType = type;
+    if (tableName != null) {
       _tableName = tableName;
-      _items.clear();
-      notifyListeners();
     }
+    if (tableId != null) {
+      _tableId = tableId;
+    }
+    _items.clear(); // Clear cart for new items to add
+    notifyListeners();
   }
 
   void addItem(MenuItem item, {int quantity = 1, String instructions = ''}) {
@@ -90,9 +123,14 @@ class CartProvider extends ChangeNotifier {
   void clearCart() {
     _items.clear();
     _tableId = null;
+    _tableName = null;
     _customerName = null;
     _waiterName = null;
-    _orderType = OrderType.dineIn;
+    _customerName = "Walk-in";
+    _customerContact = null;
+    _deliveryAddress = null;
+    _activeOrderId = null;
+    _activeTokenNo = null;
     notifyListeners();
   }
 }

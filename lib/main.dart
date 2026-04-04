@@ -13,6 +13,7 @@ import 'screens/home/tables_screen.dart';
 import 'providers/cart_provider.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/cashier/cashier_dashboard.dart';
+import 'screens/cashier/cashier_dashboard_v2.dart';
 import 'screens/auth/unauthorized_screen.dart';
 import 'services/usb_printer_service.dart';
 import 'utils/navigator_utils.dart';
@@ -115,7 +116,7 @@ class WaiterPosApp extends StatelessWidget {
             bodyMedium: GoogleFonts.inter(color: Colors.white70),
           ),
         ),
-        home: const AuthWrapper(),
+        home: const AuthWrapper(key: ValueKey('auth_root')),
       ),
     );
   }
@@ -152,10 +153,8 @@ class AuthWrapper extends StatelessWidget {
         if (auth.isUnlocked) {
           if (auth.role == UserRole.admin) {
             return const AdminDashboard();
-          } else if (auth.role == UserRole.cashier) {
-            return const CashierDashboard();
-          } else if (auth.role == UserRole.waiter) {
-            return const TablesScreen();
+          } else if (auth.role == UserRole.cashier || auth.role == UserRole.waiter) {
+            return const CashierDashboardV2();
           }
           return const UnauthorizedScreen();
         }

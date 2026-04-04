@@ -14,7 +14,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _resNameCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController(); // Added address
+  final _gstCtrl = TextEditingController(); // Added GST Controller
   bool _loading = false;
+  bool _obscurePassword = true; // Added for password visibility toggle
   
   void _register() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty || _nameCtrl.text.isEmpty || _resNameCtrl.text.isEmpty) return;
@@ -25,6 +28,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       password: _passCtrl.text.trim(),
       name: _nameCtrl.text.trim(),
       restaurantName: _resNameCtrl.text.trim(),
+      address: _addressCtrl.text.trim(), // Pass Address
+      gstNumber: _gstCtrl.text.trim(), // Pass GST Number
       role: 'admin',
     );
     
@@ -111,6 +116,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 16),
                   TextField(
+                    controller: _addressCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Restaurant Address',
+                      labelStyle: const TextStyle(color: Colors.white60),
+                      prefixIcon: const Icon(Icons.location_on_outlined, color: Colors.white38),
+                      filled: true,
+                      fillColor: const Color(0xFF141615),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
                     controller: _emailCtrl,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
@@ -126,18 +145,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 16),
                   TextField(
+                    controller: _gstCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'GST Number (Optional)',
+                      labelStyle: const TextStyle(color: Colors.white60),
+                      prefixIcon: const Icon(Icons.receipt_long_outlined, color: Colors.white38),
+                      filled: true,
+                      fillColor: const Color(0xFF141615),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
                     controller: _passCtrl,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       labelText: 'Password',
                       labelStyle: const TextStyle(color: Colors.white60),
                       prefixIcon: const Icon(Icons.lock_outline, color: Colors.white38),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                          color: Colors.white38,
+                        ),
+                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
                       filled: true,
                       fillColor: const Color(0xFF141615),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
                     ),
-                    obscureText: true,
+                    obscureText: _obscurePassword,
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton(

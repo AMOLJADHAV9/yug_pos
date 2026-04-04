@@ -97,6 +97,7 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
   Widget build(BuildContext context) {
     final auth = context.read<AuthService>();
     final restaurantId = auth.restaurantId;
+    final isWaiter = auth.role == UserRole.waiter;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0B0A),
@@ -105,11 +106,12 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
         elevation: 0,
         title: const Text("RECENT BILLS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf, color: Colors.blueAccent),
-            onPressed: () => _downloadHistoryPdf(restaurantId),
-            tooltip: "Download PDF History",
-          ),
+          if (!isWaiter)
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf, color: Colors.blueAccent),
+              onPressed: () => _downloadHistoryPdf(restaurantId),
+              tooltip: "Download PDF History",
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(() {}),
@@ -118,7 +120,7 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
       ),
       body: Column(
         children: [
-          _buildHeader(restaurantId),
+          if (!isWaiter) _buildHeader(restaurantId),
           _buildSearchField(),
           Expanded(child: _buildBillsList()),
         ],

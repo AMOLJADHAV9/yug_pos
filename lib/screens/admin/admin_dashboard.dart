@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/debouncer.dart';
+import '../../widgets/pos_view_content.dart';
 import 'tabs/revenue_tab.dart';
 import 'tabs/users_tab.dart';
 import 'tabs/menu_tab.dart';
@@ -12,8 +13,8 @@ import 'tabs/tables_tab.dart';
 import 'tabs/orders_tab.dart';
 import 'tabs/analytics_tab.dart';
 import 'tabs/takeaway_tab.dart';
+import 'tabs/settings_tab.dart';
 import '../order/online_orders_screen.dart';
-import '../home/tables_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -215,17 +216,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  late final List<Widget> _tabs = [
-    RevenueTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-    const TablesScreen(isTab: true),
-    const AnalyticsTab(),
-    const UsersTab(),
-    const MenuTab(),
-    TablesTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-    OrdersTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-    const TakeawayTab(),
-    const OnlineOrdersScreen(isTab: true),
-  ];
 
   static const _navData = [
     {'icon': Icons.dashboard, 'label': 'Dashboard'},
@@ -237,10 +227,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
     {'icon': Icons.receipt_long, 'label': 'Orders'},
     {'icon': Icons.shopping_bag, 'label': 'Takeaway'},
     {'icon': Icons.cloud_download, 'label': 'Online'},
+    {'icon': Icons.settings, 'label': 'Settings'},
   ];
 
   // Specific indices for the Bottom Navbar
-  static const List<int> _bottomBarIndices = [0, 1, 3, 4, 6];
+  static const List<int> _bottomBarIndices = [0, 1, 3, 4, 6, 9];
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +318,21 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ],
               ),
             ),
-            body: IndexedStack(index: _selectedIndex, children: _tabs),
+            body: IndexedStack(
+              index: _selectedIndex,
+              children: [
+                RevenueTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+                POSViewContent(isAdminTab: true),
+                const AnalyticsTab(),
+                const UsersTab(),
+                const MenuTab(),
+                TablesTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+                OrdersTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+                const TakeawayTab(),
+                const OnlineOrdersScreen(isTab: true),
+                const SettingsTab(),
+              ],
+            ),
             bottomNavigationBar: BottomNavigationBar(
               currentIndex: _bottomBarIndices.contains(_selectedIndex) 
                 ? _bottomBarIndices.indexOf(_selectedIndex) 
@@ -524,7 +529,21 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Expanded(
                 child: Container(
                   color: const Color(0xFF141615),
-                  child: IndexedStack(index: _selectedIndex, children: _tabs),
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: [
+                      RevenueTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+                      POSViewContent(isAdminTab: true),
+                      const AnalyticsTab(),
+                      const UsersTab(),
+                      const MenuTab(),
+                      TablesTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+                      OrdersTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
+                      const TakeawayTab(),
+                      const OnlineOrdersScreen(isTab: true),
+                      const SettingsTab(),
+                    ],
+                  ),
                 ),
               ),
             ],

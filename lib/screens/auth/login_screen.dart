@@ -15,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _loading = false;
+  bool _obscurePassword = true; // Added for password visibility toggle
   String _pinInput = '';
 
   // Theme Colors
@@ -273,13 +274,20 @@ class _LoginScreenState extends State<LoginScreen> {
             labelText: 'Password',
             labelStyle: GoogleFonts.inter(color: Colors.white60),
             prefixIcon: const Icon(Icons.lock_outline, color: Colors.white38),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                color: Colors.white38,
+              ),
+              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            ),
             filled: true, 
             fillColor: const Color(0xFF141615),
             contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: _primaryYellow, width: 1.5)),
           ),
-          obscureText: true,
+          obscureText: _obscurePassword,
         ),
         const SizedBox(height: 32),
         SizedBox(

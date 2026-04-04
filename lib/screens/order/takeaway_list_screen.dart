@@ -493,7 +493,7 @@ class _TakeawayListScreenState extends State<TakeawayListScreen> with SingleTick
         final printerService = context.read<UsbPrinterService>();
         final hotelName = context.read<AuthService>().restaurantName ?? "YUG POS";
 
-        if (printerService.selectedDevice != null) {
+        if (printerService.hasSavedPrinter) {
           final billBytes = await ReportService.generateFinalBillBytes(
             data: printData,
             total: finalTotal!,

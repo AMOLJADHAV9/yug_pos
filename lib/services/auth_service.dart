@@ -103,6 +103,8 @@ class AuthService extends ChangeNotifier {
     required String password, 
     required String name, 
     required String restaurantName,
+    String? address, 
+    String? gstNumber,
     String role = 'admin',
   }) async {
     try {
@@ -111,6 +113,8 @@ class AuthService extends ChangeNotifier {
       // Create Restaurant
       final restaurantDoc = await _firestore.collection('restaurants').add({
         'name': restaurantName,
+        'address': address,
+        'gstNumber': gstNumber,
         'createdAt': FieldValue.serverTimestamp(),
         'adminUid': credential.user!.uid,
       });

@@ -24,6 +24,12 @@ class _OrdersTabState extends State<OrdersTab> {
   DateTime filterDate = DateTime.now();
   String? filterStatus;
 
+  DateTime _getDateTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return DateTime.now();
+  }
+
   @override
   Widget build(BuildContext context) {
     final restaurantId = context.watch<AuthService>().restaurantId;
@@ -208,7 +214,13 @@ class _OrdersTabState extends State<OrdersTab> {
                               ),
                               const SizedBox(height: 2),
                               Text("${isTakeaway ? 'Takeaway' : (data['tableName'] ?? 'Table')} • ${data['customerName'] ?? 'Walk-in'}", style: const TextStyle(fontSize: 12, color: Colors.white54), overflow: TextOverflow.ellipsis),
-                              Text(DateFormat('hh:mm a').format(date), style: const TextStyle(fontSize: 11, color: Colors.white38)),
+                              Row(
+                                children: [
+                                  Text("S: ${DateFormat('HH:mm').format(date)} ", style: const TextStyle(fontSize: 11, color: Colors.white38)),
+                                  if (data['billedAt'] != null)
+                                    Text("| E: ${DateFormat('HH:mm').format(_getDateTime(data['billedAt']))}", style: TextStyle(fontSize: 11, color: const Color(0xFFFCDD22).withOpacity(0.5))),
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -273,7 +285,7 @@ class _OrdersTabState extends State<OrdersTab> {
                                  // Using Future.microtask gives Flutter's event loop a clean
                                  // boundary so the USB plugin's background thread callbacks
                                  // cannot interfere with Firebase platform channels.
-                                 if (printerService.selectedDevice != null) {
+                                 if (printerService.hasSavedPrinter) {
                                    Future.microtask(() async {
                                      try {
                                        await printerService.printRawBytes(bytes);
@@ -415,6 +427,22 @@ class _OrdersTabState extends State<OrdersTab> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  const Text("Order Started", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  Text(DateFormat('hh:mm a').format(_getDateTime(data['createdAt'])), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              if (data['billedAt'] != null)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Order Settled", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    Text(DateFormat('hh:mm a').format(_getDateTime(data['billedAt'])), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
                   const Text("Payment Method", style: TextStyle(color: Colors.grey)),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -437,7 +465,7 @@ class _OrdersTabState extends State<OrdersTab> {
                 child: OutlinedButton.icon(
                   onPressed: () async {
                     final printerService = context.read<UsbPrinterService>();
-                    if (printerService.selectedDevice != null) {
+                    if (printerService.hasSavedPrinter) {
                       final bytes = await ReportService.generateFinalBillBytes(
                         data: data, 
                         total: (data['totalAmount'] ?? 0).toDouble(), 

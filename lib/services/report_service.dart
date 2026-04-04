@@ -58,7 +58,6 @@ class ReportService {
     }
   }
 
-
   static DateTime _getDateTime(dynamic value) {
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
@@ -70,6 +69,30 @@ class ReportService {
     if (value is String) return double.tryParse(value) ?? 0.0;
     return 0.0;
   }
+
+  static List<Map<String, dynamic>> _groupItems(List<dynamic> rawItems) {
+    final Map<String, Map<String, dynamic>> grouped = {};
+    for (var raw in rawItems) {
+      final item = Map<String, dynamic>.from(raw as Map);
+      final itemName = item['name']?.toString() ?? 'Unknown';
+      final itemPrice = _getDouble(item['price']);
+      final itemQty = (item['quantity'] as num?)?.toInt() ?? 1;
+      
+      final key = "$itemName-$itemPrice";
+      if (grouped.containsKey(key)) {
+        grouped[key]!['quantity'] += itemQty;
+      } else {
+        grouped[key] = {
+          'name': itemName,
+          'price': itemPrice,
+          'quantity': itemQty,
+          'category': item['category'],
+        };
+      }
+    }
+    return grouped.values.toList();
+  }
+
   // ── Standard thermal widths in PDF points (72 points per inch) ───────────
   static const double _width58mm = 155.91; // approx 155.91 pts
   static const double _width75mm = 212.77; // approx 212.77 pts
@@ -99,24 +122,21 @@ class ReportService {
     );
   }
 
-  // Light dashed separator
+  // ── Professional Separators (Vector Lines instead of Text Dots) ──────────
   static pw.Widget _dash() => pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(vertical: 2),
-        child: pw.Text(
-          '- ' * 48,
-          style: pw.TextStyle(fontSize: 6, letterSpacing: 0),
-          textAlign: pw.TextAlign.center,
+        padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
+        child: pw.Divider(
+          color: PdfColors.grey800,
+          thickness: 0.5,
+          borderStyle: pw.BorderStyle.dashed,
         ),
       );
 
-  // Heavy "=" separator
   static pw.Widget _thickDash() => pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(vertical: 2),
-        child: pw.Text(
-          '= ' * 28
-          ,
-          style: pw.TextStyle(fontSize: 7, letterSpacing: 0),
-          textAlign: pw.TextAlign.center,
+        padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
+        child: pw.Divider(
+          color: PdfColors.black,
+          thickness: 1.0,
         ),
       );
 
@@ -288,7 +308,7 @@ class ReportService {
     final netCol = (data['netCollection'] as num?)?.toDouble() ?? 0.0;
     final upiCol = (data['upiCollection'] as num?)?.toDouble() ?? 0.0;
     final cashCol = (data['cashCollection'] as num?)?.toDouble() ?? 0.0;
-    final dineInCol = (data['dineInCollection'] as num?)?.toDouble() ?? 0.0;
+    final dineInCol = (data['tableCollection'] as num?)?.toDouble() ?? 0.0;
     final takeawayCol = (data['takeawayCollection'] as num?)?.toDouble() ?? 0.0;
     final onlineCol = (data['onlineCollection'] as num?)?.toDouble() ?? 0.0;
     final bCount = (data['billCount'] as num?)?.toInt() ?? 0;
@@ -342,7 +362,7 @@ class ReportService {
     );
   }
 
-  // ── KOT RECEIPT ─────────────────────────────────────────────────────────
+  // ── KOT RECEIPT (Professional Layout) ─────────────────────────────────────
   static Future<void> printKOTReceipt(
       Map<String, dynamic> data, String orderId) async {
     final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -365,37 +385,53 @@ class ReportService {
             pageFormat: _getThermalFormat(format.width),
             theme: theme,
             build: (pw.Context context) => _receiptWrapper(format.width, [
+              // ── Header ──
               pw.Center(
-                child: pw.Text("KOT", style: pw.TextStyle(fontSize: 11)),
+                child: pw.Text("KOT", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
               ),
-              _thickDash(),
+              pw.SizedBox(height: 4),
               pw.Center(
                 child: pw.Text(_formatOrderTypeDisplay(data),
-                    style: pw.TextStyle(fontSize: 14)),
+                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               ),
+              pw.SizedBox(height: 6),
+              
+              // ── Meta Info ──
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Token: ${data['kotNumber'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text("Time: ${DateFormat('hh:mm a').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 10)),
+                ]
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text("Waiter: ${data['waiterName'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 10)),
               _thickDash(),
-              // ── Column headers ──────────────────────────────────
+
+              // ── Column headers ──
               pw.Row(children: [
-                pw.Expanded(child: pw.Text("ITEM", style: pw.TextStyle(fontSize: 8))),
-                pw.SizedBox(width: 30, child: pw.Text("QTY", style: pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                pw.SizedBox(width: 40, child: pw.Text("RATE", style: pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 3, child: pw.Text("ITEM", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+                pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
               ]),
-              _thickDash(),
-              // ── Items ───────────────────────────────────────────
+              _dash(),
+
+              // ── Items ──
               ...items.map((rawItem) {
                 final item = Map<String, dynamic>.from(rawItem as Map);
                 final itemName = (item['name']?.toString() ?? '').toUpperCase();
                 final itemQty = (item['quantity'] as num?)?.toInt() ?? 1;
+                
                 return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                  child: pw.Row(children: [
-                    pw.Expanded(child: pw.Text(itemName, style: const pw.TextStyle(fontSize: 8))),
-                    pw.SizedBox(width: 30, child: pw.Text("$itemQty", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                    pw.SizedBox(width: 40, child: pw.Text("-", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                    pw.Expanded(flex: 3, child: pw.Text(itemName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
+                    pw.Expanded(flex: 1, child: pw.Text("$itemQty", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
                   ]),
                 );
               }),
-              _dash(),
+              _thickDash(),
               pw.SizedBox(height: 10),
             ]),
           ),
@@ -408,7 +444,7 @@ class ReportService {
   // ── ORDER RECEIPT (waiter copy) ──────────────────────────────────────────
   static Future<void> printOrderReceipt(
       Map<String, dynamic> data, String orderId, {String restaurantName = "YUG POS"}) async {
-    final items = data['items'] as List;
+    final items = _groupItems(data['items'] as List? ?? []);
     final date = _getDateTime(data['createdAt']);
 
     final roboto = await PdfGoogleFonts.robotoRegular();
@@ -438,7 +474,7 @@ class ReportService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text("Order: ${orderId.substring(0, 8)}", style: const pw.TextStyle(fontSize: 7)),
-                  pw.Text(DateFormat('dd/MM/yy hh:mm a').format(date), style: const pw.TextStyle(fontSize: 7)),
+                  pw.Text("Start: ${DateFormat('dd/MM HH:mm').format(date)}", style: const pw.TextStyle(fontSize: 7)),
                 ],
               ),
               pw.Text(_formatOrderTypeDisplay(data, includeTablePrefix: true), 
@@ -446,9 +482,9 @@ class ReportService {
               pw.Text("Waiter: ${data['waiterName']}", style: const pw.TextStyle(fontSize: 8)),
               _dash(),
               pw.Row(children: [
-                pw.Expanded(child: pw.Text("Item", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.SizedBox(width: 30, child: pw.Text("Qty", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
-                pw.SizedBox(width: 40, child: pw.Text("Amt", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 3, child: pw.Text("Item", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.Expanded(flex: 1, child: pw.Text("Qty", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 2, child: pw.Text("Amt", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
               ]),
               _dash(),
               ...items.map((item) {
@@ -457,11 +493,11 @@ class ReportService {
                 return pw.Padding(
                     padding: const pw.EdgeInsets.symmetric(vertical: 2),
                     child: pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Expanded(child: pw.Text("${item['name']}", style: const pw.TextStyle(fontSize: 8))),
-                        pw.SizedBox(width: 30, child: pw.Text("$qty", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                        pw.SizedBox(width: 40, child: pw.Text("₹${(price * qty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                        pw.Expanded(flex: 3, child: pw.Text("${item['name']}", style: const pw.TextStyle(fontSize: 8))),
+                        pw.Expanded(flex: 1, child: pw.Text("$qty", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                        pw.Expanded(flex: 2, child: pw.Text("₹${(price * qty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
                       ],
                     ),
                   );
@@ -486,21 +522,24 @@ class ReportService {
     );
   }
 
-  // ── FINAL BILL ───────────────────────────────────────────────────────────
+  // ── FINAL BILL (Professional Layout) ───────────────────────────────────────
   static Future<void> printFinalBill({
     required Map<String, dynamic> orderData,
     required String orderId,
     required double subtotal,
-    required double cgst,
-    required double sgst,
+    double serviceCharge = 0,
+    double discount = 0,
+    double? cgst,
+    double? sgst,
     required double total,
     required String paymentMode,
     String hotelName = "YUG POS",
     String address = "Market Road, City",
   }) async {
-    final items = (orderData['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final date = DateTime.now();
-    final dateStr = DateFormat('dd-MM-yyyy  hh:mm a').format(date);
+    final items = _groupItems(orderData['items'] as List? ?? []);
+    final date = _getDateTime(orderData['billedAt']);
+    final dateStr = DateFormat('dd-MM-yyyy').format(date);
+    final timeStr = DateFormat('hh:mm a').format(date);
 
     final roboto = await PdfGoogleFonts.robotoRegular();
     final robotoBold = await PdfGoogleFonts.robotoBold();
@@ -522,76 +561,111 @@ class ReportService {
             pageFormat: _getThermalFormat(format.width),
             theme: theme,
             build: (pw.Context context) => _receiptWrapper(format.width, [
-              // ── Header ─────────────────────────────────────────
+              
+              // ── Header ──
               pw.Center(child: pw.Image(logo, width: 45, height: 45)),
-              pw.SizedBox(height: 4),
-              pw.Center(child: pw.Text(actualHotelName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
-              pw.Center(child: pw.Text(actualAddress, style: const pw.TextStyle(fontSize: 7))),
+              pw.SizedBox(height: 6),
+              pw.Center(child: pw.Text(actualHotelName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14))),
+              pw.Center(child: pw.Text(actualAddress, style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.center)),
+              pw.SizedBox(height: 8),
+              
+              pw.Center(child: pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+              )),
+              pw.SizedBox(height: 8),
+              
+              // ── Meta Data Grid ──
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Bill No: $receiptNum", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 9)),
+                ]
+              ),
+              pw.SizedBox(height: 2),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(_formatOrderTypeDisplay(orderData, isFinalBill: true), style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text("Time: $timeStr", style: const pw.TextStyle(fontSize: 9)),
+                ]
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text("Waiter: ${orderData['waiterName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 9)),
+              
               _thickDash(),
-              pw.Center(child: pw.Text("INVOICE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-              _dash(),
-              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                pw.Text("Bill #: $receiptNum", style: const pw.TextStyle(fontSize: 8)),
-                pw.Text(_formatOrderTypeDisplay(orderData, isFinalBill: true), 
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-              ]),
-              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 7)),
-                pw.Text("Token: ${orderData['kotNumber'] ?? 'N/A'}", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-              ]),
-              if (orderData['orderType'] == 'takeaway' && orderData['deliveryAddress'] != null)
-                pw.Text("Address: ${orderData['deliveryAddress']}", style: const pw.TextStyle(fontSize: 7)),
-              pw.Text("Cashier: ${orderData['cashierName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 7)),
-              pw.Text("Waiter: ${orderData['waiterName'] ?? 'Waiter'}", style: const pw.TextStyle(fontSize: 7)),
-              _dash(),
 
-              // ── Column headers ──────────────────────────────────
+              // ── Column headers ──
               pw.Row(children: [
-                pw.Expanded(child: pw.Text("Item", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.SizedBox(width: 20, child: pw.Text("Qty", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
-                pw.SizedBox(width: 35, child: pw.Text("Rate", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
-                pw.SizedBox(width: 40, child: pw.Text("Amt", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 4, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 2, child: pw.Text("RATE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 2, child: pw.Text("AMT", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: pw.TextAlign.right)),
               ]),
               _dash(),
 
-              // ── Items ───────────────────────────────────────────                  
+              // ── Items ──                 
               ...items.map((rawItem) {
                 final item = Map<String, dynamic>.from(rawItem as Map);
                 final itemName = item['name']?.toString() ?? '';
                 final itemQty = (item['quantity'] as num?)?.toInt() ?? 1;
                 final itemPrice = (item['price'] as num?)?.toDouble() ?? 0.0;
+                
                 return pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
-                      child: pw.Row(children: [
-                        pw.Expanded(child: pw.Text(itemName.toUpperCase(), style: const pw.TextStyle(fontSize: 8))),
-                        pw.SizedBox(width: 20, child: pw.Text("$itemQty", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                        pw.SizedBox(width: 35, child: pw.Text("$itemPrice", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
-                        pw.SizedBox(width: 40, child: pw.Text("₹${(itemPrice * itemQty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 3),
+                      child: pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                        pw.Expanded(flex: 4, child: pw.Text(itemName.toUpperCase(), style: const pw.TextStyle(fontSize: 9))),
+                        pw.Expanded(flex: 1, child: pw.Text("$itemQty", style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.center)),
+                        pw.Expanded(flex: 2, child: pw.Text(itemPrice.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.right)),
+                        pw.Expanded(flex: 2, child: pw.Text("${(itemPrice * itemQty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
                       ]),
                     );
               }),
               _dash(),
 
-              // ── Totals ──────────────────────────────────────────
-              _amountRow("Total Amount", "₹${subtotal.toStringAsFixed(2)}"),
+              // ── Totals ──
+              pw.SizedBox(height: 4),
+              _amountRow("SUBTOTAL", "₹${subtotal.toStringAsFixed(2)}"),
+              if (serviceCharge > 0) _amountRow("SERVICE CHARGE", "₹${serviceCharge.toStringAsFixed(2)}"),
+              if (discount > 0) _amountRow("DISCOUNT", "-₹${discount.toStringAsFixed(2)}"),
+              if (cgst != null && cgst > 0) _amountRow("CGST", "₹${cgst.toStringAsFixed(2)}"),
+              if (sgst != null && sgst > 0) _amountRow("SGST", "₹${sgst.toStringAsFixed(2)}"),
               _thickDash(),
-              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                pw.Text("GRAND TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
-                pw.Text("₹${total.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
-              ]),
+              
+              // ── Grand Total ──
+              pw.Container(
+                color: PdfColors.grey100,
+                padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text("GRAND TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                    pw.Text("₹${total.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                  ]
+                )
+              ),
               _thickDash(),
 
-              // ── Footer ──────────────────────────────────────────
-              pw.Center(
-                child: pw.Text("PAYMENT: ${paymentMode.toUpperCase()}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              // ── Footer ──
+              pw.SizedBox(height: 8),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("PAYMENT: ${paymentMode.toUpperCase()}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.Text("STATUS: PAID", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                ]
               ),
-              pw.Center(
-                child: pw.Text("STATUS: ${orderData['status'] == 'completed' ? 'PAID' : 'DRAFT / UNPAID'}", style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic)),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Center(child: pw.Text("Thank you! Visit Again", style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 8))),
-              pw.SizedBox(height: 5),
-              pw.Center(child: pw.Text(actualHotelName, style: const pw.TextStyle(fontSize: 6))),
+              pw.SizedBox(height: 16),
+              pw.Center(child: pw.Text("Thank you! Visit Again", style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 10))),
+              pw.SizedBox(height: 4),
+              pw.Center(child: pw.Text("Powered by YUG POS", style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600))),
               pw.SizedBox(height: 15),
             ]),
           ),
@@ -601,14 +675,14 @@ class ReportService {
     );
   }
 
-  // ── Helper: amount row ───────────────────────────────────────────────────
+  // ── Helper: amount row (Updated for better proportions) ──────────────────
   static pw.Widget _amountRow(String label, String value) => pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(vertical: 1),
+        padding: const pw.EdgeInsets.symmetric(vertical: 2),
         child: pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text(label, style: const pw.TextStyle(fontSize: 8)),
-            pw.Text(value, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+            pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
+            pw.Text(value, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
           ],
         ),
       );
@@ -775,14 +849,15 @@ class ReportService {
     );
   }
 
-  static pw.Widget _tableHeader(String text, {pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
-    padding: const pw.EdgeInsets.all(5),
-    child: pw.Text(text, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: align),
+  static pw.Widget _tableHeader(String text, {pw.TextAlign align = pw.TextAlign.left}) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+    child: pw.Text(text, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: align),
   );
 
   static pw.Widget _tableCell(String text, {pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
-    padding: const pw.EdgeInsets.all(5),
-    child: pw.Text(text, style: const pw.TextStyle(fontSize: 8), textAlign: align),
+    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    child: pw.Text(text, style: const pw.TextStyle(fontSize: 9), textAlign: align),
   );
 
   // ── ESC/POS GENERATORS (Thermal Printers) ──────────────────────────────
@@ -803,16 +878,20 @@ class ReportService {
     bytes += generator.text("KITCHEN TICKET", styles: const PosStyles(bold: true));
     bytes += generator.hr();
 
-    // Details: size 8 (Font B)
+    // Primary Identifiers: LARGE
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text("KOT : $kotNum", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    bytes += generator.text("TABLE : $tableName", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    bytes += generator.emptyLines(1);
+
+    // Secondary Details: Small
     bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
-    bytes += generator.text("KOT : $kotNum");
-    bytes += generator.text("Table : $tableName");
     bytes += generator.text("Waiter : $waiterName");
     bytes += generator.text("Time : $timeStr");
     bytes += generator.hr();
 
     // Column Headers
-    bytes += generator.text("QTY   ITEM", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+    bytes += generator.text("QTY   ITEM", styles: const PosStyles(bold: true, fontType: PosFontType.fontA));
     bytes += generator.hr();
 
     // Items
@@ -820,15 +899,15 @@ class ReportService {
     for (var item in items) {
       final qty = item['quantity'] ?? 1;
       final name = item['name'].toString().toUpperCase();
-      // Simple alignment: Qty followed by Name
-      bytes += generator.text("${qty.toString().padRight(5)} $name", styles: const PosStyles(fontType: PosFontType.fontB));
+      bytes += generator.text("${qty.toString().padRight(4)} x $name", styles: const PosStyles(bold: true, fontType: PosFontType.fontA));
     }
 
     bytes += generator.hr();
 
     // Note
     if (note.isNotEmpty) {
-      bytes += generator.text("Note : $note", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+      bytes += generator.emptyLines(1);
+      bytes += generator.text("Note : $note", styles: const PosStyles(bold: true, fontType: PosFontType.fontA));
       bytes += generator.hr();
     }
 
@@ -842,6 +921,8 @@ class ReportService {
     required double total,
     required String paymentMode,
     String hotelName = "YUG POS",
+    String address = "",
+    String gstNumber = "",
     PaperSize paperSize = PaperSize.mm58,
   }) async {
     final profile = await CapabilityProfile.load();
@@ -850,49 +931,129 @@ class ReportService {
 
     // Header: Title
     bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.text("INVOICE", styles: const PosStyles(bold: false));
-    bytes += generator.hr();
+    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: false, fontType: PosFontType.fontB));
+    if (address.isNotEmpty) {
+      bytes += generator.text(address);
+    }
+    if (gstNumber.isNotEmpty) {
+      bytes += generator.text("GSTIN: $gstNumber");
+    }
+    bytes += generator.hr(ch: '=');
+    bytes += generator.text("TAX INVOICE", styles: const PosStyles(bold: true, height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.hr(ch: '-');
 
-    // Details: size 8 (Font B)
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
-    bytes += generator.text("Table: ${_formatOrderTypeDisplay(data, isFinalBill: true)}");
+    // Bill Details (Center-Aligned blocks)
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB));
+    final receiptNum = data['receiptNumber'] ?? '';
+    final tableDisplay = _formatOrderTypeDisplay(data, isFinalBill: true);
+    
+    bytes += generator.text("BILL #: $receiptNum", styles: const PosStyles(bold: true));
+    bytes += generator.text(tableDisplay.toUpperCase(), styles: const PosStyles(bold: true));
     
     final billedAt = _getDateTime(data['billedAt']);
-    bytes += generator.text("Date: ${DateFormat('dd/MM/yy hh:mm a').format(billedAt)}");
-    bytes += generator.hr();
+    final createdAt = _getDateTime(data['createdAt']);
+    
+    final dateStr = DateFormat('dd-MM-yyyy  hh:mm a').format(billedAt);
+    final startStr = DateFormat('hh:mm a').format(createdAt);
+    final endStr = DateFormat('hh:mm a').format(billedAt);
+    
+    final token = data['kotNumber'] ?? 'N/A';
+    bytes += generator.text("DATE: $dateStr");
+    bytes += generator.text("START: $startStr   END: $endStr");
+    bytes += generator.text("TOKEN: $token", styles: const PosStyles(bold: true));
+    
+    bytes += generator.text("CASHIER: ${data['cashierName'] ?? 'STAFF'}");
+    bytes += generator.text("WAITER: ${data['waiterName'] ?? 'STAFF'}");
+    bytes += generator.hr(ch: '-');
 
-    // Column Headers
+    // Column Headers (6-1-2-3 Optimized for 58mm)
     bytes += generator.row([
-      PosColumn(text: "ITEM", width: 7, styles: const PosStyles(bold: true, fontType: PosFontType.fontB)),
-      PosColumn(text: "QTY", width: 2, styles: const PosStyles(bold: true, align: PosAlign.center, fontType: PosFontType.fontB)),
+      PosColumn(text: "ITEM", width: 6, styles: const PosStyles(bold: true, fontType: PosFontType.fontB)),
+      PosColumn(text: "QT", width: 1, styles: const PosStyles(bold: true, align: PosAlign.center, fontType: PosFontType.fontB)),
+      PosColumn(text: "RT", width: 2, styles: const PosStyles(bold: true, align: PosAlign.right, fontType: PosFontType.fontB)),
       PosColumn(text: "AMT", width: 3, styles: const PosStyles(bold: true, align: PosAlign.right, fontType: PosFontType.fontB)),
     ]);
-    bytes += generator.hr();
+    bytes += generator.hr(ch: '.');
 
-    // Items
-    final items = data['items'] as List;
+    // Items (6-1-2-3 Balanced widths)
+    final items = _groupItems(data['items'] as List? ?? []);
     for (var item in items) {
       final qty = item['quantity'] ?? 1;
       final price = (item['price'] ?? 0) as num;
       bytes += generator.row([
-        PosColumn(text: "${item['name']}".toUpperCase(), width: 7, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB)),
-        PosColumn(text: "$qty", width: 2, styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB)),
+        PosColumn(text: "${item['name']}".toUpperCase(), width: 6, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB)),
+        PosColumn(text: "$qty", width: 1, styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB)),
+        PosColumn(text: "${price.toStringAsFixed(0)}", width: 2, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
         PosColumn(text: "${(qty * price).toStringAsFixed(0)}", width: 3, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
       ]);
     }
 
-    bytes += generator.hr();
+    bytes += generator.hr(ch: '-');
 
-    // Grand Total
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.right, bold: true));
-    bytes += generator.text("TOTAL: INR ${total.toStringAsFixed(0)}", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    // Totals Grid (2 columns for alignment)
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    final sub = data['subtotal'] ?? total;
+    final sc = data['serviceCharge'] ?? 0;
+    final ds = data['discount'] ?? 0;
+
+    bytes += generator.row([
+      PosColumn(text: "SUBTOTAL:", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
+      PosColumn(text: "INR ${sub.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
+    ]);
+
+    if (sc > 0) {
+      bytes += generator.row([
+        PosColumn(text: "SERVICE CHRG:", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
+        PosColumn(text: "INR ${sc.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
+      ]);
+    }
+
+    if (ds > 0) {
+      bytes += generator.row([
+        PosColumn(text: "DISCOUNT:", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
+        PosColumn(text: "-INR ${ds.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
+      ]);
+    }
+    
+    // GST Breakdown
+    final cgst = data['cgst'] ?? 0;
+    final sgst = data['sgst'] ?? 0;
+    final gstP = data['gstPercentage'] ?? 0;
+    if (cgst > 0) {
+      bytes += generator.row([
+        PosColumn(text: "CGST (${(gstP/2).toStringAsFixed(1)}%):", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
+        PosColumn(text: "INR ${cgst.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
+      ]);
+      bytes += generator.row([
+        PosColumn(text: "SGST (${(gstP/2).toStringAsFixed(1)}%):", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
+        PosColumn(text: "INR ${sgst.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
+      ]);
+    }
+
+    bytes += generator.emptyLines(1);
     bytes += generator.hr(ch: '=');
 
+    // Grand Total (Centered & Large)
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text("GRAND TOTAL", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.text("INR ${total.toStringAsFixed(2)}", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    bytes += generator.hr(ch: '=');
+    bytes += generator.text("= " * 16);
+    bytes += generator.text("GRAND TOTAL: INR ${total.toStringAsFixed(0)}", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.text("= " * 16);
+
     // Footer
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center));
+    bytes += generator.feed(1);
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
     bytes += generator.text("PAYMENT: ${paymentMode.toUpperCase()}");
-    bytes += generator.text("Thank you! Visit Again", styles: const PosStyles(bold: true));
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB));
+    bytes += generator.text("STATUS: PAID");
+    
+    bytes += generator.feed(1);
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: false));
+    bytes += generator.text("Thank you! Visit Again");
+    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(bold: true));
     
     bytes += generator.feed(3);
     bytes += generator.cut();
@@ -1059,5 +1220,82 @@ class ReportService {
       debugPrint("Error settling order: $e");
       rethrow;
     }
+  }
+
+  static Future<List<int>> generateDailyCollectionBytes({
+    required Map<String, dynamic> data,
+    String hotelName = "YUG POS",
+    PaperSize paperSize = PaperSize.mm58,
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(paperSize, profile);
+    List<int> bytes = [];
+
+    final dateStr = DateFormat('dd-MM-yyyy').format(DateTime.now());
+    final netCol = (data['netCollection'] as num?)?.toDouble() ?? 0.0;
+    final upiCol = (data['upiCollection'] as num?)?.toDouble() ?? 0.0;
+    final cashCol = (data['cashCollection'] as num?)?.toDouble() ?? 0.0;
+    final dineInCol = (data['tableCollection'] as num?)?.toDouble() ?? 0.0;
+    final takeawayCol = (data['takeawayCollection'] as num?)?.toDouble() ?? 0.0;
+    final deliveryCol = (data['deliveryCollection'] as num?)?.toDouble() ?? 0.0;
+    final bCount = (data['billCount'] as num?)?.toInt() ?? 0;
+    final cCount = (data['cancelCount'] as num?)?.toInt() ?? 0;
+
+    // Header
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text("DAILY COLLECTION", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(bold: true));
+    bytes += generator.text("Date: $dateStr", styles: const PosStyles(bold: false, fontType: PosFontType.fontB));
+    bytes += generator.hr(ch: '=');
+
+    // Summary
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.row([
+      PosColumn(text: "Total Bills:", width: 8),
+      PosColumn(text: "$bCount", width: 4, styles: const PosStyles(align: PosAlign.right, bold: true)),
+    ]);
+    bytes += generator.row([
+      PosColumn(text: "Cancelled:", width: 8),
+      PosColumn(text: "$cCount", width: 4, styles: const PosStyles(align: PosAlign.right, bold: true)),
+    ]);
+    bytes += generator.hr();
+
+    // Payment Breakdown
+    bytes += generator.text("PAYMENT BREAKDOWN", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+    bytes += generator.row([
+      PosColumn(text: "Cash:", width: 8),
+      PosColumn(text: cashCol.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(text: "UPI:", width: 8),
+      PosColumn(text: upiCol.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.hr();
+
+    // Source Breakdown
+    bytes += generator.text("SOURCE BREAKDOWN", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+    bytes += generator.row([
+      PosColumn(text: "Dine-In:", width: 8),
+      PosColumn(text: dineInCol.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(text: "Takeaway:", width: 8),
+      PosColumn(text: takeawayCol.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(text: "Delivery:", width: 8),
+      PosColumn(text: deliveryCol.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    bytes += generator.hr();
+
+    // Net Totals
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.right, bold: true));
+    bytes += generator.text("NET REVENUE: INR ${netCol.toStringAsFixed(0)}", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.hr(ch: '=');
+
+    bytes += generator.feed(3);
+    bytes += generator.cut();
+
+    return bytes;
   }
 }

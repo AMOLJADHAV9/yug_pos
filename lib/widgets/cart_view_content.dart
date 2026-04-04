@@ -375,7 +375,7 @@ class _CartViewContentState extends State<CartViewContent> {
         }).toList(),
       };
       final printerService = context.read<UsbPrinterService>();
-      final hasUsbPrinter = printerService.selectedDevice != null;
+      final hasUsbPrinter = printerService.hasSavedPrinter;
 
       // Auto-Print KOT for Waiter (only if NOT printing the final bill/settling)
       if (!printBill) {

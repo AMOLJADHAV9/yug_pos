@@ -50,6 +50,32 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
+    final isWaiter = auth.role == UserRole.waiter;
+
+    if (isWaiter) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF141615),
+        appBar: AppBar(
+          title: const Text("ACCESS DENIED", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent)),
+          backgroundColor: const Color(0xFF141615),
+          elevation: 0,
+          centerTitle: true,
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_person, size: 64, color: Colors.white24),
+              SizedBox(height: 16),
+              Text("ACCESS RESTRICTED", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text("Only Admins and Cashiers can view revenue stats.", style: TextStyle(color: Colors.white38, fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
+
     final restaurantId = auth.restaurantId;
     final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final docId = "${restaurantId}_$todayStr";

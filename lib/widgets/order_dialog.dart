@@ -26,12 +26,9 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   final List<CartItem> _selectedItems = [];
   final Debouncer _debouncer = Debouncer(milliseconds: 1000);
 
-  // Removed _phoneController
-
   @override
   void dispose() {
     _searchController.dispose();
-
     _debouncer.dispose();
     super.dispose();
   }
@@ -63,7 +60,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: _buildSearchBar(),
         ),
-        _buildCategoryStrip(), // NEW: Horizontal categories for mobile
+        _buildCategoryStrip(), 
         Expanded(
           child: _buildMenuPane(),
         ),
@@ -75,8 +72,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   Widget _buildCategoryStrip() {
     final restaurantId = context.read<AuthService>().restaurantId;
     return Container(
-      height: 35, // Reduced from 45
-      margin: const EdgeInsets.only(bottom: 4), // Reduced margin
+      height: 35,
+      margin: const EdgeInsets.only(bottom: 4),
       child: FutureBuilder<QuerySnapshot>(
         future: FirebaseFirestore.instance.collection('menu_categories')
             .where('restaurantId', isEqualTo: restaurantId)
@@ -100,12 +97,12 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Text(name, style: TextStyle(
-                    fontSize: 10, // Reduced from 12
+                    fontSize: 10,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     color: isSelected ? const Color(0xFF141615) : Colors.white70
                   )),
-                  labelPadding: const EdgeInsets.symmetric(horizontal: 4), // Reduced padding
-                  visualDensity: VisualDensity.compact, // Compact chip
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  visualDensity: VisualDensity.compact,
                   selected: isSelected,
                   selectedColor: const Color(0xFFFCDD22),
                   backgroundColor: Colors.white.withOpacity(0.05),
@@ -146,11 +143,11 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                    Text("₹${total.toStringAsFixed(0)}", style: const TextStyle(color: const Color(0xFF141615), fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
-              Row(
+              const Row(
                 children: [
-                  const Text("VIEW CART", style: TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.arrow_right, color: const Color(0xFF141615)),
+                  Text("VIEW CART", style: TextStyle(color: Color(0xFF141615), fontWeight: FontWeight.bold)),
+                  SizedBox(width: 4),
+                  Icon(Icons.arrow_right, color: Color(0xFF141615)),
                 ],
               ),
             ],
@@ -197,7 +194,6 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   Widget _buildDesktopLayout() {
     return Row(
       children: [
-        // LEFT SIDE: MENU GRID
         Expanded(
           flex: 4,
           child: Padding(
@@ -214,9 +210,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
             ),
           ),
         ),
-        // RIGHT SIDE: CATEGORIES SIDEBAR (As per Reference Image)
         _buildCategorySidebar(),
-        // FAR RIGHT: CART (Toggleable or persistent)
         Container(
           width: 320,
           decoration: BoxDecoration(
@@ -232,7 +226,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   Widget _buildCategorySidebar() {
     final restaurantId = context.read<AuthService>().restaurantId;
     return Container(
-      width: 110, // Reduced from 140
+      width: 110,
       decoration: BoxDecoration(
         color: const Color(0xFF000000),
         border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
@@ -243,7 +237,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             width: double.infinity,
             color: Colors.white.withOpacity(0.05),
-            child: const Center(child: Text("Categories", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white54))), // Shortened label
+            child: const Center(child: Text("Categories", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white54))),
           ),
           Expanded(
             child: FutureBuilder<QuerySnapshot>(
@@ -278,8 +272,8 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
     return InkWell(
       onTap: () => setState(() => _selectedCategory = name),
       child: Container(
-        height: 70, // Reduced from 90
-        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), // Reduced margin
+        height: 70,
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFFCDD22) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
@@ -289,12 +283,12 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             AspectRatio(
-              aspectRatio: 1.8, // More compact
+              aspectRatio: 1.8,
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
                 child: imageUrl != null 
                   ? Image.network(imageUrl, fit: BoxFit.cover)
-                  : Icon(Icons.category, color: isSelected ? const Color(0xFF141615) : Colors.white24, size: 20), // Smaller icon
+                  : Icon(Icons.category, color: isSelected ? const Color(0xFF141615) : Colors.white24, size: 20),
               ),
             ),
             Expanded(
@@ -304,7 +298,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                   child: Text(
                     name, 
                     style: TextStyle(
-                      fontSize: 9, // Reduced from 10
+                      fontSize: 9, 
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       color: isSelected ? const Color(0xFF141615) : Colors.white70,
                     ),
@@ -361,7 +355,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   }
 
   Widget _buildSearchBar() {
-    return Container(
+    return SizedBox(
       height: 40,
       child: TextField(
         controller: _searchController,
@@ -376,6 +370,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
           filled: true, fillColor: const Color(0xFF141615),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
           contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
         ),
         onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
@@ -413,9 +408,9 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                       return GridView.builder(
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: cols,
-                          crossAxisSpacing: 4, // Reduced spacing
+                          crossAxisSpacing: 4,
                           mainAxisSpacing: 4,
-                          childAspectRatio: 0.72, // Slightly more vertical space for 2 lines
+                          childAspectRatio: 0.72,
                         ),
                         itemCount: filteredItems.length,
                         itemBuilder: (context, index) {
@@ -438,7 +433,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                   width: double.infinity,
                                   decoration: BoxDecoration(
                                     color: isSelected ? const Color(0xFFFCDD22).withOpacity(0.08) : const Color(0xFF141615),
-                                    borderRadius: BorderRadius.circular(8), // Smaller radius
+                                    borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: isSelected ? const Color(0xFFFCDD22) : Colors.white.withOpacity(0.05)),
                                     ),
                                     child: Column(
@@ -453,11 +448,11 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                           clipBehavior: Clip.antiAlias,
                                           child: item.imageUrl != null 
                                               ? Image.network(item.imageUrl!, fit: BoxFit.cover, width: double.infinity)
-                                              : const Center(child: Icon(Icons.fastfood, size: 20, color: Colors.white10)), // Smaller icon
+                                              : const Center(child: Icon(Icons.fastfood, size: 20, color: Colors.white10)),
                                         ),
                                       ),
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3), // Smaller padding
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
@@ -476,7 +471,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                       decoration: BoxDecoration(color: const Color(0xFFFCDD22), borderRadius: BorderRadius.circular(8)),
-                                      child: Text("$count", style: const TextStyle(color: const Color(0xFF141615), fontSize: 8, fontWeight: FontWeight.bold)),
+                                      child: Text("$count", style: const TextStyle(color: Color(0xFF141615), fontSize: 8, fontWeight: FontWeight.bold)),
                                     ),
                                   ),
                               ],
@@ -539,7 +534,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                               } else {
                                 _selectedItems.removeAt(index);
                                 if (_selectedItems.isEmpty) {
-                                  safePop(context);
+                                  // Don't pop on desktop, only on mobile if you want
                                 }
                               }
                               if (onChange != null) onChange(_selectedItems);
@@ -563,7 +558,6 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
               ),
         ),
 
-        // Total + Button
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -578,7 +572,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                 children: [
                   const Text("Total:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   Text(
-                    "₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(2)}",
+                    "₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(0)}",
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFFCDD22)),
                   ),
                 ],
@@ -602,95 +596,99 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   }
 
   void _submitOrder() async {
-     final auth = context.read<AuthService>();
-     final waiterDisplayName = auth.role == UserRole.admin ? "Admin (${auth.currentUser?.email?.split('@')[0] ?? 'Admin'})" : "Cashier";
-     final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
+    final auth = context.read<AuthService>();
+    final waiterDisplayName = auth.role == UserRole.admin 
+        ? "Admin (${auth.currentUser?.email?.split('@')[0] ?? 'Admin'})" 
+        : "Cashier";
+    final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
+    const customerName = "Walk-in";
 
-     const customerName = "Walk-in";
+    final firestore = FirebaseFirestore.instance;
+    final batch = firestore.batch();
+    final orderRef = firestore.collection('orders').doc();
+    
+    batch.set(orderRef, {
+      'tableId': widget.table.id,
+      'tableName': widget.table.name,
+      'waiterName': waiterDisplayName,
+      'customerName': customerName,
+      'status': 'open',
+      'restaurantId': auth.restaurantId,
+      'createdAt': FieldValue.serverTimestamp(),
+      'totalAmount': total,
+      'items': _selectedItems.map((i) => {
+        'id': i.item.id,
+        'name': i.item.name,
+        'price': i.item.price,
+        'quantity': i.quantity,
+        'category': i.item.category,
+      }).toList(),
+    });
 
-     final firestore = FirebaseFirestore.instance;
-     final batch = firestore.batch();
-     final orderRef = firestore.collection('orders').doc();
-     
-     batch.set(orderRef, {
-        'tableId': widget.table.id,
-        'tableName': widget.table.name,
-        'waiterName': waiterDisplayName,
-        'customerName': customerName,
-        'status': 'open',
+    final itemsRef = orderRef.collection('items');
+    for (var i in _selectedItems) {
+      batch.set(itemsRef.doc(), {
+        'menuItemId': i.item.id,
+        'name': i.item.name,
+        'price': i.item.price,
+        'quantity': i.quantity,
+        'totalPrice': i.item.price * i.quantity,
+        'category': i.item.category,
         'restaurantId': auth.restaurantId,
-        'createdAt': FieldValue.serverTimestamp(),
-        'totalAmount': total,
-        'items': _selectedItems.map((i) => {
-           'id': i.item.id,
-           'name': i.item.name,
-           'price': i.item.price,
-           'quantity': i.quantity,
-           'category': i.item.category,
-        }).toList(),
-     });
-
-     final itemsRef = orderRef.collection('items');
-     for (var i in _selectedItems) {
-        batch.set(itemsRef.doc(), {
-           'menuItemId': i.item.id,
-           'name': i.item.name,
-           'price': i.item.price,
-           'quantity': i.quantity,
-           'totalPrice': i.item.price * i.quantity,
-           'category': i.item.category,
-           'restaurantId': auth.restaurantId,
-           'status': 'Pending',
-           'createdAt': FieldValue.serverTimestamp(),
-        });
-     }
-
-     final kotRef = firestore.collection('kots').doc();
-     batch.set(kotRef, {
-        'orderId': orderRef.id,
-        'tableId': widget.table.id,
-        'tableName': widget.table.name,
-        'customerName': customerName,
         'status': 'Pending',
-        'restaurantId': auth.restaurantId,
         'createdAt': FieldValue.serverTimestamp(),
-        'waiterName': waiterDisplayName,
-        'items': _selectedItems.map((i) => {
-           'name': i.item.name,
-           'quantity': i.quantity,
-        }).toList(),
-     });
+      });
+    }
 
-     final tableRef = firestore.collection('tables').doc(widget.table.id);
-     batch.update(tableRef, {
-        'status': TableStatus.occupied.name,
-        'currentOrderId': orderRef.id,
-     });
+    final kotRef = firestore.collection('kots').doc();
+    batch.set(kotRef, {
+      'orderId': orderRef.id,
+      'tableId': widget.table.id,
+      'tableName': widget.table.name,
+      'customerName': customerName,
+      'status': 'Pending',
+      'restaurantId': auth.restaurantId,
+      'createdAt': FieldValue.serverTimestamp(),
+      'waiterName': waiterDisplayName,
+      'items': _selectedItems.map((i) => {
+        'name': i.item.name,
+        'quantity': i.quantity,
+      }).toList(),
+    });
 
-     await batch.commit();
+    final tableRef = firestore.collection('tables').doc(widget.table.id);
+    batch.update(tableRef, {
+      'status': TableStatus.occupied.name,
+      'currentOrderId': orderRef.id,
+    });
 
-     final kotData = {
-        'tableName': widget.table.name,
-        'customerName': customerName,
-        'waiterName': waiterDisplayName,
-        'items': _selectedItems.map((i) => {
-           'name': i.item.name,
-           'quantity': i.quantity,
-           'price': i.item.price,
-        }).toList(),
-     };
-     
-     final printerService = context.read<UsbPrinterService>();
-     if (printerService.selectedDevice != null) {
-       final bytes = await ReportService.generateKOTBytes(kotData);
-       await ReportService.printBytesIsolated(printerService, bytes);
-     } else {
-       await ReportService.printKOTReceipt(kotData, orderRef.id);
-     }
+    await batch.commit();
 
-     if (mounted) {
-       safePop(context);
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order placed successfully!"), backgroundColor: Colors.green));
-     }
+    final kotData = {
+      'tableName': widget.table.name,
+      'customerName': customerName,
+      'waiterName': waiterDisplayName,
+      'items': _selectedItems.map((i) => {
+        'name': i.item.name,
+        'quantity': i.quantity,
+        'price': i.item.price,
+      }).toList(),
+    };
+    
+    final printerService = context.read<UsbPrinterService>();
+    if (printerService.hasSavedPrinter) {
+      final bytes = await ReportService.generateKOTBytes(kotData);
+      await ReportService.printBytesIsolated(printerService, bytes);
+    } else {
+      await ReportService.printKOTReceipt(kotData, orderRef.id);
+    }
+
+    if (mounted) {
+      safePop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Order placed successfully!"), 
+        backgroundColor: Colors.green
+      ));
+    }
   }
 }
