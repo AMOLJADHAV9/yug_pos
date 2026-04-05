@@ -51,7 +51,7 @@ class CartProvider extends ChangeNotifier {
   }
 
   void setCustomerName(String? name) {
-    _customerName = (name == null || name.isEmpty) ? "Walk-in" : name;
+    _customerName = name;
     notifyListeners();
   }
 

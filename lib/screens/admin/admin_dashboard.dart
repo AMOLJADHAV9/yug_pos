@@ -224,14 +224,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
     {'icon': Icons.people, 'label': 'Staff'},
     {'icon': Icons.restaurant_menu, 'label': 'Menu'},
     {'icon': Icons.table_bar, 'label': 'Tables'},
-    {'icon': Icons.receipt_long, 'label': 'Orders'},
-    {'icon': Icons.shopping_bag, 'label': 'Takeaway'},
     {'icon': Icons.cloud_download, 'label': 'Online'},
     {'icon': Icons.settings, 'label': 'Settings'},
   ];
 
   // Specific indices for the Bottom Navbar
-  static const List<int> _bottomBarIndices = [0, 1, 3, 4, 6, 9];
+  static const List<int> _bottomBarIndices = [0, 1, 3, 4, 7];
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +250,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 const SizedBox(width: 8),
               ],
             ),
-            drawer: Drawer(
+            drawer: (isMobile && _selectedIndex == 1) ? null : Drawer(
               child: Column(
                 children: [
                    DrawerHeader(
@@ -322,31 +320,31 @@ class _AdminDashboardState extends State<AdminDashboard> {
               index: _selectedIndex,
               children: [
                 RevenueTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-                POSViewContent(isAdminTab: true),
+                POSViewContent(isAdminTab: true, onTabSelect: (index) => setState(() => _selectedIndex = index)),
                 const AnalyticsTab(),
                 const UsersTab(),
                 const MenuTab(),
                 TablesTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-                OrdersTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-                const TakeawayTab(),
                 const OnlineOrdersScreen(isTab: true),
                 const SettingsTab(),
               ],
             ),
-            bottomNavigationBar: BottomNavigationBar(
-              currentIndex: _bottomBarIndices.contains(_selectedIndex) 
-                ? _bottomBarIndices.indexOf(_selectedIndex) 
-                : 0,
-              onTap: (idx) => setState(() => _selectedIndex = _bottomBarIndices[idx]),
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: theme.colorScheme.primary,
-              unselectedItemColor: Colors.grey,
-              backgroundColor: const Color(0xFF141615),
-              items: _bottomBarIndices.map((i) => BottomNavigationBarItem(
-                icon: Icon(_navData[i]['icon'] as IconData), 
-                label: _navData[i]['label'] as String
-              )).toList(),
-            ),
+            bottomNavigationBar: (isMobile && _selectedIndex == 1) 
+              ? null 
+              : BottomNavigationBar(
+                  currentIndex: _bottomBarIndices.contains(_selectedIndex) 
+                    ? _bottomBarIndices.indexOf(_selectedIndex) 
+                    : 0,
+                  onTap: (idx) => setState(() => _selectedIndex = _bottomBarIndices[idx]),
+                  type: BottomNavigationBarType.fixed,
+                  selectedItemColor: theme.colorScheme.primary,
+                  unselectedItemColor: Colors.grey,
+                  backgroundColor: const Color(0xFF141615),
+                  items: _bottomBarIndices.map((i) => BottomNavigationBarItem(
+                    icon: Icon(_navData[i]['icon'] as IconData), 
+                    label: _navData[i]['label'] as String
+                  )).toList(),
+                ),
           );
         }
 
@@ -533,13 +531,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     index: _selectedIndex,
                     children: [
                       RevenueTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-                      POSViewContent(isAdminTab: true),
+                      POSViewContent(isAdminTab: true, onTabSelect: (index) => setState(() => _selectedIndex = index)),
                       const AnalyticsTab(),
                       const UsersTab(),
                       const MenuTab(),
                       TablesTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-                      OrdersTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
-                      const TakeawayTab(),
                       const OnlineOrdersScreen(isTab: true),
                       const SettingsTab(),
                     ],

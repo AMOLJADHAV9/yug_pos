@@ -13,7 +13,8 @@ import '../screens/cashier/v2_styles.dart';
 
 class POSViewContent extends StatefulWidget {
   final bool isAdminTab;
-  const POSViewContent({super.key, this.isAdminTab = false});
+  final Function(int)? onTabSelect;
+  const POSViewContent({super.key, this.isAdminTab = false, this.onTabSelect});
 
   @override
   State<POSViewContent> createState() => _POSViewContentState();
@@ -29,11 +30,15 @@ class _POSViewContentState extends State<POSViewContent> {
   // For History column filters
   String _hTab = 'all'; // all, table, takeaway, delivery
   String _hFilter = 'active'; // active, new, preparing, ready, done
+  DateTime _selectedHistoryDate = DateTime.now();
+  DateTime _selectedReportsDate = DateTime.now();
   double _gstPercentage = 0.0;
   String? _restaurantAddress;
   String? _restaurantName;
   String? _gstNumber;
   String? _lastRestaurantId;
+  int _mobileActiveIndex = 1; // 0: History, 1: Tables/Order, 2: Cart, 3: Reports, 4: Settings
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -81,32 +86,47 @@ class _POSViewContentState extends State<POSViewContent> {
     final auth = context.watch<AuthService>();
     final restaurantId = auth.restaurantId;
     final role = auth.role;
+    final isWaiter = role == UserRole.waiter;
     
     return Container(
       color: V2Colors.bg,
-      child: Column(
-        children: [
-          _buildTopBar(restaurantId, role),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth > 1200) {
-                  return Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isLarge = constraints.maxWidth > 1200;
+          
+          if (isLarge) {
+            return Column(
+              children: [
+                _buildTopBar(restaurantId, role),
+                Expanded(
+                  child: Row(
                     children: [
                       if (role != UserRole.waiter) _buildColumnHistory(restaurantId),
                       _buildColumnTables(restaurantId, role),
-                      _buildColumnMenu(restaurantId, role),
+                      Expanded(flex: isWaiter ? 2 : 3, child: _buildColumnMenu(restaurantId, role)),
                       _buildColumnCart(restaurantId, role),
                     ],
-                  );
-                } else {
-                  // Mobile/Tablet responsive layout (simplified with Tabs)
-                  return _buildResponsiveLayout(context, restaurantId, role);
-                }
-              },
-            ),
-          ),
-        ],
+                  ),
+                ),
+              ],
+            );
+          } else {
+            // Mobile/Tablet responsive layout
+            return Scaffold(
+              key: _scaffoldKey, // Add a key to safely control drawer
+              backgroundColor: V2Colors.bg,
+              drawer: _buildMobileDrawer(), // Added drawer
+              body: Column(
+                children: [
+                  _buildMobileHeader(restaurantId, role),
+                  _buildMobileStatsCards(restaurantId),
+                  Expanded(child: _buildMobileContentView(restaurantId, role)),
+                ],
+              ),
+              bottomNavigationBar: _buildMobileBottomNav(),
+            );
+          }
+        },
       ),
     );
   }
@@ -166,25 +186,6 @@ class _POSViewContentState extends State<POSViewContent> {
                         _buildTopPill("Del", "₹${del.toStringAsFixed(0)}"),
                         _buildTopPill("Can", "${canCount.toInt()}"),
                         const SizedBox(width: 8),
-                        InkWell(
-                          onTap: () => _printDailyReport(restaurantId),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: V2Colors.yellow.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: V2Colors.yellow.withOpacity(0.5)),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.assessment, size: 12, color: V2Colors.yellow),
-                                SizedBox(width: 4),
-                                Text("DAILY REPORT", style: TextStyle(color: V2Colors.yellow, fontSize: 10, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   );
@@ -379,18 +380,18 @@ class _POSViewContentState extends State<POSViewContent> {
   }
 
   // --- COL 1: TABLES ---
-  Widget _buildColumnTables(String? restaurantId, UserRole role) {
+  Widget _buildColumnTables(String? restaurantId, UserRole role, {bool isMobile = false}) {
     final isWaiter = role == UserRole.waiter;
     return Container(
-      width: isWaiter ? 260 : 200,
-      decoration: const BoxDecoration(
-        border: Border(right: BorderSide(color: V2Colors.border)),
+      width: isMobile ? null : (isWaiter ? 260 : 200),
+      decoration: BoxDecoration(
+        border: Border(right: BorderSide(color: isMobile ? Colors.transparent : V2Colors.border)),
       ),
       child: Column(
         children: [
-          _buildColHead("TABLES", onAdd: () => _showAddTableDialog()),
-          _buildZoneTabs(restaurantId),
-          Expanded(child: _buildTableGrid(restaurantId)),
+          if (!isMobile) _buildColHead("TABLES", onAdd: () => _showAddTableDialog()),
+          _buildZoneTabs(restaurantId, isMobile: isMobile),
+          Expanded(child: _buildTableGrid(restaurantId, isMobile: isMobile)),
         ],
       ),
     );
@@ -421,7 +422,7 @@ class _POSViewContentState extends State<POSViewContent> {
     );
   }
 
-  Widget _buildZoneTabs(String? restaurantId) {
+  Widget _buildZoneTabs(String? restaurantId, {bool isMobile = false}) {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore.collection('tables').where('restaurantId', isEqualTo: restaurantId).snapshots(),
       builder: (context, snapshot) {
@@ -435,38 +436,41 @@ class _POSViewContentState extends State<POSViewContent> {
         final list = sections.toList()..sort();
         
         return Container(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            children: list.map((s) => Expanded(
-              child: InkWell(
-                onTap: () => setState(() => _selectedZone = s),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _selectedZone == s ? V2Colors.yellow : Colors.transparent,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: _selectedZone == s ? V2Colors.yellow : V2Colors.border),
-                  ),
-                  child: Text(
-                    s,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: _selectedZone == s ? const Color(0xFF111111) : V2Colors.muted,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 8, vertical: 8),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: list.map((s) {
+                final isSelected = _selectedZone == s;
+                return InkWell(
+                  onTap: () => setState(() => _selectedZone = s),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected ? V2Colors.yellow : V2Colors.s3,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: isSelected ? V2Colors.yellow : V2Colors.border, width: 0.5),
+                    ),
+                    child: Text(
+                      s,
+                      style: TextStyle(
+                        color: isSelected ? Colors.black : V2Colors.muted,
+                        fontSize: isMobile ? 11 : 9,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-              ),
-            )).toList(),
+                );
+              }).toList(),
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildTableGrid(String? restaurantId) {
+  Widget _buildTableGrid(String? restaurantId, {bool isMobile = false}) {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore.collection('tables')
         .where('restaurantId', isEqualTo: restaurantId)
@@ -478,12 +482,12 @@ class _POSViewContentState extends State<POSViewContent> {
         tables.sort(TableModel.compareByName);
 
         return GridView.builder(
-          padding: const EdgeInsets.all(8),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 8, vertical: 8),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            crossAxisSpacing: 6,
-            mainAxisSpacing: 6,
-            childAspectRatio: 1.2,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: isMobile ? 1.4 : 1.2,
           ),
           itemCount: tables.length,
           itemBuilder: (context, index) {
@@ -659,18 +663,15 @@ class _POSViewContentState extends State<POSViewContent> {
     final needsTable = cart.orderType == OrderType.dineIn && cart.tableId == null;
     final isWaiter = role == UserRole.waiter;
 
-    return Expanded(
-      flex: isWaiter ? 2 : 3,
-      child: Container(
-        decoration: const BoxDecoration(border: Border(right: BorderSide(color: V2Colors.border))),
-        child: Column(
-          children: [
-            _buildOrderTypeTabs(),
-            _buildSearchBar(),
-            _buildCategoryTabs(restaurantId),
-            Expanded(child: _buildMenuGrid(restaurantId, needsTable, role)),
-          ],
-        ),
+    return Container(
+      decoration: const BoxDecoration(border: Border(right: BorderSide(color: V2Colors.border))),
+      child: Column(
+        children: [
+          _buildOrderTypeTabs(),
+          _buildSearchBar(),
+          _buildCategoryTabs(restaurantId),
+          Expanded(child: _buildMenuGrid(restaurantId, needsTable, role)),
+        ],
       ),
     );
   }
@@ -781,68 +782,96 @@ class _POSViewContentState extends State<POSViewContent> {
         final cart = context.read<CartProvider>();
         final isWaiter = role == UserRole.waiter;
 
-        return GridView.builder(
-          padding: const EdgeInsets.all(8),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: isWaiter ? 5 : 3,
-            crossAxisSpacing: 6,
-            mainAxisSpacing: 6,
-            childAspectRatio: isWaiter ? 0.85 : 0.9,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return InkWell(
-              onTap: needsTable ? () {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text("⚠️ Please select a table first!"),
-                  backgroundColor: V2Colors.red,
-                  duration: Duration(seconds: 1),
-                ));
-              } : () => cart.addItem(item),
-              child: Container(
-                decoration: V2Styles.cardDecoration,
-                padding: const EdgeInsets.all(4),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text("🍽", style: TextStyle(fontSize: isWaiter ? 14 : 20)),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.name, 
-                      textAlign: TextAlign.center, 
-                      style: TextStyle(fontSize: isWaiter ? 9 : 10, fontWeight: FontWeight.bold, height: 1.1), 
-                      maxLines: 2, 
-                      overflow: TextOverflow.ellipsis
-                    ),
-                    const SizedBox(height: 2),
-                    Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(fontSize: isWaiter ? 10 : 11, color: V2Colors.yellow, fontWeight: FontWeight.bold)),
-                  ],
-                ),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 600;
+
+            return GridView.builder(
+              padding: const EdgeInsets.all(8),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: isMobile ? 2 : 5,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: isMobile ? 1.05 : 0.85,
               ),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return InkWell(
+                  onTap: needsTable ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text("⚠️ Please select a table first!"),
+                      backgroundColor: V2Colors.red,
+                      duration: Duration(seconds: 1),
+                    ));
+                  } : () => cart.addItem(item),
+                  child: Container(
+                    decoration: V2Styles.cardDecoration,
+                    padding: const EdgeInsets.all(8),
+                    child: Stack(
+                      children: [
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+                          children: [
+                            if (isMobile) 
+                              Container(
+                                height: 60, width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 8),
+                                decoration: BoxDecoration(color: V2Colors.s3, borderRadius: BorderRadius.circular(6)),
+                                child: const Center(child: Text("🍽", style: TextStyle(fontSize: 24))),
+                              )
+                            else
+                              const Text("🍽", style: TextStyle(fontSize: 16)),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.name, 
+                              textAlign: isMobile ? TextAlign.left : TextAlign.center, 
+                              style: TextStyle(fontSize: isMobile ? 12 : 9, fontWeight: FontWeight.bold, height: 1.1), 
+                              maxLines: 2, 
+                              overflow: TextOverflow.ellipsis
+                            ),
+                            const SizedBox(height: 4),
+                            Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(fontSize: isMobile ? 11 : 10, color: V2Colors.yellow, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        if (isMobile)
+                          Positioned(
+                            right: 0, bottom: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(color: V2Colors.yellow, shape: BoxShape.circle),
+                              child: const Icon(Icons.add, size: 16, color: Colors.black),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             );
-          },
+          }
         );
       },
     );
   }
 
   // --- COL 3: CART ---
-  Widget _buildColumnCart(String? restaurantId, UserRole role) {
+  Widget _buildColumnCart(String? restaurantId, UserRole role, {bool isMobile = false}) {
     final cart = context.watch<CartProvider>();
     final isWaiter = role == UserRole.waiter;
     return Container(
-      width: isWaiter ? 300 : 250,
-      decoration: const BoxDecoration(
-        border: Border(right: BorderSide(color: V2Colors.border)),
+      width: isMobile ? null : (isWaiter ? 260 : 200),
+      decoration: BoxDecoration(
+        border: Border(right: BorderSide(color: isMobile ? Colors.transparent : V2Colors.border)),
       ),
       child: Column(
         children: [
-          _buildColHead("CART"),
+          if (!isMobile) _buildColHead("CART"),
           _buildCartInfo(cart),
-          if (cart.orderType != OrderType.dineIn) _buildCustomerInputs(),
-          Expanded(child: _buildCartList(cart)),
-          _buildCartFooter(cart),
+          if (cart.orderType != OrderType.dineIn && !isMobile) _buildCustomerInputs(),
+          Expanded(child: _buildCartList(cart, isMobile: isMobile)),
+          _buildCartFooter(cart, isMobile: isMobile),
         ],
       ),
     );
@@ -860,7 +889,13 @@ class _POSViewContentState extends State<POSViewContent> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 11)),
+          Expanded(
+            child: Text(label, 
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 11)
+            ),
+          ),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(color: badgeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
@@ -924,38 +959,52 @@ class _POSViewContentState extends State<POSViewContent> {
     );
   }
 
-  Widget _buildCartList(CartProvider cart) {
+  Widget _buildCartList(CartProvider cart, {bool isMobile = false}) {
     if (cart.items.isEmpty) {
-      return const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text("Cart is empty", style: TextStyle(color: V2Colors.muted, fontSize: 11)),
-          Text("Tap items to add", style: TextStyle(color: Color(0xFF444444), fontSize: 9)),
-        ],
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.shopping_cart_outlined, size: isMobile ? 48 : 32, color: V2Colors.s3),
+            const SizedBox(height: 12),
+            const Text("Cart is empty", style: TextStyle(color: V2Colors.muted, fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            const Text("Tap items to add", style: TextStyle(color: Color(0xFF444444), fontSize: 10)),
+          ],
+        ),
       );
     }
     return ListView.builder(
       itemCount: cart.items.length,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 8),
       itemBuilder: (context, index) {
         final i = cart.items[index];
         return Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF222222)))),
           child: Row(
             children: [
-              Expanded(child: Text(i.item.name, style: const TextStyle(fontSize: 11))),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(i.item.name, style: TextStyle(fontSize: isMobile ? 12 : 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                    if (i.specialInstructions.isNotEmpty) 
+                      Text(i.specialInstructions, style: const TextStyle(color: V2Colors.muted, fontSize: 9)),
+                  ],
+                ),
+              ),
               Row(
                 children: [
                   _buildQtyBtn("-", () => context.read<CartProvider>().updateQuantity(i, i.quantity - 1)),
-                  const SizedBox(width: 8),
-                  Text("${i.quantity}", style: const TextStyle(fontSize: 11)),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
+                  Text("${i.quantity}", style: TextStyle(fontSize: isMobile ? 13 : 11, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 10),
                   _buildQtyBtn("+", () => context.read<CartProvider>().updateQuantity(i, i.quantity + 1)),
                 ],
               ),
-              const SizedBox(width: 12),
-              Text("₹${(i.item.price * i.quantity).toStringAsFixed(0)}", style: const TextStyle(fontSize: 11, color: V2Colors.yellow, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 16),
+              Text("₹${(i.item.price * i.quantity).toStringAsFixed(0)}", style: TextStyle(fontSize: isMobile ? 13 : 11, color: V2Colors.yellow, fontWeight: FontWeight.bold)),
             ],
           ),
         );
@@ -975,31 +1024,27 @@ class _POSViewContentState extends State<POSViewContent> {
     );
   }
 
-  Widget _buildCartFooter(CartProvider cart) {
+  Widget _buildCartFooter(CartProvider cart, {bool isMobile = false}) {
     final subtotal = cart.totalAmount;
-    final tax = subtotal * (_gstPercentage / 100);
-    final total = subtotal + tax;
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 10, vertical: 12),
       decoration: const BoxDecoration(border: Border(top: BorderSide(color: V2Colors.border))),
       child: Column(
         children: [
           _buildPriceRow("Subtotal", "₹${subtotal.toStringAsFixed(0)}"),
-          if (_gstPercentage > 0) 
-            _buildPriceRow("GST (${_gstPercentage.toStringAsFixed(0)}%)", "₹${tax.toStringAsFixed(2)}"),
           const SizedBox(height: 4),
-          _buildPriceRow("TOTAL", "₹${total.toStringAsFixed(0)}", isTotal: true),
-          const SizedBox(height: 10),
+          _buildPriceRow("TOTAL", "₹${subtotal.toStringAsFixed(0)}", isTotal: true),
+          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildActionBtn("✕ Clear", V2Colors.red, () => cart.clearCart())),
-              const SizedBox(width: 4),
-              Expanded(child: _buildActionBtn("✓ Place", V2Colors.green, () => _placeOrder(cart))),
+              Expanded(child: _buildActionBtn("✕ Clear", V2Colors.red, () => cart.clearCart(), height: isMobile ? 48 : 36)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildActionBtn("✓ Place", V2Colors.green, () => _placeOrder(cart), height: isMobile ? 48 : 36)),
             ],
           ),
-          const SizedBox(height: 4),
-          _buildActionBtn("🖨 Bill", V2Colors.yellow, () => _printBill(cart), isFull: true),
+          const SizedBox(height: 8),
+          _buildActionBtn("🖨 Bill", V2Colors.yellow, () => _printBill(cart), isFull: true, height: isMobile ? 48 : 36),
         ],
       ),
     );
@@ -1018,21 +1063,54 @@ class _POSViewContentState extends State<POSViewContent> {
     );
   }
 
-  Widget _buildActionBtn(String label, Color color, VoidCallback onTap, {bool isFull = false}) {
+  Widget _buildActionBtn(String label, Color color, VoidCallback onTap, {bool isFull = false, double height = 36}) {
+    final isYellow = color == V2Colors.yellow;
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        height: height,
         width: isFull ? double.infinity : null,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: color.withOpacity(0.3)),
+          color: isYellow ? color : color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isYellow ? color : color.withOpacity(0.3)),
         ),
         alignment: Alignment.center,
-        child: Text(label, style: TextStyle(color: color == V2Colors.yellow ? const Color(0xFF111111) : color, fontSize: 11, fontWeight: FontWeight.bold)),
+        child: Text(
+          label, 
+          style: TextStyle(
+            color: isYellow ? Colors.black : color, 
+            fontSize: height > 40 ? 13 : 11, 
+            fontWeight: FontWeight.bold
+          )
+        ),
       ),
     );
+  }
+
+  Future<void> _selectHistoryDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedHistoryDate,
+      firstDate: DateTime(2023),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: V2Colors.yellow,
+              onPrimary: Colors.black,
+              surface: V2Colors.s2,
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedHistoryDate) {
+      setState(() => _selectedHistoryDate = picked);
+    }
   }
 
   // --- COL 4: HISTORY ---
@@ -1051,6 +1129,10 @@ class _POSViewContentState extends State<POSViewContent> {
   }
 
   Widget _buildHistoryFilters() {
+    final dateStr = DateUtils.isSameDay(_selectedHistoryDate, DateTime.now()) 
+        ? "TODAY" 
+        : DateFormat('dd MMM').format(_selectedHistoryDate).toUpperCase();
+
     return Container(
       padding: const EdgeInsets.all(8),
       color: V2Colors.s2,
@@ -1062,6 +1144,25 @@ class _POSViewContentState extends State<POSViewContent> {
               _buildHTypeBtn("table", "TBL"),
               _buildHTypeBtn("takeaway", "TK"),
               _buildHTypeBtn("delivery", "DEL"),
+              const SizedBox(width: 4),
+              InkWell(
+                onTap: _selectHistoryDate,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: V2Colors.s3,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: V2Colors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today, size: 8, color: V2Colors.yellow),
+                      const SizedBox(width: 4),
+                      Text(dateStr, style: const TextStyle(color: V2Colors.yellow, fontSize: 8, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -1108,7 +1209,13 @@ class _POSViewContentState extends State<POSViewContent> {
   }
 
   Widget _buildHistoryList(String? restaurantId) {
-    Query q = _firestore.collection('orders').where('restaurantId', isEqualTo: restaurantId);
+    final start = DateTime(_selectedHistoryDate.year, _selectedHistoryDate.month, _selectedHistoryDate.day);
+    final end = start.add(const Duration(days: 1));
+
+    Query q = _firestore.collection('orders')
+        .where('restaurantId', isEqualTo: restaurantId)
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('createdAt', isLessThan: Timestamp.fromDate(end));
     
     if (_hTab != 'all') q = q.where('orderType', isEqualTo: _hTab == 'table' ? 'dineIn' : _hTab);
     
@@ -1146,7 +1253,7 @@ class _POSViewContentState extends State<POSViewContent> {
 
   Widget _buildOrderCard(String id, Map<String, dynamic> o) {
     final status = o['status'] ?? 'new';
-    final nxtMap = {'new': 'Preparing', 'preparing': 'Ready', 'ready': 'Done'};
+    final nxtMap = {'new': 'Preparing', 'preparing': 'Ready'};
     final canAdv = nxtMap.containsKey(status);
     final cart = context.read<CartProvider>();
     
@@ -1167,7 +1274,13 @@ class _POSViewContentState extends State<POSViewContent> {
             children: [
               Row(
                 children: [
-                  Text("#${id.substring(0, 4).toUpperCase()}", style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 11)),
+                  Row(
+                    children: [
+                      Text("#${id.substring(0, 4).toUpperCase()}", style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 11)),
+                      const SizedBox(width: 4),
+                      Text(DateFormat('dd/MM').format(_getDateTime(o['createdAt'])), style: const TextStyle(color: V2Colors.muted, fontSize: 9)),
+                    ],
+                  ),
                   if (tokenNo != null)
                     Padding(
                       padding: const EdgeInsets.only(left: 8),
@@ -1221,7 +1334,12 @@ class _POSViewContentState extends State<POSViewContent> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(o['tableName'] ?? o['customerName'] ?? 'Customer', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              Text(
+                orderType == OrderType.dineIn 
+                    ? (o['tableName'] ?? 'Table') 
+                    : (orderType == OrderType.delivery ? 'Delivery' : 'Takeaway'),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
               Text("₹${o['totalAmount']?.toStringAsFixed(0) ?? 0}", style: const TextStyle(color: V2Colors.yellow, fontSize: 11, fontWeight: FontWeight.bold)),
             ],
           ),
@@ -1291,7 +1409,7 @@ class _POSViewContentState extends State<POSViewContent> {
     final timeStr = createdAt != null ? DateFormat('hh:mm a').format(createdAt) : 'N/A';
     final type = o['orderType'] ?? 'dineIn';
     final cName = o['customerName'];
-    final cPhone = o['customerPhone'];
+    final cContact = o['customerContact'];
     final address = o['deliveryAddress'];
 
     showDialog(
@@ -1351,13 +1469,13 @@ class _POSViewContentState extends State<POSViewContent> {
                     children: [
                       const Text("CUSTOMER INFO", style: TextStyle(color: V2Colors.muted, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                       const SizedBox(height: 6),
-                      Text(cName ?? (type == 'delivery' ? 'Delivery Customer' : 'Takeaway'), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                      if (cPhone != null && cPhone.toString().isNotEmpty)
+                      Text(cName ?? (type.toString().toLowerCase() == 'delivery' ? 'Delivery Customer' : 'Takeaway'), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                      if (cContact != null && cContact.toString().isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: Text("📞 $cPhone", style: const TextStyle(color: V2Colors.yellow, fontSize: 12)),
+                          child: Text("📞 $cContact", style: const TextStyle(color: V2Colors.yellow, fontSize: 12)),
                         ),
-                      if (type == 'delivery' && address != null && address.toString().isNotEmpty)
+                      if (type.toString().toLowerCase() == 'delivery' && address != null && address.toString().isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Column(
@@ -1451,7 +1569,7 @@ class _POSViewContentState extends State<POSViewContent> {
       }).toList();
 
       final subtotal = cart.totalAmount;
-      final total = subtotal * 1.05;
+      final total = subtotal * (1 + (_gstPercentage / 100));
 
       if (isNewOrder) {
         batch.set(orderRef, {
@@ -1459,6 +1577,7 @@ class _POSViewContentState extends State<POSViewContent> {
           'items': newItems,
           'totalAmount': total,
           'subtotal': subtotal,
+          'gstPercentage': _gstPercentage,
           'status': 'new',
           'createdAt': FieldValue.serverTimestamp(),
           'orderType': cart.orderType.name,
@@ -1481,6 +1600,7 @@ class _POSViewContentState extends State<POSViewContent> {
           'items': FieldValue.arrayUnion(newItems),
           'totalAmount': FieldValue.increment(total),
           'subtotal': FieldValue.increment(subtotal),
+          'gstPercentage': _gstPercentage,
           'lastUpdatedAt': FieldValue.serverTimestamp(),
         });
       }
@@ -1525,18 +1645,10 @@ class _POSViewContentState extends State<POSViewContent> {
     switch (currentStatus) {
       case 'new': nextStatus = 'preparing'; break;
       case 'preparing': nextStatus = 'ready'; break;
-      case 'ready': nextStatus = 'done'; break;
       default: return;
     }
     try {
       await _firestore.collection('orders').doc(orderId).update({'status': nextStatus});
-      if (nextStatus == 'done') {
-        final doc = await _firestore.collection('orders').doc(orderId).get();
-        final data = doc.data() as Map<String, dynamic>?;
-        if (data != null && data['orderType'] == 'dineIn' && data['tableId'] != null) {
-          await _firestore.collection('tables').doc(data['tableId']).update({'status': 'available', 'currentOrderId': null});
-        }
-      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Advance Error: $e"), backgroundColor: V2Colors.red));
     }
@@ -1550,7 +1662,10 @@ class _POSViewContentState extends State<POSViewContent> {
       orderType: cart.orderType.name,
       tableId: cart.tableId,
       tableName: cart.tableName ?? 'Takeaway',
-      onComplete: () => cart.clearCart(),
+      onComplete: () => setState(() {
+        cart.clearCart();
+        _hFilter = 'billed';
+      }),
       orderId: cart.activeOrderId,
     );
   }
@@ -1563,6 +1678,9 @@ class _POSViewContentState extends State<POSViewContent> {
     required String tableName,
     VoidCallback? onComplete,
     String? orderId,
+    String? customerName,
+    String? customerContact,
+    String? deliveryAddress,
   }) async {
     // 1. Fetch GST Setting
     final resId = context.read<AuthService>().restaurantId;
@@ -1587,6 +1705,11 @@ class _POSViewContentState extends State<POSViewContent> {
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final cart = context.read<CartProvider>();
+          final displayCustName = customerName ?? cart.customerName;
+          final displayCustContact = customerContact ?? cart.customerContact;
+          final displayCustAddr = deliveryAddress ?? cart.deliveryAddress;
+
           double scVal = double.tryParse(scCtrl.text) ?? 0;
           double dsVal = double.tryParse(dsCtrl.text) ?? 0;
           double scAmt = scIsPercent ? (subtotal * scVal / 100) : scVal;
@@ -1611,6 +1734,26 @@ class _POSViewContentState extends State<POSViewContent> {
                       decoration: BoxDecoration(color: V2Colors.s2, borderRadius: BorderRadius.circular(8)),
                       child: Column(
                         children: [
+                          if (orderType.toLowerCase() != 'dinein') ...[
+                            Row(children: [
+                              const Icon(Icons.person_outline, size: 10, color: V2Colors.muted),
+                              const SizedBox(width: 4),
+                              Expanded(child: Text(displayCustName ?? 'Walk-in', style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold))),
+                            ]),
+                            if (displayCustContact?.isNotEmpty ?? false)
+                              Row(children: [
+                                const Icon(Icons.phone_outlined, size: 10, color: V2Colors.muted),
+                                const SizedBox(width: 4),
+                                Text(displayCustContact!, style: const TextStyle(color: V2Colors.muted, fontSize: 9)),
+                              ]),
+                            if (orderType.toLowerCase() == 'delivery' && (displayCustAddr?.isNotEmpty ?? false))
+                              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                const Icon(Icons.location_on_outlined, size: 10, color: V2Colors.muted),
+                                const SizedBox(width: 4),
+                                Expanded(child: Text(displayCustAddr!, style: const TextStyle(color: V2Colors.muted, fontSize: 9), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                              ]),
+                            const Divider(color: V2Colors.border, height: 16),
+                          ],
                           _buildPriceRow("Subtotal", "₹${subtotal.toStringAsFixed(0)}"),
                           if (scAmt > 0) _buildPriceRow("Srv Charge", "+₹${scAmt.toStringAsFixed(2)}"),
                           if (dsAmt > 0) _buildPriceRow("Discount", "-₹${dsAmt.toStringAsFixed(2)}"),
@@ -1669,6 +1812,9 @@ class _POSViewContentState extends State<POSViewContent> {
                   items: items, subtotal: subtotal, paymentMode: selectedMode,
                   orderType: orderType, tableId: tableId, tableName: tableName, onComplete: onComplete,
                   existingOrderId: orderId,
+                  customerName: displayCustName,
+                  customerContact: displayCustContact,
+                  deliveryAddress: displayCustAddr,
                   serviceCharge: scAmt,
                   discount: dsAmt,
                   gst: gstAmt,
@@ -1756,14 +1902,18 @@ class _POSViewContentState extends State<POSViewContent> {
     double gst = 0,
     double gstPercentage = 0,
     String gstNumber = "",
+    String? customerName,
+    String? customerContact,
+    String? deliveryAddress,
   }) async {
     final auth = context.read<AuthService>();
+    final cart = context.read<CartProvider>();
     final restaurantId = auth.restaurantId;
     if (restaurantId == null) return;
     try {
       final receiptNo = await _nextReceiptNoNonTxn(restaurantId);
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final total = subtotal + serviceCharge - discount;
+      final total = subtotal + serviceCharge - discount + gst;
       final batch = _firestore.batch();
       final orderRef = existingOrderId != null 
           ? _firestore.collection('orders').doc(existingOrderId)
@@ -1785,7 +1935,10 @@ class _POSViewContentState extends State<POSViewContent> {
         'receiptNumber': receiptNo,
         'billedAt': FieldValue.serverTimestamp(),
         'orderType': orderType, 
-        'tableName': tableName,
+        'tableName': orderType == 'dineIn' ? tableName : (orderType == 'delivery' ? 'Delivery' : 'Takeaway'),
+        'customerName': customerName,
+        'customerContact': customerContact,
+        'deliveryAddress': deliveryAddress,
       };
 
       if (existingOrderId != null) {
@@ -1799,11 +1952,25 @@ class _POSViewContentState extends State<POSViewContent> {
       }
       final colRef = _firestore.collection('daily_collections').doc("${restaurantId}_$today");
       batch.set(colRef, {
-        'restaurantId': restaurantId, 'lastUpdatedAt': FieldValue.serverTimestamp(),
-        'netCollection': FieldValue.increment(total), 'billCount': FieldValue.increment(1),
+        'restaurantId': restaurantId, 
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+        'netCollection': FieldValue.increment(total), 
+        'billCount': FieldValue.increment(1),
+        
+        // Revenue by Type
         if (orderType == 'dineIn') 'tableCollection': FieldValue.increment(total),
         if (orderType == 'takeaway') 'takeawayCollection': FieldValue.increment(total),
         if (orderType == 'delivery') 'deliveryCollection': FieldValue.increment(total),
+        
+        // Order Counts by Type
+        if (orderType == 'dineIn') 'tableCount': FieldValue.increment(1),
+        if (orderType == 'takeaway') 'takeawayCount': FieldValue.increment(1),
+        if (orderType == 'delivery') 'deliveryCount': FieldValue.increment(1),
+        
+        // Revenue by Payment Mode
+        if (paymentMode == 'Cash') 'cashCollection': FieldValue.increment(total),
+        if (paymentMode == 'UPI') 'upiCollection': FieldValue.increment(total),
+        if (paymentMode == 'Card') 'cardCollection': FieldValue.increment(total),
       }, SetOptions(merge: true));
       await batch.commit();
 
@@ -1813,6 +1980,9 @@ class _POSViewContentState extends State<POSViewContent> {
         'status': 'completed', 'receiptNumber': receiptNo, 'billedAt': Timestamp.now(),
         'serviceCharge': serviceCharge, 'discount': discount, 'subtotal': subtotal,
         'gst': gst, 'cgst': gst / 2, 'sgst': gst / 2, 'gstPercentage': gstPercentage,
+        'customerName': cart.customerName,
+        'customerContact': cart.customerContact,
+        'deliveryAddress': cart.deliveryAddress,
       };
       if (printerService.hasSavedPrinter || printerService.isConnected) {
         final bytes = await ReportService.generateFinalBillBytes(
@@ -1829,6 +1999,7 @@ class _POSViewContentState extends State<POSViewContent> {
           orderData: billData, orderId: receiptNo.toString(), subtotal: subtotal,
           serviceCharge: serviceCharge, discount: discount, total: total,
           cgst: gst / 2, sgst: gst / 2, paymentMode: paymentMode,
+          gstPercentage: gstPercentage,
           hotelName: _restaurantName ?? auth.restaurantName ?? "YUG POS",
         );
       }
@@ -1856,7 +2027,11 @@ class _POSViewContentState extends State<POSViewContent> {
       orderType: o['orderType'] ?? 'dineIn',
       tableId: o['tableId'],
       tableName: o['tableName'] ?? 'Takeaway',
-      onComplete: () => setState(() {}),
+      orderId: id,
+      customerName: o['customerName'],
+      customerContact: o['customerContact'],
+      deliveryAddress: o['deliveryAddress'],
+      onComplete: () => setState(() => _hFilter = 'billed'),
     );
   }
 
@@ -1866,29 +2041,553 @@ class _POSViewContentState extends State<POSViewContent> {
     return DateTime.now();
   }
 
-  // --- MOBILE RESPONSIVE VIEW ---
-  Widget _buildResponsiveLayout(BuildContext context, String? restaurantId, UserRole role) {
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
+  // --- MOBILE UI COMPONENTS ---
+
+  Widget _buildMobileHeader(String? restaurantId, UserRole role) {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final docId = "${restaurantId}_$today";
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: const BoxDecoration(
+        color: V2Colors.bg,
+        border: Border(bottom: BorderSide(color: V2Colors.border, width: 0.5)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _restaurantName?.toUpperCase() ?? "YUG POS", 
+                  style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.2)
+                ),
+                Text(
+                  role == UserRole.waiter ? "WAITER" : (role == UserRole.cashier ? "CASHIER" : "ADMIN"), 
+                  style: const TextStyle(color: V2Colors.muted, fontSize: 9, fontWeight: FontWeight.bold)
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                if (role != UserRole.waiter)
+                  StreamBuilder<DocumentSnapshot>(
+                    stream: _firestore.collection('daily_collections').doc(docId).snapshots(),
+                    builder: (context, snapshot) {
+                      double net = 0;
+                      if (snapshot.hasData && snapshot.data!.exists) {
+                        final data = snapshot.data!.data() as Map<String, dynamic>;
+                        net = (data['netCollection'] ?? 0).toDouble();
+                      }
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: V2Colors.s2, borderRadius: BorderRadius.circular(8), border: Border.all(color: V2Colors.border)),
+                        child: Column(
+                          children: [
+                            const Text("Net", style: TextStyle(color: V2Colors.muted, fontSize: 7, fontWeight: FontWeight.bold)),
+                            Text("₹${net.toStringAsFixed(0)}", style: const TextStyle(color: V2Colors.yellow, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                const SizedBox(width: 12),
+                Builder(
+                  builder: (context) => InkWell(
+                    onTap: () => Scaffold.of(context).openDrawer(),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: V2Colors.s3, borderRadius: BorderRadius.circular(8)),
+                      child: const Icon(Icons.menu, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileStatsCards(String? restaurantId) {
+    if (_mobileActiveIndex != 1 && _mobileActiveIndex != 3) return const SizedBox.shrink();
+    
+    final auth = context.read<AuthService>();
+    final isWaiter = auth.role == UserRole.waiter;
+    
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final docId = "${restaurantId}_$today";
+    final cart = context.watch<CartProvider>();
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _firestore.collection('daily_collections').doc(docId).snapshots(),
+      builder: (context, snapshot) {
+        double dine = 0, tk = 0, del = 0;
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          dine = (data['tableCollection'] ?? 0).toDouble();
+          tk = (data['takeawayCollection'] ?? 0).toDouble();
+          del = (data['deliveryCollection'] ?? 0).toDouble();
+        }
+        return Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Row(
+            children: [
+              if (!isWaiter) ...[
+                _mobileStatCard("Dine in", "₹${dine.toInt()}", V2Colors.blue),
+                _mobileStatCard("Takeaway", "₹${tk.toInt()}", V2Colors.orange),
+                _mobileStatCard("Delivery", "₹${del.toInt()}", V2Colors.green),
+              ],
+              _mobileStatCard("Cart", "₹${cart.totalAmount.toInt()}", V2Colors.yellow),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _mobileStatCard(String label, String val, Color color) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: V2Colors.s2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: V2Colors.border, width: 0.5),
+        ),
+        child: Column(
+          children: [
+            Text(label, style: const TextStyle(color: V2Colors.muted, fontSize: 7, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
+            Text(val, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileBottomNav() {
+    return SafeArea(
+      child: Container(
+        height: 68,
+        decoration: const BoxDecoration(
+          color: V2Colors.s1,
+          border: Border(top: BorderSide(color: V2Colors.border, width: 0.5)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            if (context.read<AuthService>().role != UserRole.waiter) _buildMobileNavIcon(0, Icons.history, "History"),
+            _buildMobileNavIcon(1, Icons.table_restaurant, "Tables"),
+            _buildMobileCenterCartIcon(),
+            if (context.read<AuthService>().role != UserRole.waiter) _buildMobileNavIcon(3, Icons.bar_chart, "Reports"),
+            _buildMobileNavIcon(4, Icons.settings, "Settings"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileNavIcon(int index, IconData icon, String label) {
+    final isSel = _mobileActiveIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _mobileActiveIndex = index),
+      child: Container(
+        width: 60,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: isSel ? V2Colors.yellow : V2Colors.muted),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: isSel ? V2Colors.yellow : V2Colors.muted, fontSize: 8, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileCenterCartIcon() {
+    final cart = context.watch<CartProvider>();
+    final isSel = _mobileActiveIndex == 2;
+    return InkWell(
+      onTap: () => setState(() => _mobileActiveIndex = 2),
+      child: Transform.translate(
+        offset: const Offset(0, -10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10), // Reduced from 12
+                  decoration: BoxDecoration(
+                    color: V2Colors.yellow,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: V2Colors.yellow.withOpacity(0.3), blurRadius: 10, spreadRadius: 2)],
+                  ),
+                  child: const Icon(Icons.shopping_cart, size: 24, color: Colors.black),
+                ),
+                if (cart.items.isNotEmpty)
+                  Positioned(
+                    top: -2, right: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
+                      child: Text("${cart.totalItems}", style: const TextStyle(color: V2Colors.yellow, fontSize: 8, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 2), // Reduced from 4
+            Text("Cart", style: TextStyle(color: isSel ? V2Colors.yellow : V2Colors.muted, fontSize: 8, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileContentView(String? restaurantId, UserRole role) {
+    switch (_mobileActiveIndex) {
+      case 0: return _buildMobileHistoryView(restaurantId, role);
+      case 1: 
+        final cart = context.watch<CartProvider>();
+        if (cart.tableId != null || cart.orderType != OrderType.dineIn) {
+          return _buildMobileOrderView(restaurantId, role);
+        }
+        return _buildMobileSelectionView(restaurantId, role);
+      case 2: return _buildColumnCart(restaurantId, role, isMobile: true);
+      case 3: return _buildMobileReportsView(restaurantId);
+      case 4: return _buildMobileSettingsView();
+      default: return const Center(child: Text("Home", style: TextStyle(color: V2Colors.muted)));
+    }
+  }
+
+  Widget _buildMobileSelectionView(String? restaurantId, UserRole role) {
+    final cart = context.watch<CartProvider>();
+    return Column(
+      children: [
+        Container(
+          height: 50,
+          decoration: const BoxDecoration(color: V2Colors.s1, border: Border(bottom: BorderSide(color: V2Colors.border, width: 0.5))),
+          child: Row(
+            children: [
+              _typeNavBtn("Dine In", OrderType.dineIn, Icons.restaurant),
+              _typeNavBtn("Takeaway", OrderType.takeaway, Icons.takeout_dining),
+              _typeNavBtn("Delivery", OrderType.delivery, Icons.delivery_dining),
+            ],
+          ),
+        ),
+        if (cart.orderType == OrderType.dineIn)
+          Expanded(child: _buildColumnTables(restaurantId, role, isMobile: true))
+        else
+          Expanded(child: _buildMobileOrderView(restaurantId, role)),
+      ],
+    );
+  }
+
+  Widget _typeNavBtn(String label, OrderType type, IconData icon) {
+    final cart = context.watch<CartProvider>();
+    final isSel = cart.orderType == type;
+    return Expanded(
+      child: InkWell(
+        onTap: () => cart.setOrderType(type),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: isSel ? V2Colors.yellow : Colors.transparent, width: 2)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: isSel ? V2Colors.yellow : V2Colors.muted),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(color: isSel ? V2Colors.yellow : V2Colors.muted, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileOrderView(String? restaurantId, UserRole role) {
+    final cart = context.watch<CartProvider>();
+    return Column(
+      children: [
+        if (cart.orderType == OrderType.dineIn)
           Container(
-            color: V2Colors.s1,
-            child: const TabBar(
-              indicatorColor: V2Colors.yellow,
-              labelColor: V2Colors.yellow,
-              unselectedLabelColor: V2Colors.muted,
-              tabs: [
-                Tab(icon: Icon(Icons.table_restaurant), text: "TABLES"),
-                Tab(icon: Icon(Icons.restaurant_menu), text: "MENU"),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: V2Colors.yellow.withOpacity(0.05),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("TABLE: ${cart.tableName}", style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 11)),
+                InkWell(
+                  onTap: () => cart.clearCart(),
+                  child: const Text("CHANGE", style: TextStyle(color: V2Colors.muted, fontSize: 9, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                ),
               ],
             ),
           ),
-          Expanded(
-            child: TabBarView(
+        if (cart.orderType != OrderType.dineIn)
+          _buildMobileCustomerForm(cart),
+        Expanded(child: _buildColumnMenu(restaurantId, role)),
+      ],
+    );
+  }
+
+  Widget _buildMobileCustomerForm(CartProvider cart) {
+    return Container(
+      key: ValueKey("cust_form_${cart.orderType}"), // Force reset when order type changes
+      padding: const EdgeInsets.all(12),
+      decoration: const BoxDecoration(color: V2Colors.s1, border: Border(bottom: BorderSide(color: V2Colors.border))),
+      child: Column(
+        children: [
+          _mobileInput("Customer name", (v) => cart.setCustomerName(v), initial: cart.customerName),
+          const SizedBox(height: 8),
+          _mobileInput("Contact number", (v) => cart.setCustomerContact(v), initial: cart.customerContact),
+          if (cart.orderType == OrderType.delivery) ...[
+            const SizedBox(height: 8),
+            _mobileInput("Delivery address", (v) => cart.setDeliveryAddress(v), initial: cart.deliveryAddress),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileInput(String hint, Function(String) onChange, {String? initial}) {
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(color: V2Colors.s2, borderRadius: BorderRadius.circular(6), border: Border.all(color: V2Colors.border)),
+      child: TextFormField(
+        onChanged: onChange,
+        initialValue: initial,
+        style: const TextStyle(color: Colors.white, fontSize: 11),
+        decoration: InputDecoration(
+          hintText: hint, 
+          hintStyle: const TextStyle(color: V2Colors.muted, fontSize: 11), 
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.only(bottom: 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileHistoryView(String? restaurantId, UserRole role) {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final docId = "${restaurantId}_$today";
+    
+    return Column(
+      children: [
+        // Date Display
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: V2Colors.s1,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today, size: 14, color: V2Colors.yellow),
+                  const SizedBox(width: 8),
+                  Text(
+                    DateFormat('dd/MM/yy').format(_selectedHistoryDate), 
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
+                  ),
+                ],
+              ),
+              InkWell(
+                onTap: _selectHistoryDate,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: V2Colors.s3, borderRadius: BorderRadius.circular(6)),
+                  child: const Text("Filter Date", style: TextStyle(color: V2Colors.yellow, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Summary Cards Section
+        StreamBuilder<DocumentSnapshot>(
+          stream: _firestore.collection('daily_collections').doc(docId).snapshots(),
+          builder: (context, snapshot) {
+            double net = 0, dine = 0, tk = 0, del = 0;
+            if (snapshot.hasData && snapshot.data!.exists) {
+              final data = snapshot.data!.data() as Map<String, dynamic>;
+              net = (data['netCollection'] ?? 0).toDouble();
+              dine = (data['tableCollection'] ?? 0).toDouble();
+              tk = (data['takeawayCollection'] ?? 0).toDouble();
+              del = (data['deliveryCollection'] ?? 0).toDouble();
+            }
+            return Container(
+              padding: const EdgeInsets.all(12),
+              color: V2Colors.bg,
+              child: GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 2.2,
+                children: [
+                  _hSummaryCard("Total Billed", "₹${net.toInt()}", V2Colors.yellow),
+                  _hSummaryCard("Delivery", "₹${del.toInt()}", V2Colors.green),
+                  _hSummaryCard("Dine in", "₹${dine.toInt()}", V2Colors.blue),
+                  _hSummaryCard("Takeaway", "₹${tk.toInt()}", V2Colors.orange),
+                ],
+              ),
+            );
+          },
+        ),
+        
+        // Filter Scroll
+        Container(
+          height: 48,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
               children: [
-                _buildColumnTables(restaurantId, role),
-                _buildColumnMenu(restaurantId, role),
+                _hChip("all", "All"),
+                _hChip("dineIn", "Dine In"),
+                _hChip("takeaway", "Takeaway"),
+                _hChip("delivery", "Delivery"),
+                _hFilterChip("billed", "Billed"),
+                _hFilterChip("active", "Pending"),
+              ],
+            ),
+          ),
+        ),
+        
+        // Order List
+        Expanded(child: _buildHistoryList(restaurantId)),
+      ],
+    );
+  }
+
+  Widget _hSummaryCard(String label, String val, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: V2Colors.s2, borderRadius: BorderRadius.circular(10), border: Border.all(color: V2Colors.border, width: 0.5)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label, style: const TextStyle(color: V2Colors.muted, fontSize: 8, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(val, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _hChip(String val, String label) {
+    final isSel = _hTab == val;
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      child: FilterChip(
+        selected: isSel,
+        label: Text(label, style: TextStyle(color: isSel ? Colors.black : V2Colors.muted, fontSize: 10, fontWeight: FontWeight.bold)),
+        onSelected: (s) => setState(() => _hTab = val),
+        backgroundColor: V2Colors.s3,
+        selectedColor: V2Colors.yellow,
+        showCheckmark: false,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSel ? V2Colors.yellow : V2Colors.border)),
+      ),
+    );
+  }
+
+  Widget _hFilterChip(String val, String label) {
+    final isSel = _hFilter == val;
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      child: FilterChip(
+        selected: isSel,
+        label: Text(label, style: TextStyle(color: isSel ? Colors.black : V2Colors.muted, fontSize: 10, fontWeight: FontWeight.bold)),
+        onSelected: (s) => setState(() => _hFilter = val),
+        backgroundColor: V2Colors.s3,
+        selectedColor: V2Colors.green,
+        showCheckmark: false,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSel ? V2Colors.green : V2Colors.border)),
+      ),
+    );
+  }
+
+  Widget _buildMobileSettingsView() {
+    final auth = context.read<AuthService>();
+    final user = auth.currentUser;
+    final roleName = auth.role.toString().split('.').last.toUpperCase();
+
+    return Container(
+      color: V2Colors.s1,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          // Profile Card
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [V2Colors.s2, V2Colors.s2.withOpacity(0.5)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: V2Colors.border, width: 0.5),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 80, height: 80,
+                  decoration: BoxDecoration(
+                    color: V2Colors.yellow,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: V2Colors.border, width: 4),
+                  ),
+                  child: Center(
+                    child: Text(
+                      (auth.userName ?? "U").substring(0, 1).toUpperCase(),
+                      style: const TextStyle(color: Colors.black, fontSize: 32, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(auth.userName ?? "Unknown User", style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(color: V2Colors.yellow.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                  child: Text(roleName, style: const TextStyle(color: V2Colors.yellow, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          
+          // Details Section
+          _settingsHeader("PERSONAL INFO"),
+          _settingsRow(Icons.email_outlined, "Email", user?.email ?? "Not set"),
+          _settingsRow(Icons.storefront_outlined, "Restaurant", auth.restaurantName ?? "Not set"),
+          
+          const SizedBox(height: 32),
+          
+          _settingsHeader("ACCOUNT"),
+          _settingsActionRow(Icons.logout, "Logout", "Sign out from session", V2Colors.red, () => auth.logout()),
+          
+          const SizedBox(height: 40),
+          Center(
+            child: Column(
+              children: [
+                const Text("YUG POS v2.0.0", style: TextStyle(color: V2Colors.muted, fontSize: 10)),
+                const SizedBox(height: 4),
+                Text("RESTAURANT ID: ${auth.restaurantId ?? '-'}", style: const TextStyle(color: V2Colors.muted, fontSize: 8)),
               ],
             ),
           ),
@@ -1896,5 +2595,492 @@ class _POSViewContentState extends State<POSViewContent> {
       ),
     );
   }
+
+  Widget _settingsHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 12),
+      child: Text(title, style: const TextStyle(color: V2Colors.muted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+    );
+  }
+
+  Widget _settingsRow(IconData icon, String label, String value) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: V2Colors.s2, borderRadius: BorderRadius.circular(12), border: Border.all(color: V2Colors.border, width: 0.5)),
+      child: Row(
+        children: [
+          Icon(icon, color: V2Colors.yellow, size: 20),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(color: V2Colors.muted, fontSize: 10)),
+              const SizedBox(height: 2),
+              Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _settingsActionRow(IconData icon, String label, String sub, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: V2Colors.s2, borderRadius: BorderRadius.circular(12), border: Border.all(color: V2Colors.border, width: 0.5)),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.bold)),
+                  Text(sub, style: const TextStyle(color: V2Colors.muted, fontSize: 10)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: V2Colors.muted, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileDrawer() {
+    final auth = context.read<AuthService>();
+    return Drawer(
+      backgroundColor: V2Colors.s1,
+      child: Column(
+        children: [
+          // Drawer Header
+          Container(
+            padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 20, 20, 20),
+            color: V2Colors.s2,
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("YUG POS", style: V2Styles.logo.copyWith(fontSize: 20)),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: V2Colors.muted, size: 20),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: V2Colors.yellow,
+                      child: Text((auth.userName ?? "U")[0], style: const TextStyle(color: Colors.black)),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(auth.userName ?? "User", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                        Text(auth.role.toString().split('.').last.toUpperCase(), style: const TextStyle(color: V2Colors.muted, fontSize: 9)),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // Drawer Content
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                if (widget.isAdminTab && widget.onTabSelect != null) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Text("MAIN NAVIGATION", style: TextStyle(color: V2Colors.muted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ),
+                  _drawerItem(Icons.dashboard_outlined, "Dashboard", () {
+                    Navigator.pop(context);
+                    widget.onTabSelect!(0);
+                  }),
+                  _drawerItem(Icons.people_outline, "Staff Management", () {
+                    Navigator.pop(context);
+                    widget.onTabSelect!(3);
+                  }),
+                  _drawerItem(Icons.restaurant_menu_outlined, "Menu Management", () {
+                    Navigator.pop(context);
+                    widget.onTabSelect!(4);
+                  }),
+                  _drawerItem(Icons.analytics_outlined, "Analytics", () {
+                    Navigator.pop(context);
+                    widget.onTabSelect!(2);
+                  }),
+                  const Divider(color: V2Colors.border, indent: 16, endIndent: 16),
+                ],
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Text("POS ACTIONS", style: TextStyle(color: V2Colors.muted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                ),
+                _drawerItem(Icons.history_outlined, "Order History", () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => _buildFullHistoryPage(auth.restaurantId, auth.role)));
+                }),
+                _drawerItem(Icons.download_for_offline_outlined, "Download Daily Reports", () {
+                  Navigator.pop(context);
+                  _showDownloadReportsDialog();
+                }),
+                _drawerItem(Icons.print_outlined, "Printer Settings", () {
+                  Navigator.pop(context);
+                  _showPrinterSelectionDialog();
+                }),
+                const Divider(color: V2Colors.border, height: 24, indent: 20, endIndent: 20),
+                _drawerItem(Icons.help_outline, "Support", () {}),
+                _drawerItem(Icons.logout, "Logout Session", () {
+                  Navigator.pop(context);
+                  auth.logout();
+                }, color: V2Colors.red),
+              ],
+            ),
+          ),
+          
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                const Text("v2.0.1 Stable", style: TextStyle(color: V2Colors.muted, fontSize: 10)),
+                Text("RES ID: ${auth.restaurantId?.substring(0, 8) ?? '...'}", style: const TextStyle(color: V2Colors.muted, fontSize: 8)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _drawerItem(IconData icon, String label, VoidCallback onTap, {Color? color}) {
+    return ListTile(
+      leading: Icon(icon, color: color ?? V2Colors.yellow, size: 20),
+      title: Text(label, style: TextStyle(color: color ?? Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+      onTap: onTap,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  void _showDownloadReportsDialog() async {
+    final auth = context.read<AuthService>();
+    final restaurantId = auth.restaurantId;
+    if (restaurantId == null) return;
+
+    DateTime selectedDate = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: V2Colors.s2,
+          title: const Text("Download Reports", style: TextStyle(color: Colors.white, fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Select a date to download the daily collection summary.", style: TextStyle(color: V2Colors.muted, fontSize: 12)),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2023),
+                    lastDate: DateTime.now(),
+                    builder: (context, child) => Theme(
+                      data: ThemeData.dark().copyWith(
+                        colorScheme: const ColorScheme.dark(primary: V2Colors.yellow, onPrimary: Colors.black, surface: V2Colors.s2, onSurface: Colors.white),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) setState(() => selectedDate = picked);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: V2Colors.s3, borderRadius: BorderRadius.circular(8), border: Border.all(color: V2Colors.border)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(DateFormat('dd-MM-yyyy').format(selectedDate), style: const TextStyle(color: Colors.white)),
+                      const Icon(Icons.calendar_today, color: V2Colors.yellow, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                final dateId = "${restaurantId}_${DateFormat('yyyy-MM-dd').format(selectedDate)}";
+                final doc = await FirebaseFirestore.instance.collection('daily_collections').doc(dateId).get();
+                
+                if (!doc.exists) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No collections found for this date."), backgroundColor: V2Colors.red));
+                  return;
+                }
+
+                final data = doc.data()!;
+                await ReportService.printDailyCollection(
+                  data: data,
+                  restaurantName: auth.restaurantName ?? "YUG POS",
+                  dateStr: DateFormat('dd-MM-yyyy').format(selectedDate),
+                );
+              },
+              child: const Text("Download PDF Report"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportFilteredOrdersPDF() async {
+    final auth = context.read<AuthService>();
+    final restaurantId = auth.restaurantId;
+    if (restaurantId == null) return;
+
+    // Show loading
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Preparing Order List PDF..."), backgroundColor: V2Colors.yellow));
+
+    final start = DateTime(_selectedHistoryDate.year, _selectedHistoryDate.month, _selectedHistoryDate.day);
+    final end = start.add(const Duration(days: 1));
+
+    try {
+      Query q = _firestore.collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+          .where('createdAt', isLessThan: Timestamp.fromDate(end));
+      
+      if (_hTab != 'all') q = q.where('orderType', isEqualTo: _hTab == 'table' ? 'dineIn' : _hTab);
+      
+      final snapshot = await q.orderBy('createdAt', descending: true).get();
+      
+      final orders = snapshot.docs.where((doc) {
+        final o = doc.data() as Map<String, dynamic>;
+        final status = o['status'] ?? 'new';
+        if (_hFilter == 'active') {
+          return status != 'billed' && status != 'done' && status != 'cleared' && status != 'cancelled';
+        } else {
+          return status == _hFilter;
+        }
+      }).map((doc) {
+        final d = doc.data() as Map<String, dynamic>;
+        d['id'] = doc.id; // ensure ID is available
+        return d;
+      }).toList();
+
+      if (orders.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No orders found for the current filters."), backgroundColor: V2Colors.orange));
+        return;
+      }
+
+      await ReportService.printOrderHistoryList(
+        orders: orders,
+        restaurantName: auth.restaurantName ?? "YUG POS",
+        date: _selectedHistoryDate,
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Export failed: $e"), backgroundColor: V2Colors.red));
+    }
+  }
+
+  Widget _buildMobileReportsView(String? restaurantId) {
+    final today = DateFormat('yyyy-MM-dd').format(_selectedReportsDate);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Generate Reports", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text("Review and archive daily business performance.", style: TextStyle(color: V2Colors.muted, fontSize: 11)),
+          const SizedBox(height: 24),
+          
+          // Date Selector Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: V2Styles.cardDecoration,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("SELECT DATE", style: TextStyle(color: V2Colors.muted, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () async {
+                    final DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedReportsDate,
+                      firstDate: DateTime(2023),
+                      lastDate: DateTime.now(),
+                      builder: (context, child) => Theme(
+                        data: ThemeData.dark().copyWith(
+                          colorScheme: const ColorScheme.dark(primary: V2Colors.yellow, onPrimary: Colors.black, surface: V2Colors.s2, onSurface: Colors.white),
+                        ),
+                        child: child!,
+                      ),
+                    );
+                    if (picked != null) setState(() => _selectedReportsDate = picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(color: V2Colors.s3, borderRadius: BorderRadius.circular(8), border: Border.all(color: V2Colors.border)),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(DateFormat('EEEE, dd MMMM yyyy').format(_selectedReportsDate), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                        const Icon(Icons.calendar_month, color: V2Colors.yellow, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+
+          // Report Actions
+          _buildReportActionCard(
+            title: "Daily Collection Summary",
+            description: "A professional PDF with net revenue, payment breakdown, and source counts.",
+            icon: Icons.assignment,
+            onTap: () async {
+              final auth = context.read<AuthService>();
+              final dateId = "${restaurantId}_${DateFormat('yyyy-MM-dd').format(_selectedReportsDate)}";
+              final doc = await _firestore.collection('daily_collections').doc(dateId).get();
+              
+              if (!doc.exists) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records found for this date."), backgroundColor: V2Colors.orange));
+                return;
+              }
+              
+              await ReportService.printDailyCollection(
+                data: doc.data()!,
+                restaurantName: auth.restaurantName ?? "YUG POS",
+                dateStr: DateFormat('dd-MM-yyyy').format(_selectedReportsDate),
+              );
+            },
+          ),
+          
+          const SizedBox(height: 16),
+          
+          _buildReportActionCard(
+            title: "Detailed Order List",
+            description: "A granular list of all transactions for the day, including item summaries and token IDs.",
+            icon: Icons.list_alt,
+            onTap: () async {
+              final auth = context.read<AuthService>();
+              if (restaurantId == null) return;
+              
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fetching order list..."), backgroundColor: V2Colors.yellow));
+              
+              final start = DateTime(_selectedReportsDate.year, _selectedReportsDate.month, _selectedReportsDate.day);
+              final end = start.add(const Duration(days: 1));
+
+              try {
+                final snapshot = await _firestore.collection('orders')
+                    .where('restaurantId', isEqualTo: restaurantId)
+                    .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+                    .where('createdAt', isLessThan: Timestamp.fromDate(end))
+                    .get();
+                
+                final orders = snapshot.docs.map((doc) {
+                  final d = doc.data() as Map<String, dynamic>;
+                  d['id'] = doc.id;
+                  return d;
+                }).toList();
+
+                if (orders.isEmpty) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No orders found for this date."), backgroundColor: V2Colors.orange));
+                  return;
+                }
+
+                await ReportService.printOrderHistoryList(
+                  orders: orders,
+                  restaurantName: auth.restaurantName ?? "YUG POS",
+                  date: _selectedReportsDate,
+                );
+              } catch (e) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Export failed: $e"), backgroundColor: V2Colors.red));
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportActionCard({required String title, required String description, required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: V2Styles.cardDecoration,
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: V2Colors.yellow.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: V2Colors.yellow, size: 28),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(description, style: const TextStyle(color: V2Colors.muted, fontSize: 10, height: 1.4)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: V2Colors.muted, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+  Widget _buildFullHistoryPage(String? restaurantId, UserRole role) {
+    return Scaffold(
+      backgroundColor: V2Colors.bg,
+      appBar: AppBar(
+        backgroundColor: V2Colors.s1,
+        title: const Text("Order History", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download, color: V2Colors.yellow),
+            onPressed: () => _exportFilteredOrdersPDF(),
+            tooltip: "Download PDF Order List",
+          ),
+        ],
+      ),
+      body: _buildMobileHistoryView(restaurantId, role),
+    );
+  }
+
+  // --- RESPONSIVE LAYOUT (HIDDEN ON MOBILE NOW) ---
+  Widget _buildResponsiveLayout(BuildContext context, String? restaurantId, UserRole role) => Container();
 }
 

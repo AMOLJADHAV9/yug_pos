@@ -53,7 +53,11 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
 
     double thisMonthRevenue = 0;
     double lastMonthRevenue = 0;
+    double thisWeekRevenue = 0;
     int thisMonthOrders = 0;
+    int thisWeekOrders = 0;
+
+    final sevenDaysAgo = today.subtract(const Duration(days: 7));
 
     if (snapshot.hasData) {
       for (var doc in snapshot.data!.docs) {
@@ -73,6 +77,11 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
         } else if (createdAt.isAfter(startOfLastMonth) && createdAt.isBefore(startOfThisMonth)) {
           lastMonthRevenue += amount;
         }
+
+        if (createdAt.isAfter(sevenDaysAgo)) {
+          thisWeekRevenue += amount;
+          thisWeekOrders++;
+        }
       }
     }
 
@@ -85,7 +94,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     }
 
     final width = MediaQuery.of(context).size.width;
-    int crossAxis = width > 600 ? 3 : 2;
+    int crossAxis = width > 900 ? 4 : (width > 600 ? 3 : 2);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -105,7 +114,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
           ),
           const SizedBox(height: 24),
 
-          _buildSectionHeader("Monthly Performance", Icons.bar_chart, const Color(0xFF800000)),
+          _buildSectionHeader("Performance Overview", Icons.bar_chart, const Color(0xFF800000)),
           const SizedBox(height: 16),
           GridView.count(
             shrinkWrap: true,
@@ -133,6 +142,26 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                   const Color(0xFF800000),
                   subtitle: monthTrend,
                   subtitleColor: trendColor,
+                ),
+              ),
+              InkWell(
+                onTap: () {
+                  final thisWeekOrdersList = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final status = data['status']?.toString() ?? '';
+                    if ((status != 'billed' && status != 'completed') || data['createdAt'] == null) return false;
+                    final createdAt = (data['createdAt'] as Timestamp).toDate();
+                    return createdAt.isAfter(sevenDaysAgo);
+                  }).toList();
+                  _showOrderDetailDialog("This Week's Orders", thisWeekOrdersList);
+                },
+                child: _buildStatCard(
+                  "This Week (7 Days)",
+                  "₹${thisWeekRevenue.toStringAsFixed(0)}",
+                  Icons.view_week,
+                  Colors.amber,
+                  subtitle: "$thisWeekOrders Orders Recorded",
+                  subtitleColor: Colors.amberAccent,
                 ),
               ),
               InkWell(
@@ -453,25 +482,49 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
         }
       }
     }
+    final maxRevenue = weeklyRevenue.values.fold<double>(0, (a, b) => a > b ? a : b);
+
     return Container(
       height: MediaQuery.of(context).size.width < 600 ? 280 : 350,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: const Color(0xFF141615), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
       child: Column(
         children: [
-          const Text("Weekly Revenue Trend", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+          const Text("Weekly Revenue Trend (Last 12 Weeks)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
           const SizedBox(height: 24),
           Expanded(
             child: LineChart(
               LineChartData(
                 backgroundColor: const Color(0xFF141615),
-                gridData: const FlGridData(show: false),
+                maxY: maxRevenue > 0 ? maxRevenue * 1.2 : 100,
+                gridData: FlGridData(
+                  show: true, 
+                  drawVerticalLine: false, 
+                  horizontalInterval: maxRevenue > 0 ? maxRevenue / 4 : 25,
+                  getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
+                ),
                 titlesData: FlTitlesData(
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      getTitlesWidget: (v, meta) {
+                        if (v >= 1000) return Text('₹${(v / 1000).toStringAsFixed(0)}k', style: const TextStyle(fontSize: 8, color: Colors.white54));
+                        return Text('₹${v.toStringAsFixed(0)}', style: const TextStyle(fontSize: 8, color: Colors.white54));
+                      },
+                    ),
+                  ),
                   bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, getTitlesWidget: _buildLineChartTitle)),
                 ),
                 borderData: FlBorderData(show: false),
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => const Color(0xFF141615),
+                    getTooltipItems: (spots) => spots.map((s) => LineTooltipItem("₹${s.y.toStringAsFixed(0)}", const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold))).toList(),
+                  ),
+                ),
                 lineBarsData: [
                   LineChartBarData(
                     spots: weeklyRevenue.entries.map((e) => FlSpot(e.key.toDouble(), e.value)).toList(),
@@ -479,7 +532,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                     color: const Color(0xFFFCDD22),
                     barWidth: 3,
                     belowBarData: BarAreaData(show: true, color: const Color(0xFFFCDD22).withOpacity(0.1)),
-                    dotData: const FlDotData(show: false),
+                    dotData: const FlDotData(show: true),
                   ),
                 ],
               ),
@@ -491,7 +544,10 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   }
 
   Widget _buildLineChartTitle(double value, TitleMeta meta) {
-    return Text(value.toInt().toString(), style: const TextStyle(color: Colors.white54, fontSize: 10));
+    if (value.toInt() == 11) return const Text("Now", style: TextStyle(color: Color(0xFFFCDD22), fontSize: 10, fontWeight: FontWeight.bold));
+    if (value.toInt() == 0) return const Text("-12w", style: TextStyle(color: Colors.white54, fontSize: 10));
+    if (value.toInt() == 5) return const Text("-6w", style: TextStyle(color: Colors.white54, fontSize: 10));
+    return const SizedBox.shrink();
   }
 
   Widget _buildSectionHeader(String title, IconData icon, Color color) {

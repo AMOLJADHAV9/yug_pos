@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/pos_view_content.dart';
 import './v2_styles.dart';
+import './reports_screen.dart';
 
 class CashierDashboardV2 extends StatefulWidget {
   const CashierDashboardV2({super.key});
@@ -14,14 +15,25 @@ class CashierDashboardV2 extends StatefulWidget {
 class _CashierDashboardV2State extends State<CashierDashboardV2> {
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthService>();
-    
-    return Scaffold(
-      backgroundColor: V2Colors.bg,
-      drawer: _buildDrawer(context, auth),
-      body: const SafeArea(
-        child: POSViewContent(isAdminTab: false),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 1200;
+        
+        if (isMobile) {
+          // Inner POSViewContent handles everything on mobile (including its own Scaffold & Drawer)
+          return const POSViewContent(isAdminTab: false);
+        }
+        
+        // Desktop uses the outer Scaffold with Drawer
+        final auth = context.watch<AuthService>();
+        return Scaffold(
+          backgroundColor: V2Colors.bg,
+          drawer: _buildDrawer(context, auth),
+          body: const SafeArea(
+            child: POSViewContent(isAdminTab: false),
+          ),
+        );
+      },
     );
   }
 
@@ -58,6 +70,10 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               children: [
                 _buildDrawerItem(Icons.dashboard_outlined, "Dashboard", true, () => Navigator.pop(context)),
+                _buildDrawerItem(Icons.assessment_outlined, "Reports & History", false, () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CashierReportsScreen()));
+                }),
                 _buildDrawerItem(Icons.settings_outlined, "Settings", false, () {}),
                 _buildDrawerItem(Icons.help_outline, "Support", false, () {}),
               ],
