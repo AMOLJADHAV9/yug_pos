@@ -94,28 +94,23 @@ class ReportService {
   }
 
   // â”€â”€ Standard thermal widths in PDF points (72 points per inch) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  static const double _width58mm = 155.91; // approx 155.91 pts
-  static const double _width75mm = 212.77; // approx 212.77 pts
+  // Thermal widths in PDF points (72 pt per inch)
+  // 58mm  = 58 / 25.4 * 72 = 164.41 pt
+  // 3 inch = 3 * 72 = 216.00 pt
+  static const double _width58mm = 164.41;
+  static const double _width75mm = 216.00; // kept name for compatibility; used as 3-inch width
+  static const PaperSize _defaultReceiptPaperSize = PaperSize.mm80;
 
   // Standard thermal page format: defaults to 58mm but builds dynamically
   static PdfPageFormat _getThermalFormat(double width) => PdfPageFormat(
         width,
         100 * PdfPageFormat.cm, // 1 meter max height per page
-        marginAll: 6,
+        // Keep margins minimal so printed content starts near left edge.
+        marginAll: 2,
       );
 
-  // Dynamic content wrapper: Centering 58mm design on wider paper
-  static pw.Widget _receiptWrapper(double pageWidth, List<pw.Widget> children) {
-    if (pageWidth > 200) { // If printing on 80mm (226pt)
-      final sidePadding = (pageWidth - _width58mm) / 2 - 6; // substracting margin
-      return pw.Padding(
-        padding: pw.EdgeInsets.symmetric(horizontal: sidePadding > 0 ? sidePadding : 0),
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: children,
-        ),
-      );
-    }
+  // Dynamic content wrapper: always use available printable width.
+  static pw.Widget _receiptWrapper(double _pageWidth, List<pw.Widget> children) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: children,
@@ -147,6 +142,64 @@ class ReportService {
     if (type == 'delivery') return isFinalBill ? 'Type: DELIVERY' : 'DELIVERY';
     if (isFinalBill) return 'Table: ${data['tableName']}';
     return includeTablePrefix ? 'TABLE: ${data['tableName']}' : data['tableName'].toString().toUpperCase();
+  }
+
+  // Thermal text helpers for stable fixed-width formatting (58mm/75mm).
+  static int _thermalChars(PaperSize paperSize) => paperSize == PaperSize.mm58 ? 32 : 52;
+
+  static String _clipText(String text, int maxChars) {
+    final clean = text.replaceAll('\n', ' ').replaceAll('\r', ' ').trim();
+    if (clean.length <= maxChars) return clean;
+    return clean.substring(0, maxChars);
+  }
+
+  static String _fitLeft(String text, int width) {
+    final clipped = _clipText(text, width);
+    return clipped.padRight(width);
+  }
+
+  static String _fitRight(String text, int width) {
+    final clipped = _clipText(text, width);
+    return clipped.padLeft(width);
+  }
+
+  static String _lineOf(int count, {String ch = '-'}) => List.filled(count, ch).join();
+
+  static List<String> _wrapText(String text, int width) {
+    final clean = text.replaceAll('\n', ' ').replaceAll('\r', ' ').trim();
+    if (clean.isEmpty) return [''];
+    if (clean.length <= width) return [clean];
+
+    final words = clean.split(RegExp(r'\s+'));
+    final List<String> lines = [];
+    var current = '';
+    for (final w in words) {
+      if (current.isEmpty) {
+        current = w;
+      } else if ((current.length + 1 + w.length) <= width) {
+        current = '$current $w';
+      } else {
+        lines.add(current);
+        current = w;
+      }
+    }
+    if (current.isNotEmpty) lines.add(current);
+
+    // If a very long word breaks width, hard-split fallback.
+    final List<String> normalized = [];
+    for (final line in lines) {
+      if (line.length <= width) {
+        normalized.add(line);
+      } else {
+        var start = 0;
+        while (start < line.length) {
+          final end = (start + width < line.length) ? start + width : line.length;
+          normalized.add(line.substring(start, end));
+          start = end;
+        }
+      }
+    }
+    return normalized;
   }
 
   // â”€â”€ DAILY COLLECTION REPORT (A4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -498,19 +551,24 @@ class ReportService {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text("TOKEN: ${data['tokenNo'] ?? data['kotNumber'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(_formatOrderTypeDisplay(data).toUpperCase(), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                   pw.Text("Time: ${DateFormat('hh:mm a').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 6)),
                 ]
               ),
               pw.SizedBox(height: 1),
-              pw.Text("Order ID: #${orderId.substring(0, 6).toUpperCase()}", style: const pw.TextStyle(fontSize: 6)),
-              pw.Text("Waiter: ${data['waiterName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 6)),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Order ID: #${orderId.substring(0, 6).toUpperCase()}", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text("Waiter: ${(data['waiterName'] ?? 'Counter').toString().toUpperCase()}", style: const pw.TextStyle(fontSize: 6)),
+                ],
+              ),
               _thickDash(),
 
               // â”€â”€ Column headers â”€â”€
               pw.Row(children: [
-                pw.Expanded(flex: 3, child: pw.Text("ITEM", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
                 pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 3, child: pw.Text("ITEM", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
               ]),
               _dash(),
 
@@ -525,8 +583,8 @@ class ReportService {
                   child: pw.Row(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                    pw.Expanded(flex: 3, child: pw.Text(itemName, style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
                     pw.Expanded(flex: 1, child: pw.Text("$itemQty", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
+                    pw.Expanded(flex: 3, child: pw.Text(itemName, style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
                   ]),
                 );
               }),
@@ -1011,31 +1069,27 @@ class ReportService {
     List<int> bytes = [];
 
     final kotNo = data['kotNo'] ?? 1;
-    final tokenNum = data['tokenNo'] ?? data['kotNumber'] ?? 'N/A';
     final tableName = _formatOrderTypeDisplay(data);
     final waiterName = data['waiterName'] ?? 'Staff';
     final timeStr = DateFormat('hh:mm a').format(DateTime.now());
     final note = data['note'] ?? '';
+    final pageChars = _thermalChars(paperSize);
+    final divider = _lineOf(pageChars, ch: '-');
 
-    // Header: YUGPOS
+    // Header
     bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
     bytes += generator.text("YUGPOS", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.text("KITCHEN TICKET", styles: const PosStyles(bold: true));
-    bytes += generator.hr();
-
-    // Primary Identifiers: LARGE
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text("KITCHEN ORDER TICKET", styles: const PosStyles(bold: true));
     bytes += generator.text("KOT #$kotNo", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
-    bytes += generator.text("TOKEN: $tokenNum", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.text("TABLE: $tableName", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.emptyLines(1);
+    bytes += generator.text(tableName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
 
-    // Secondary Details: Small
+    // Meta details
     bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
-    bytes += generator.text("Waiter : $waiterName");
-    bytes += generator.text("Time : $timeStr");
+    bytes += generator.text("WAITER : ${waiterName.toString().toUpperCase()}");
+    bytes += generator.text("TIME   : $timeStr");
 
-    // Delivery Info in KOT
+    // Customer info for delivery/takeaway
     final orderType = (data['orderType'] ?? '').toString().toLowerCase();
     if (orderType == 'delivery' || orderType == 'takeaway') {
       final custName = (data['customerName'] ?? 'Walk-in').toString().toUpperCase();
@@ -1044,31 +1098,32 @@ class ReportService {
         bytes += generator.text("ADDR: ${data['deliveryAddress']}", styles: const PosStyles(fontType: PosFontType.fontB));
       }
     }
-    
-    bytes += generator.hr();
 
-    // Column Headers
-    bytes += generator.text("QTY   ITEM", styles: const PosStyles(bold: true, fontType: PosFontType.fontA));
-    bytes += generator.hr();
+    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.text("QTY ITEM", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
 
-    // Items
-    final items = data['items'] as List;
-    for (var item in items) {
-      final qty = item['quantity'] ?? 1;
-      final name = item['name'].toString().toUpperCase();
-      bytes += generator.text("${qty.toString().padRight(4)} x $name", styles: const PosStyles(bold: true, fontType: PosFontType.fontA));
+    final qtyW = paperSize == PaperSize.mm58 ? 3 : 4;
+    final itemW = pageChars - qtyW - 1;
+    final items = _groupItems(data['items'] as List? ?? []);
+    for (final item in items) {
+      final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+      final lines = _wrapText((item['name'] ?? '').toString().toUpperCase(), itemW);
+      for (var i = 0; i < lines.length; i++) {
+        final prefix = i == 0 ? _fitRight("$qty", qtyW) : (' ' * qtyW);
+        bytes += generator.text("$prefix ${_fitLeft(lines[i], itemW)}", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+      }
     }
 
-    bytes += generator.hr();
+    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
 
     // Note
     if (note.isNotEmpty) {
-      bytes += generator.emptyLines(1);
       bytes += generator.text("Note : $note", styles: const PosStyles(bold: true, fontType: PosFontType.fontA));
-      bytes += generator.hr();
+      bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
     }
 
-    bytes += generator.feed(3);
+    bytes += generator.feed(2);
     bytes += generator.cut();
     return bytes;
   }
@@ -1080,155 +1135,194 @@ class ReportService {
     String hotelName = "YUG POS",
     String address = "",
     String gstNumber = "",
-    PaperSize paperSize = PaperSize.mm58,
+    PaperSize paperSize = _defaultReceiptPaperSize,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(paperSize, profile);
     List<int> bytes = [];
 
-    // Header: Title
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: false, fontType: PosFontType.fontB));
-    if (address.isNotEmpty) {
-      bytes += generator.text(address);
-    }
-    if (gstNumber.isNotEmpty) {
-      bytes += generator.text("GSTIN: $gstNumber");
-    }
-    bytes += generator.hr(ch: '=');
-    bytes += generator.text("TAX INVOICE", styles: const PosStyles(bold: true, height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.hr(ch: '-');
+    final pageChars = _thermalChars(paperSize);
+    // Keep final bill content centered on wider paper for equal left/right whitespace.
+    final contentChars = paperSize == PaperSize.mm58 ? pageChars : 48;
+    final leftPad = ((pageChars - contentChars) / 8).floor() + (paperSize == PaperSize.mm58 ? 0 : 3);
+    final rightPad = pageChars - contentChars - leftPad;
+    final divider = _lineOf(contentChars, ch: '-');
+    final thickDivider = _lineOf(contentChars, ch: '=');
 
-    // Bill Details (Center-Aligned blocks)
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB));
-    final receiptNum = data['receiptNumber'] ?? '';
-    final tableDisplay = _formatOrderTypeDisplay(data, isFinalBill: true);
-    
-    bytes += generator.text("BILL #: $receiptNum", styles: const PosStyles(bold: true));
-    bytes += generator.text(tableDisplay.toUpperCase(), styles: const PosStyles(bold: true));
-    
-    final billedAt = _getDateTime(data['billedAt']);
-    final createdAt = _getDateTime(data['createdAt']);
-    
-    final dateStr = DateFormat('dd-MM-yyyy  hh:mm a').format(billedAt);
+    final receiptNum = (data['receiptNumber'] ?? '').toString();
+    final tableDisplay = _formatOrderTypeDisplay(data, isFinalBill: true).toUpperCase();
+    final billedAt = _getDateTime(data['billedAt'] ?? data['completedAt'] ?? data['createdAt']);
+    final createdAt = _getDateTime(data['createdAt'] ?? data['billedAt'] ?? data['completedAt']);
+    final dateStr = DateFormat('dd-MM-yyyy').format(billedAt);
     final startStr = DateFormat('hh:mm a').format(createdAt);
     final endStr = DateFormat('hh:mm a').format(billedAt);
-    
-    final token = data['kotNumber'] ?? 'N/A';
-    bytes += generator.text("DATE: $dateStr");
-    bytes += generator.text("START: $startStr   END: $endStr");
-    bytes += generator.text("TOKEN: $token", styles: const PosStyles(bold: true));
-    
-    bytes += generator.text("CASHIER: ${data['cashierName'] ?? 'STAFF'}");
-    bytes += generator.text("WAITER: ${data['waiterName'] ?? 'STAFF'}");
 
-    // Customer Info (Thermal Bill)
+    final groupedItems = _groupItems(data['items'] as List? ?? []);
+
+    final subtotalVal = _getDouble(data['subtotal']) > 0
+        ? _getDouble(data['subtotal'])
+        : (_getDouble(data['totalAmount']) > 0 ? _getDouble(data['totalAmount']) : _getDouble(data['grandTotal']));
+    final serviceChargeVal = _getDouble(data['serviceCharge']);
+    final discountVal = _getDouble(data['discount']);
+    double cgstVal = _getDouble(data['cgst']);
+    double sgstVal = _getDouble(data['sgst']);
+    final gstP = _getDouble(data['gstPercentage']);
+    if ((cgstVal == 0 && sgstVal == 0) && gstP > 0 && subtotalVal > 0) {
+      final half = subtotalVal * (gstP / 2) / 100;
+      cgstVal = half;
+      sgstVal = half;
+    }
+    final computedGrand = _getDouble(data['grandTotal']) > 0
+        ? _getDouble(data['grandTotal'])
+        : (total > 0 ? total : subtotalVal + serviceChargeVal - discountVal + cgstVal + sgstVal);
+
+    String padLine(String line) =>
+        (' ' * leftPad) +
+        _fitLeft(_clipText(line, contentChars), contentChars) +
+        (' ' * rightPad);
+
+    void addLine(String line, {PosStyles style = const PosStyles(fontType: PosFontType.fontB)}) {
+      bytes += generator.text(padLine(line), styles: style);
+    }
+
+    String kvLine(String key, String value) {
+      final leftWidth = (contentChars * 0.58).floor();
+      final rightWidth = contentChars - leftWidth;
+      return _fitLeft(key, leftWidth) + _fitRight(value, rightWidth);
+    }
+
+    String twoColKvLine({
+      required String leftKey,
+      required String leftValue,
+      required String rightKey,
+      required String rightValue,
+    }) {
+      final colGap = 2;
+      final colWidth = ((contentChars - colGap) / 2).floor();
+      final keyW = (colWidth * 0.42).floor();
+      final valueW = colWidth - keyW - 3; // " : "
+
+      String col(String key, String value) {
+        final safeValueW = valueW > 0 ? valueW : 1;
+        return _fitLeft(key, keyW) + " : " + _fitLeft(value, safeValueW);
+      }
+
+      return col(leftKey, leftValue) + (' ' * colGap) + col(rightKey, rightValue);
+    }
+
+    // ITEM layout widths by paper.
+    final qtyW = paperSize == PaperSize.mm58 ? 3 : 4;
+    final rateW = paperSize == PaperSize.mm58 ? 6 : 9;
+    final amtW = paperSize == PaperSize.mm58 ? 7 : 10;
+    final spacer = 2;
+    final itemNameW = contentChars - qtyW - rateW - amtW - spacer;
+
+    // Header
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB));
+    if (address.isNotEmpty) bytes += generator.text(address);
+    if (gstNumber.isNotEmpty) bytes += generator.text("GSTIN: $gstNumber");
+    bytes += generator.text("TAX INVOICE", styles: const PosStyles(bold: true));
+    addLine(divider);
+
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    addLine(twoColKvLine(
+      leftKey: "Bill No",
+      leftValue: receiptNum.isEmpty ? "N/A" : receiptNum,
+      rightKey: "Order",
+      rightValue: tableDisplay,
+    ));
+    addLine(twoColKvLine(
+      leftKey: "Date",
+      leftValue: dateStr,
+      rightKey: "Cashier",
+      rightValue: (data['cashierName'] ?? 'STAFF').toString().toUpperCase(),
+    ));
+    addLine(twoColKvLine(
+      leftKey: "Start",
+      leftValue: startStr,
+      rightKey: "Waiter",
+      rightValue: (data['waiterName'] ?? 'STAFF').toString().toUpperCase(),
+    ));
+    addLine(kvLine("END", endStr));
+
     final orderTypeStr = (data['orderType'] ?? '').toString().toLowerCase();
     if (orderTypeStr == 'delivery' || orderTypeStr == 'takeaway') {
-      bytes += generator.hr(ch: '-');
-      bytes += generator.text("CUSTOMER: ${(data['customerName'] ?? 'Walk-in').toString().toUpperCase()}", styles: const PosStyles(bold: true));
-      if (data['customerContact'] != null && data['customerContact'].toString().isNotEmpty) {
-        bytes += generator.text("PHONE: ${data['customerContact']}");
+      final customer = (data['customerName'] ?? 'Walk-in').toString();
+      addLine(kvLine("CUSTOMER", customer.toUpperCase()));
+      final phone = (data['customerContact'] ?? '').toString();
+      if (phone.isNotEmpty) addLine(kvLine("PHONE", phone));
+      final addr = (data['deliveryAddress'] ?? '').toString();
+      if (orderTypeStr == 'delivery' && addr.isNotEmpty) {
+        final wrapped = _wrapText("ADDR: $addr", contentChars);
+        for (final line in wrapped) {
+          addLine(line);
+        }
       }
-      if (orderTypeStr == 'delivery' && data['deliveryAddress'] != null && data['deliveryAddress'].toString().isNotEmpty) {
-        bytes += generator.text("ADDRESS: ${data['deliveryAddress']}", styles: const PosStyles(fontType: PosFontType.fontB));
+    }
+
+    addLine(divider);
+
+    // Items section
+    final itemHeader = _fitLeft("ITEM", itemNameW) +
+        _fitRight("QTY", qtyW) +
+        _fitRight("RATE", rateW) +
+        _fitRight("AMT", amtW);
+    addLine(itemHeader, style: const PosStyles(bold: true, fontType: PosFontType.fontB));
+    addLine(divider);
+
+    for (final item in groupedItems) {
+      final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+      final price = _getDouble(item['price']);
+      final amount = qty * price;
+      final nameLines = _wrapText((item['name'] ?? '').toString().toUpperCase(), itemNameW);
+      for (var i = 0; i < nameLines.length; i++) {
+        final isFirst = i == 0;
+        final line = _fitLeft(nameLines[i], itemNameW) +
+            _fitRight(isFirst ? "$qty" : "", qtyW) +
+            _fitRight(isFirst ? price.toStringAsFixed(0) : "", rateW) +
+            _fitRight(isFirst ? amount.toStringAsFixed(0) : "", amtW);
+        addLine(line);
       }
     }
 
-    bytes += generator.hr(ch: '-');
+    addLine(divider);
 
-    // Column Headers (6-1-2-3 Optimized for 58mm)
-    bytes += generator.row([
-      PosColumn(text: "ITEM", width: 6, styles: const PosStyles(bold: true, fontType: PosFontType.fontB)),
-      PosColumn(text: "QT", width: 1, styles: const PosStyles(bold: true, align: PosAlign.center, fontType: PosFontType.fontB)),
-      PosColumn(text: "RT", width: 2, styles: const PosStyles(bold: true, align: PosAlign.right, fontType: PosFontType.fontB)),
-      PosColumn(text: "AMT", width: 3, styles: const PosStyles(bold: true, align: PosAlign.right, fontType: PosFontType.fontB)),
-    ]);
-    bytes += generator.hr(ch: '.');
-
-    // Items (6-1-2-3 Balanced widths)
-    final items = _groupItems(data['items'] as List? ?? []);
-    for (var item in items) {
-      final qty = item['quantity'] ?? 1;
-      final price = (item['price'] ?? 0) as num;
-      bytes += generator.row([
-        PosColumn(text: "${item['name']}".toUpperCase(), width: 6, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB)),
-        PosColumn(text: "$qty", width: 1, styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB)),
-        PosColumn(text: "${price.toStringAsFixed(0)}", width: 2, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
-        PosColumn(text: "${(qty * price).toStringAsFixed(0)}", width: 3, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
-      ]);
+    // Totals
+    addLine(kvLine("SUBTOTAL", "INR ${subtotalVal.toStringAsFixed(2)}"));
+    if (serviceChargeVal > 0) {
+      addLine(kvLine("SERVICE CHARGE", "INR ${serviceChargeVal.toStringAsFixed(2)}"));
+    }
+    if (discountVal > 0) {
+      addLine(kvLine("DISCOUNT", "-INR ${discountVal.toStringAsFixed(2)}"));
+    }
+    if (cgstVal > 0) {
+      final p = gstP > 0 ? " (${(gstP / 2).toStringAsFixed(1)}%)" : "";
+      addLine(kvLine("CGST$p", "INR ${cgstVal.toStringAsFixed(2)}"));
+    }
+    if (sgstVal > 0) {
+      final p = gstP > 0 ? " (${(gstP / 2).toStringAsFixed(1)}%)" : "";
+      addLine(kvLine("SGST$p", "INR ${sgstVal.toStringAsFixed(2)}"));
     }
 
-    bytes += generator.hr(ch: '-');
-
-    // Totals Grid (2 columns for alignment)
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
-    final sub = data['subtotal'] ?? total;
-    final sc = data['serviceCharge'] ?? 0;
-    final ds = data['discount'] ?? 0;
-
-    bytes += generator.row([
-      PosColumn(text: "SUBTOTAL:", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
-      PosColumn(text: "INR ${sub.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
-    ]);
-
-    if (sc > 0) {
-      bytes += generator.row([
-        PosColumn(text: "SERVICE CHRG:", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
-        PosColumn(text: "INR ${sc.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
-      ]);
-    }
-
-    if (ds > 0) {
-      bytes += generator.row([
-        PosColumn(text: "DISCOUNT:", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
-        PosColumn(text: "-INR ${ds.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
-      ]);
-    }
-    
-    // GST Breakdown
-    final cgst = data['cgst'] ?? 0;
-    final sgst = data['sgst'] ?? 0;
-    final gstP = data['gstPercentage'] ?? 0;
-    if (cgst > 0) {
-      bytes += generator.row([
-        PosColumn(text: "CGST (${(gstP/2).toStringAsFixed(1)}%):", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
-        PosColumn(text: "INR ${cgst.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
-      ]);
-      bytes += generator.row([
-        PosColumn(text: "SGST (${(gstP/2).toStringAsFixed(1)}%):", width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
-        PosColumn(text: "INR ${sgst.toStringAsFixed(2)}", width: 5, styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB)),
-      ]);
-    }
-
-    bytes += generator.emptyLines(1);
-    bytes += generator.hr(ch: '=');
-
-    // Grand Total (Centered & Large)
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text("GRAND TOTAL", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.text("INR ${total.toStringAsFixed(2)}", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
-    bytes += generator.hr(ch: '=');
-    bytes += generator.text("= " * 16);
-    bytes += generator.text("GRAND TOTAL: INR ${total.toStringAsFixed(0)}", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.text("= " * 16);
+    addLine(thickDivider);
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, bold: true));
+    addLine(kvLine("GRAND TOTAL", "INR ${computedGrand.toStringAsFixed(2)}"),
+        style: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1, fontType: PosFontType.fontB));
+    addLine(thickDivider);
 
     // Footer
-    bytes += generator.feed(1);
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text("PAYMENT: ${paymentMode.toUpperCase()}");
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    addLine(kvLine("PAYMENT", paymentMode.toUpperCase()));
+    addLine(kvLine("STATUS", "PAID"));
+    // Keep footer compact to reduce paper usage.
     bytes += generator.setStyles(const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB));
-    bytes += generator.text("STATUS: PAID");
-    
-    bytes += generator.feed(1);
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: false));
     bytes += generator.text("Thank you! Visit Again");
     bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(bold: true));
-    
-    bytes += generator.feed(3);
-    bytes += generator.cut();
 
+    bytes += generator.feed(1);
+    bytes += generator.cut();
     return bytes;
   }
 

@@ -259,7 +259,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.restaurant, size: 48, color: const Color(0xFFFCDD22)),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: SizedBox(
+                              width: 150,
+                              height: 56,
+                              child: Image.asset(
+                                'lib/assets/img/yug-poslogo.png',
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 10),
                           const Text("YUG POS", style: TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 18)),
                         ],

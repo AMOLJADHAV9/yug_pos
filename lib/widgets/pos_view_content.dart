@@ -383,7 +383,7 @@ class _POSViewContentState extends State<POSViewContent> {
   Widget _buildColumnTables(String? restaurantId, UserRole role, {bool isMobile = false}) {
     final isWaiter = role == UserRole.waiter;
     return Container(
-      width: isMobile ? null : (isWaiter ? 260 : 200),
+      width: isMobile ? null : (isWaiter ? 280 : 240),
       decoration: BoxDecoration(
         border: Border(right: BorderSide(color: isMobile ? Colors.transparent : V2Colors.border)),
       ),
@@ -820,15 +820,19 @@ class _POSViewContentState extends State<POSViewContent> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
                           children: [
-                            if (isMobile) 
+                            if (isMobile)
                               Container(
-                                height: 60, width: double.infinity,
+                                height: 60,
+                                width: double.infinity,
                                 margin: const EdgeInsets.only(bottom: 8),
-                                decoration: BoxDecoration(color: V2Colors.s3, borderRadius: BorderRadius.circular(6)),
-                                child: const Center(child: Text("🍽", style: TextStyle(fontSize: 24))),
+                                child: _buildMenuItemThumb(item, isLarge: true),
                               )
                             else
-                              const Text("🍽", style: TextStyle(fontSize: 16)),
+                              SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: _buildMenuItemThumb(item),
+                              ),
                             const SizedBox(height: 2),
                             Text(
                               item.name, 
@@ -881,6 +885,38 @@ class _POSViewContentState extends State<POSViewContent> {
     );
   }
 
+  Widget _buildMenuItemThumb(MenuItem item, {bool isLarge = false}) {
+    final imageUrl = (item.imageUrl ?? '').trim();
+    final radius = BorderRadius.circular(isLarge ? 6 : 4);
+    final placeholder = Container(
+      decoration: BoxDecoration(
+        color: V2Colors.s3,
+        borderRadius: radius,
+        border: Border.all(color: V2Colors.border),
+      ),
+      child: Icon(
+        Icons.fastfood_rounded,
+        size: isLarge ? 22 : 12,
+        color: V2Colors.muted,
+      ),
+    );
+
+    if (imageUrl.isEmpty) return placeholder;
+
+    return ClipRRect(
+      borderRadius: radius,
+      child: Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => placeholder,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return placeholder;
+        },
+      ),
+    );
+  }
+
   // --- COL 3: CART ---
   Widget _buildColumnCart(String? restaurantId, UserRole role, {bool isMobile = false}) {
     final cart = context.watch<CartProvider>();
@@ -896,7 +932,7 @@ class _POSViewContentState extends State<POSViewContent> {
           _buildCartInfo(cart),
           if (cart.orderType != OrderType.dineIn && !isMobile) _buildCustomerInputs(),
           Expanded(child: _buildCartList(cart, isMobile: isMobile)),
-          _buildCartFooter(cart, isMobile: isMobile),
+          _buildCartFooter(cart, isMobile: isMobile, isWaiter: isWaiter),
         ],
       ),
     );
@@ -1009,6 +1045,12 @@ class _POSViewContentState extends State<POSViewContent> {
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF222222)))),
           child: Row(
             children: [
+              SizedBox(
+                width: 34,
+                height: 34,
+                child: _buildMenuItemThumb(i.item),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1049,7 +1091,7 @@ class _POSViewContentState extends State<POSViewContent> {
     );
   }
 
-  Widget _buildCartFooter(CartProvider cart, {bool isMobile = false}) {
+  Widget _buildCartFooter(CartProvider cart, {bool isMobile = false, bool isWaiter = false}) {
     final subtotal = cart.totalAmount;
 
     return Container(
@@ -1068,8 +1110,10 @@ class _POSViewContentState extends State<POSViewContent> {
               Expanded(child: _buildActionBtn("✓ Place", V2Colors.green, () => _placeOrder(cart), height: isMobile ? 48 : 36)),
             ],
           ),
-          const SizedBox(height: 8),
-          _buildActionBtn("🖨 Bill", V2Colors.yellow, () => _printBill(cart), isFull: true, height: isMobile ? 48 : 36),
+          if (!isWaiter) ...[
+            const SizedBox(height: 8),
+            _buildActionBtn("🖨 Bill", V2Colors.yellow, () => _printBill(cart), isFull: true, height: isMobile ? 48 : 36),
+          ],
         ],
       ),
     );
@@ -2726,7 +2770,17 @@ class _POSViewContentState extends State<POSViewContent> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("YUG POS", style: V2Styles.logo.copyWith(fontSize: 20)),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: SizedBox(
+                        width: 110,
+                        height: 42,
+                        child: Image.asset(
+                          'lib/assets/img/yug-poslogo.png',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.close, color: V2Colors.muted, size: 20),
                       onPressed: () => Navigator.pop(context),

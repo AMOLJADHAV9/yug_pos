@@ -258,7 +258,17 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.restaurant_menu, size: 40, color: const Color(0xFF141615)),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      width: 140,
+                      height: 52,
+                      child: Image.asset(
+                        'lib/assets/img/yug-poslogo.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Text(restaurantName, style: const TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold)),
                   const Text("WAITER DASHBOARD", style: TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold)),

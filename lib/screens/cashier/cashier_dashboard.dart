@@ -89,7 +89,17 @@ class _CashierDashboardState extends State<CashierDashboard> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.point_of_sale, size: 48, color: Color(0xFFFCDD22)),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: SizedBox(
+                        width: 150,
+                        height: 58,
+                        child: Image.asset(
+                          'lib/assets/img/yug-poslogo.png',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     Text("YUG POS", style: const TextStyle(color: Color(0xFFFCDD22), fontWeight: FontWeight.bold, fontSize: 18)),
                     const Text("CASHIER PANEL", style: TextStyle(color: Colors.white70, fontSize: 12)),

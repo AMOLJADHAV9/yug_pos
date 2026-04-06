@@ -54,14 +54,25 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: V2Colors.yellow.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                  child: const Icon(Icons.storefront, color: V2Colors.yellow, size: 24),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 132,
+                    height: 46,
+                    child: Image.asset(
+                      'lib/assets/img/yug-poslogo.png',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(auth.restaurantName ?? "YUG POS", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                Text(auth.currentUser?.email ?? "", style: const TextStyle(color: V2Colors.muted, fontSize: 11)),
+                Text(
+                  auth.currentUser?.email ?? "",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: V2Colors.muted, fontSize: 11),
+                ),
               ],
             ),
           ),

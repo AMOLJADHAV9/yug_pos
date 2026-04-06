@@ -555,6 +555,89 @@ class _RevenueTabState extends State<RevenueTab> {
           },
         );
   }
+
+  Widget _buildOnlineSourceCard(
+    FirebaseFirestore firestore,
+    String? restaurantId, {
+    required String sourceKey,
+    required String title,
+    required Color color,
+    required IconData icon,
+  }) {
+    final startOfDay = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    double revenueFrom(QuerySnapshot snapshot) {
+      var revenue = 0.0;
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        if (status != 'billed' && status != 'completed') continue;
+
+        final billedAt = (data['billedAt'] as Timestamp?)?.toDate() ??
+            (data['createdAt'] as Timestamp?)?.toDate();
+        if (billedAt == null || billedAt.isBefore(startOfDay) || !billedAt.isBefore(endOfDay)) {
+          continue;
+        }
+
+        final source = (data['orderSource'] ?? data['channel'] ?? '').toString().toLowerCase().trim();
+        if (source != sourceKey) continue;
+        revenue += ((data['totalAmount'] ?? data['grandTotal'] ?? 0) as num).toDouble();
+      }
+      return revenue;
+    }
+
+    int countFrom(QuerySnapshot snapshot) {
+      var count = 0;
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        if (status != 'billed' && status != 'completed') continue;
+
+        final billedAt = (data['billedAt'] as Timestamp?)?.toDate() ??
+            (data['createdAt'] as Timestamp?)?.toDate();
+        if (billedAt == null || billedAt.isBefore(startOfDay) || !billedAt.isBefore(endOfDay)) {
+          continue;
+        }
+
+        final source = (data['orderSource'] ?? data['channel'] ?? '').toString().toLowerCase().trim();
+        if (source == sourceKey) count++;
+      }
+      return count;
+    }
+
+    return kIsWeb
+        ? FutureBuilder<QuerySnapshot>(
+            future: firestore.collection('orders').where('restaurantId', isEqualTo: restaurantId).get(),
+            builder: (context, snapshot) {
+              final revenue = snapshot.hasData ? revenueFrom(snapshot.data!) : 0.0;
+              final count = snapshot.hasData ? countFrom(snapshot.data!) : 0;
+              return _buildStatCard(
+                title,
+                "₹${revenue.toStringAsFixed(0)}",
+                icon,
+                color,
+                subtitle: "$count Orders",
+                onTap: () => _showTodayDetails(sourceKey),
+              );
+            },
+          )
+        : StreamBuilder<QuerySnapshot>(
+            stream: firestore.collection('orders').where('restaurantId', isEqualTo: restaurantId).snapshots(),
+            builder: (context, snapshot) {
+              final revenue = snapshot.hasData ? revenueFrom(snapshot.data!) : 0.0;
+              final count = snapshot.hasData ? countFrom(snapshot.data!) : 0;
+              return _buildStatCard(
+                title,
+                "₹${revenue.toStringAsFixed(0)}",
+                icon,
+                color,
+                subtitle: "$count Orders",
+                onTap: () => _showTodayDetails(sourceKey),
+              );
+            },
+          );
+  }
   Widget _buildTodayStats(BuildContext context, AsyncSnapshot<DocumentSnapshot> snapshot, FirebaseFirestore firestore, String? restaurantId) {
     double todayRevenue = 0;
     double todayTableRevenue = 0;
@@ -653,13 +736,29 @@ class _RevenueTabState extends State<RevenueTab> {
           subtitle: "$deliveryCount Orders",
           onTap: () => _showTodayDetails('delivery'),
         ),
-        _buildStatCard(
-          "Online Sales", 
-          "₹${todayOnlineRevenue.toStringAsFixed(0)}", 
-          Icons.cloud_download, 
-          Colors.blueAccent,
-          subtitle: "$onlineCount Z/S Orders",
-          onTap: () => _showTodayDetails('online'),
+        _buildOnlineSourceCard(
+          firestore,
+          restaurantId,
+          sourceKey: 'zomato',
+          title: "Zomato",
+          color: Colors.redAccent,
+          icon: Icons.local_mall,
+        ),
+        _buildOnlineSourceCard(
+          firestore,
+          restaurantId,
+          sourceKey: 'swiggy',
+          title: "Swiggy",
+          color: Colors.orangeAccent,
+          icon: Icons.delivery_dining,
+        ),
+        _buildOnlineSourceCard(
+          firestore,
+          restaurantId,
+          sourceKey: 'uber',
+          title: "Uber",
+          color: Colors.greenAccent,
+          icon: Icons.local_taxi,
         ),
         _buildStatCard(
           "Cash Sales", 
@@ -860,10 +959,14 @@ class _RevenueTabState extends State<RevenueTab> {
                   const onlineSources = [
                     'zomato',
                     'swiggy',
+                    'uber',
                     'urbanpiper',
                     'urban_piper',
                   ];
                   return orderType == 'online' || onlineSources.contains(orderSource);
+                }
+                if (type == 'zomato' || type == 'swiggy' || type == 'uber') {
+                  return orderSource == type;
                 }
 
                 return true;
@@ -891,7 +994,8 @@ class _RevenueTabState extends State<RevenueTab> {
                   if (type == 'table') return orderType == 'dine_in' || orderSource == 'dine_in';
                   if (type == 'takeaway') return orderType == 'takeaway' || orderSource == 'takeaway';
                   if (type == 'delivery') return orderType == 'delivery' || orderSource == 'delivery';
-                  if (type == 'online') return orderType == 'online' || ['zomato', 'swiggy'].contains(orderSource);
+                  if (type == 'online') return orderType == 'online' || ['zomato', 'swiggy', 'uber'].contains(orderSource);
+                  if (type == 'zomato' || type == 'swiggy' || type == 'uber') return orderSource == type;
                   return true;
                 }).toList();
               }
