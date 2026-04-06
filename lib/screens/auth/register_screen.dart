@@ -99,6 +99,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
                     ),
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -113,6 +114,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
                     ),
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -127,6 +129,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
                     ),
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -142,6 +145,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
                     ),
                     keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -156,6 +160,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
                     ),
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -178,6 +183,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
                     ),
                     obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _register(),
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton(

@@ -797,6 +797,9 @@ class _POSViewContentState extends State<POSViewContent> {
               itemCount: items.length,
               itemBuilder: (context, index) {
                 final item = items[index];
+                final cartQty = cart.items.where((i) => i.item.id == item.id).fold(0, (sum, i) => sum + i.quantity);
+                final isSelected = cartQty > 0;
+
                 return InkWell(
                   onTap: needsTable ? () {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -806,9 +809,12 @@ class _POSViewContentState extends State<POSViewContent> {
                     ));
                   } : () => cart.addItem(item),
                   child: Container(
-                    decoration: V2Styles.cardDecoration,
+                    decoration: isSelected 
+                      ? V2Styles.cardDecoration.copyWith(border: Border.all(color: V2Colors.yellow, width: 2))
+                      : V2Styles.cardDecoration,
                     padding: const EdgeInsets.all(8),
                     child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
                         Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -842,6 +848,25 @@ class _POSViewContentState extends State<POSViewContent> {
                               padding: const EdgeInsets.all(6),
                               decoration: const BoxDecoration(color: V2Colors.yellow, shape: BoxShape.circle),
                               child: const Icon(Icons.add, size: 16, color: Colors.black),
+                            ),
+                          ),
+                        if (isSelected)
+                          Positioned(
+                            top: -12, right: -12,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: V2Colors.yellow,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2))],
+                              ),
+                              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                              child: Center(
+                                child: Text(
+                                  "$cartQty", 
+                                  style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w900)
+                                ),
+                              ),
                             ),
                           ),
                       ],
@@ -1272,38 +1297,38 @@ class _POSViewContentState extends State<POSViewContent> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Row(
-                    children: [
-                      Text("#${id.substring(0, 4).toUpperCase()}", style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 11)),
-                      const SizedBox(width: 4),
-                      Text(DateFormat('dd/MM').format(_getDateTime(o['createdAt'])), style: const TextStyle(color: V2Colors.muted, fontSize: 9)),
-                    ],
-                  ),
-                  if (tokenNo != null)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(color: V2Colors.yellow.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                        child: Text("Token: $tokenNo", style: const TextStyle(color: V2Colors.yellow, fontSize: 9, fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Row(
+                  children: [
+                    Text("#${id.substring(0, 4).toUpperCase()}", style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 10)),
+                    const SizedBox(width: 4),
+                    Text(DateFormat('dd/MM').format(_getDateTime(o['createdAt'])), style: const TextStyle(color: V2Colors.muted, fontSize: 8)),
+                    if (tokenNo != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(color: V2Colors.yellow.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                          child: Text("Token: $tokenNo", style: const TextStyle(color: V2Colors.yellow, fontSize: 8, fontWeight: FontWeight.bold)),
+                        ),
                       ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.visibility, size: 13, color: V2Colors.muted),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _showOrderDetailDialog(id, o),
+                      tooltip: "View Details",
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.visibility, size: 14, color: V2Colors.muted),
-                    padding: const EdgeInsets.only(left: 8),
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showOrderDetailDialog(id, o),
-                    tooltip: "View Details",
-                  ),
-                ],
+                  ],
+                ),
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (status != 'billed' && status != 'done' && status != 'cancelled' && status != 'cleared')
                     IconButton(
-                      icon: const Icon(Icons.add_circle_outline, size: 16, color: V2Colors.yellow),
+                      icon: const Icon(Icons.add_circle_outline, size: 15, color: V2Colors.yellow),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: () {
@@ -1320,11 +1345,11 @@ class _POSViewContentState extends State<POSViewContent> {
                         ));
                       },
                     ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(color: V2Colors.border, borderRadius: BorderRadius.circular(4)),
-                    child: Text(o['orderType']?.toString().toUpperCase() ?? "DINE-IN", style: const TextStyle(color: V2Colors.muted, fontSize: 8, fontWeight: FontWeight.bold)),
+                    child: Text(o['orderType']?.toString().toUpperCase() ?? "DINE-IN", style: const TextStyle(color: V2Colors.muted, fontSize: 7, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -1352,43 +1377,52 @@ class _POSViewContentState extends State<POSViewContent> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(width: 5, height: 5, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                    const SizedBox(width: 4),
+                    Text(status.toString().toUpperCase(), style: TextStyle(color: V2Colors.muted, fontSize: 8)),
+                    const SizedBox(width: 5),
+                    if (status == 'billed')
+                      Expanded(
+                        child: Text("S:${DateFormat('HH:mm').format(_getDateTime(o['createdAt']))} | E:${DateFormat('HH:mm').format(_getDateTime(o['billedAt']))}", 
+                             style: const TextStyle(color: V2Colors.yellow, fontSize: 8, fontWeight: FontWeight.bold),
+                             overflow: TextOverflow.ellipsis),
+                      )
+                    else
+                      Text("S:${DateFormat('HH:mm').format(_getDateTime(o['createdAt']))}", style: const TextStyle(color: Colors.white38, fontSize: 8)),
+                  ],
+                ),
+              ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
-                  const SizedBox(width: 4),
-                  Text(status.toString().toUpperCase(), style: TextStyle(color: V2Colors.muted, fontSize: 9)),
-                  const SizedBox(width: 6),
-                  if (status == 'billed')
-                    Text("S: ${DateFormat('HH:mm').format(_getDateTime(o['createdAt']))} | E: ${DateFormat('HH:mm').format(_getDateTime(o['billedAt']))}", 
-                         style: const TextStyle(color: V2Colors.yellow, fontSize: 8.5, fontWeight: FontWeight.bold))
-                  else
-                    Text("S: ${DateFormat('HH:mm').format(_getDateTime(o['createdAt']))}", style: const TextStyle(color: Colors.white38, fontSize: 8.5)),
-                  const SizedBox(width: 8),
                   if (status != 'done' && status != 'cancelled' && status != 'billed' && status != 'cleared' && orderType != OrderType.dineIn)
                     InkWell(
                       onTap: () => _showSettleDialogFromHistory(id, o),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(color: V2Colors.green, borderRadius: BorderRadius.circular(4)),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.receipt_long, size: 10, color: Colors.white),
-                            SizedBox(width: 4),
-                            Text("PAY & BILL", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                            Icon(Icons.receipt_long, size: 8, color: Colors.white),
+                            SizedBox(width: 2),
+                            Text("PAY", style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
                     ),
                   if (canAdv)
                     Padding(
-                      padding: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.only(left: 4),
                       child: InkWell(
                         onTap: () => _advanceOrder(id, status),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(color: V2Colors.yellow, borderRadius: BorderRadius.circular(4)),
-                          child: Text("→ ${nxtMap[status]}", style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold)),
+                          child: Text("→${nxtMap[status]}", style: const TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ),
@@ -1571,10 +1605,12 @@ class _POSViewContentState extends State<POSViewContent> {
       final subtotal = cart.totalAmount;
       final total = subtotal * (1 + (_gstPercentage / 100));
 
+      int kotNo = 1;
+
       if (isNewOrder) {
         batch.set(orderRef, {
           'restaurantId': restaurantId,
-          'items': newItems,
+          'items': newItems.map((i) => {...i, 'kotNo': 1}).toList(),
           'totalAmount': total,
           'subtotal': subtotal,
           'gstPercentage': _gstPercentage,
@@ -1587,6 +1623,7 @@ class _POSViewContentState extends State<POSViewContent> {
           'customerName': cart.customerName,
           'customerContact': cart.customerContact,
           'deliveryAddress': cart.deliveryAddress,
+          'kotCount': 1,
         });
 
         if (isDineIn && cart.tableId != null) {
@@ -1596,12 +1633,19 @@ class _POSViewContentState extends State<POSViewContent> {
           });
         }
       } else {
+        // Fetch current order to get kotCount
+        final orderDoc = await orderRef.get();
+        if (orderDoc.exists) {
+          kotNo = (orderDoc.data()?['kotCount'] ?? 1) + 1;
+        }
+        
         batch.update(orderRef, {
-          'items': FieldValue.arrayUnion(newItems),
+          'items': FieldValue.arrayUnion(newItems.map((i) => {...i, 'kotNo': kotNo}).toList()),
           'totalAmount': FieldValue.increment(total),
           'subtotal': FieldValue.increment(subtotal),
           'gstPercentage': _gstPercentage,
           'lastUpdatedAt': FieldValue.serverTimestamp(),
+          'kotCount': kotNo,
         });
       }
 
@@ -1616,6 +1660,11 @@ class _POSViewContentState extends State<POSViewContent> {
         'items': newItems.map((i) => {'name': i['name'], 'quantity': i['quantity']}).toList(),
         'waiterName': 'POS Dashboard',
         'status': 'Pending',
+        'kotNo': kotNo,
+        'orderType': cart.orderType.name,
+        'customerName': cart.customerName,
+        'customerContact': cart.customerContact,
+        'deliveryAddress': cart.deliveryAddress,
         'createdAt': FieldValue.serverTimestamp(),
       };
       batch.set(kotRef, kotData);
@@ -1631,7 +1680,9 @@ class _POSViewContentState extends State<POSViewContent> {
         } else {
           await ReportService.printKOTReceipt(kotData, orderId);
         }
-      } catch (e) { debugPrint("KOT Print Error: $e"); }
+      } catch (e) {
+        debugPrint("KOT Print Error: $e");
+      }
 
       cart.clearCart();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isNewOrder ? "Order placed!" : "Items added!"), backgroundColor: V2Colors.green));
@@ -1662,6 +1713,9 @@ class _POSViewContentState extends State<POSViewContent> {
       orderType: cart.orderType.name,
       tableId: cart.tableId,
       tableName: cart.tableName ?? 'Takeaway',
+      customerName: cart.customerName,
+      customerContact: cart.customerContact,
+      deliveryAddress: cart.deliveryAddress,
       onComplete: () => setState(() {
         cart.clearCart();
         _hFilter = 'billed';
@@ -1980,9 +2034,9 @@ class _POSViewContentState extends State<POSViewContent> {
         'status': 'completed', 'receiptNumber': receiptNo, 'billedAt': Timestamp.now(),
         'serviceCharge': serviceCharge, 'discount': discount, 'subtotal': subtotal,
         'gst': gst, 'cgst': gst / 2, 'sgst': gst / 2, 'gstPercentage': gstPercentage,
-        'customerName': cart.customerName,
-        'customerContact': cart.customerContact,
-        'deliveryAddress': cart.deliveryAddress,
+        'customerName': customerName,
+        'customerContact': customerContact,
+        'deliveryAddress': deliveryAddress,
       };
       if (printerService.hasSavedPrinter || printerService.isConnected) {
         final bytes = await ReportService.generateFinalBillBytes(

@@ -85,6 +85,7 @@ class _AdminRegisterScreenState extends State<AdminRegisterScreen> {
                       prefixIcon: const Icon(Icons.restaurant_menu),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -94,6 +95,7 @@ class _AdminRegisterScreenState extends State<AdminRegisterScreen> {
                       prefixIcon: const Icon(Icons.person_outline),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -104,6 +106,7 @@ class _AdminRegisterScreenState extends State<AdminRegisterScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -114,6 +117,8 @@ class _AdminRegisterScreenState extends State<AdminRegisterScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     obscureText: true,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _registerAdmin(),
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton(

@@ -265,6 +265,7 @@ class _LoginScreenState extends State<LoginScreen> {
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: _primaryYellow, width: 1.5)),
           ),
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
         ),
         const SizedBox(height: 16),
         TextField(
@@ -288,6 +289,8 @@ class _LoginScreenState extends State<LoginScreen> {
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: _primaryYellow, width: 1.5)),
           ),
           obscureText: _obscurePassword,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _loginEmail(),
         ),
         const SizedBox(height: 32),
         SizedBox(

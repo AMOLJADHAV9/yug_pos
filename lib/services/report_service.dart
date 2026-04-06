@@ -485,7 +485,7 @@ class ReportService {
             build: (pw.Context context) => _receiptWrapper(format.width, [
               // â”€â”€ Header â”€â”€
               pw.Center(
-                child: pw.Text("KOT", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                child: pw.Text("KOT #${data['kotNo'] ?? 1}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
               ),
               pw.SizedBox(height: 1),
               pw.Center(
@@ -498,12 +498,13 @@ class ReportService {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text("Token: ${data['kotNumber'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text("TOKEN: ${data['tokenNo'] ?? data['kotNumber'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                   pw.Text("Time: ${DateFormat('hh:mm a').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 6)),
                 ]
               ),
               pw.SizedBox(height: 1),
-              pw.Text("Waiter: ${data['waiterName'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 6)),
+              pw.Text("Order ID: #${orderId.substring(0, 6).toUpperCase()}", style: const pw.TextStyle(fontSize: 6)),
+              pw.Text("Waiter: ${data['waiterName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 6)),
               _thickDash(),
 
               // â”€â”€ Column headers â”€â”€
@@ -1009,7 +1010,8 @@ class ReportService {
     final generator = Generator(paperSize, profile);
     List<int> bytes = [];
 
-    final kotNum = data['kotNumber'] ?? 'N/A';
+    final kotNo = data['kotNo'] ?? 1;
+    final tokenNum = data['tokenNo'] ?? data['kotNumber'] ?? 'N/A';
     final tableName = _formatOrderTypeDisplay(data);
     final waiterName = data['waiterName'] ?? 'Staff';
     final timeStr = DateFormat('hh:mm a').format(DateTime.now());
@@ -1023,8 +1025,9 @@ class ReportService {
 
     // Primary Identifiers: LARGE
     bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text("KOT : $kotNum", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
-    bytes += generator.text("TABLE : $tableName", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    bytes += generator.text("KOT #$kotNo", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    bytes += generator.text("TOKEN: $tokenNum", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.text("TABLE: $tableName", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
     bytes += generator.emptyLines(1);
 
     // Secondary Details: Small
