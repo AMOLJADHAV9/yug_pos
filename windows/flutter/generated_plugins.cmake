@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_core
   firebase_storage
   flutter_pos_printer_platform_image_3
+  permission_handler_windows
   printing
 )
 

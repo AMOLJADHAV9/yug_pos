@@ -1,9 +1,12 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/usb_printer_service.dart';
+import '../../../services/bluetooth_printer_service.dart';
 import '../../../services/report_service.dart';
 
 class UsersTab extends StatefulWidget {
@@ -428,158 +431,250 @@ class PrinterSettingsDialog extends StatefulWidget {
   State<PrinterSettingsDialog> createState() => _PrinterSettingsDialogState();
 }
 
-class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> {
+class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  late int _tabCount;
+
+  @override
+  void initState() {
+    super.initState();
+    final bool showBluetooth = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+    _tabCount = showBluetooth ? 2 : 1;
+    _tabController = TabController(length: _tabCount, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Consumer<UsbPrinterService>(
-      builder: (context, printerService, child) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF141615),
-          title: const Row(
-            children: [
-              Icon(Icons.print, color: Color(0xFFFCDD22)),
-              SizedBox(width: 10),
-              Text("USB Printer Setup", style: TextStyle(color: Colors.white)),
-            ],
-          ),
-          content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+    return AlertDialog(
+      backgroundColor: const Color(0xFF141615),
+      titlePadding: EdgeInsets.zero,
+      title: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+            child: Row(
               children: [
-                if (printerService.selectedDevice != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFCDD22).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFFCDD22).withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          printerService.isConnected ? Icons.check_circle : Icons.error_outline, 
-                          color: printerService.isConnected ? const Color(0xFFFCDD22) : Colors.redAccent
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Text("Current Printer", style: TextStyle(color: Colors.white54, fontSize: 10)),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: printerService.isConnected ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      printerService.isConnected ? "CONNECTED" : "OFFLINE", 
-                                      style: TextStyle(
-                                        color: printerService.isConnected ? Colors.greenAccent : Colors.redAccent, 
-                                        fontSize: 8, 
-                                        fontWeight: FontWeight.bold
-                                      )
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text(printerService.selectedDevice!.name ?? "Unknown", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              Text(printerService.selectedDevice!.address ?? "", style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => printerService.disconnect(),
-                          child: const Text("FORGET", style: TextStyle(color: Colors.white38, fontSize: 10)),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                             final bytes = await ReportService.generateKOTBytes({
-                               'tableName': 'TEST', 
-                               'items': [{'name': 'TEST PRINT', 'quantity': 1}]
-                             });
-                             final success = await printerService.printRawBytes(bytes);
-                             if (mounted) {
-                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                 content: Text(success ? "Test Page Sent!" : "Failed to print"),
-                                 backgroundColor: success ? Colors.green : Colors.red,
-                               ));
-                             }
-                          },
-                          child: const Text("TEST", style: TextStyle(color: Color(0xFFFCDD22))),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ] else if (printerService.isScanning) ...[
-                   Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                    ),
-                    child: const Row(
-                      children: [
-                        SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCDD22))),
-                        SizedBox(width: 12),
-                        Text("Looking for saved printer...", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-                const Text("Select a USB printer from the list below:", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 10),
-                if (printerService.isScanning)
-                  const Padding(
-                    padding: EdgeInsets.all(20.0),
-                    child: CircularProgressIndicator(color: Color(0xFFFCDD22)),
-                  )
-                else if (printerService.devices.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(20.0),
-                    child: Text("No USB printers found", style: TextStyle(color: Colors.white38)),
-                  )
-                else
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: printerService.devices.length,
-                      itemBuilder: (context, index) {
-                        final device = printerService.devices[index];
-                        return ListTile(
-                          title: Text(device.name ?? "Unknown Device", style: const TextStyle(color: Colors.white)),
-                          subtitle: Text(device.address ?? "", style: const TextStyle(color: Colors.white38)),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white24),
-                          onTap: () {
-                            printerService.selectDevice(device);
-                          },
-                        );
-                      },
-                    ),
-                  ),
+                const Icon(Icons.print, color: Color(0xFFFCDD22)),
+                const SizedBox(width: 10),
+                const Text("Printer Configuration", style: TextStyle(color: Colors.white, fontSize: 18)),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("CLOSE", style: TextStyle(color: Colors.white54)),
-            ),
-            ElevatedButton(
-              onPressed: printerService.isScanning ? null : () => printerService.scan(),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22)),
-              child: const Text("SCAN", style: TextStyle(color: const Color(0xFF141615))),
+          TabBar(
+            controller: _tabController,
+            indicatorColor: const Color(0xFFFCDD22),
+            labelColor: const Color(0xFFFCDD22),
+            unselectedLabelColor: Colors.white54,
+            tabs: [
+              const Tab(text: "USB (Windows)", icon: Icon(Icons.usb, size: 20)),
+              if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) 
+                const Tab(text: "Bluetooth (Android)", icon: Icon(Icons.bluetooth, size: 20)),
+            ],
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        height: 400,
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildUsbTab(),
+            if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) 
+              _buildBluetoothTab(),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("CLOSE", style: TextStyle(color: Colors.white54)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUsbTab() {
+    return Consumer<UsbPrinterService>(
+      builder: (context, service, _) {
+        return Column(
+          children: [
+            const SizedBox(height: 16),
+            if (service.selectedDevice != null) ...[
+              _buildConnectedSourceCard(
+                name: service.selectedDevice!.name ?? "USB Printer",
+                address: service.selectedDevice!.address ?? "USB",
+                isConnected: service.isConnected,
+                onForget: () => service.disconnect(),
+                onTest: () async {
+                  final bytes = await ReportService.generateKOTBytes({
+                    'tableName': 'TEST-USB', 
+                    'items': [{'name': 'USB TEST PRINT', 'quantity': 1}]
+                  });
+                  await service.printRawBytes(bytes);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+            Expanded(
+              child: _buildDeviceList(
+                devices: service.devices,
+                isScanning: service.isScanning,
+                onScan: () => service.scan(),
+                onSelect: (d) => service.selectDevice(d),
+                emptyTitle: "No USB printers found",
+                helpText: "Select a USB printer below:",
+              ),
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildBluetoothTab() {
+    return Consumer<BluetoothPrinterService>(
+      builder: (context, service, _) {
+        return Column(
+          children: [
+            const SizedBox(height: 16),
+            if (service.selectedDevice != null || service.hasSavedPrinter) ...[
+              _buildConnectedSourceCard(
+                name: service.selectedDevice?.name ?? "Saved Printer",
+                address: service.selectedDevice?.address ?? "",
+                isConnected: service.isConnected,
+                onForget: () => service.disconnect(),
+                onTest: () async {
+                  final bytes = await ReportService.generateKOTBytes({
+                    'tableName': 'TEST-BT', 
+                    'items': [{'name': 'BLUETOOTH TEST', 'quantity': 1}]
+                  }, paperSize: PaperSize.mm58);
+                  final success = await service.printRawBytes(bytes);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(success ? "Test Page Sent!" : "Failed to print"),
+                      backgroundColor: success ? Colors.green : Colors.red,
+                    ));
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+            Expanded(
+              child: _buildDeviceList(
+                devices: service.devices,
+                isScanning: service.isScanning,
+                onScan: () => service.scan(),
+                onSelect: (d) => service.selectDevice(d),
+                emptyTitle: "No Bluetooth printers found",
+                helpText: "Select a paired Bluetooth printer:",
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildConnectedSourceCard({
+    required String name,
+    required String address,
+    required bool isConnected,
+    required VoidCallback onForget,
+    required VoidCallback onTest,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFCDD22).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFCDD22).withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(isConnected ? Icons.check_circle : Icons.error_outline, 
+                   color: isConnected ? Colors.greenAccent : Colors.redAccent, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(isConnected ? "CONNECTED" : "DISCONNECTED", 
+                         style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    if (address.isNotEmpty) Text(address, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 20, color: Colors.white10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: onForget, child: const Text("FORGET", style: TextStyle(color: Colors.redAccent, fontSize: 11))),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: onTest, 
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), minimumSize: const Size(80, 32)),
+                child: const Text("TEST PRINT", style: TextStyle(color: Color(0xFF141615), fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeviceList({
+    required List<dynamic> devices,
+    required bool isScanning,
+    required VoidCallback onScan,
+    required Function(dynamic) onSelect,
+    required String emptyTitle,
+    required String helpText,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(helpText, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            if (isScanning)
+              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCDD22)))
+            else
+              IconButton(onPressed: onScan, icon: const Icon(Icons.refresh, size: 18, color: Color(0xFFFCDD22))),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (!isScanning && devices.isEmpty)
+          Expanded(child: Center(child: Text(emptyTitle, style: const TextStyle(color: Colors.white38))))
+        else
+          Expanded(
+            child: ListView.builder(
+              itemCount: devices.length,
+              itemBuilder: (context, index) {
+                final d = devices[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(d.name ?? "Unknown Device", style: const TextStyle(color: Colors.white, fontSize: 14)),
+                  subtitle: Text(d.address ?? "", style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+                  onTap: () => onSelect(d),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }

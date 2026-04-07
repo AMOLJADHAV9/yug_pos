@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +12,7 @@ import '../models/menu_item.dart';
 import '../providers/cart_provider.dart';
 import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
+import '../services/bluetooth_printer_service.dart';
 import '../utils/debouncer.dart';
 
 class CommonOrderDialog extends StatefulWidget {
@@ -668,6 +672,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
       'tableName': widget.table.name,
       'customerName': customerName,
       'waiterName': waiterDisplayName,
+      'restaurantId': auth.restaurantId, // CRITICAL: Added for receipt metadata retrieval
       'items': _selectedItems.map((i) => {
         'name': i.item.name,
         'quantity': i.quantity,
@@ -675,9 +680,13 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
       }).toList(),
     };
     
-    final printerService = context.read<UsbPrinterService>();
-    if (printerService.hasSavedPrinter) {
-      final bytes = await ReportService.generateKOTBytes(kotData);
+    final usb = context.read<UsbPrinterService>();
+    final bt = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    final dynamic printerService = isAndroid ? bt : usb;
+
+    if (printerService.hasSavedPrinter || printerService.isConnected) {
+      final bytes = await ReportService.generateKOTBytes(kotData, paperSize: isAndroid ? PaperSize.mm58 : PaperSize.mm80);
       await ReportService.printBytesIsolated(printerService, bytes);
     } else {
       await ReportService.printKOTReceipt(kotData, orderRef.id);

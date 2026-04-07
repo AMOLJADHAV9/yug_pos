@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
+import '../bluetooth_printer_settings_screen.dart';
+import '../../../services/bluetooth_printer_service.dart';
+import 'dart:io';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
@@ -14,8 +17,20 @@ class _SettingsTabState extends State<SettingsTab> {
   final _gstPercentCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _gstNumberCtrl = TextEditingController(); // Added GST Number
+  String? _selectedState;
   bool _loading = false;
   bool _saving = false;
+
+  // List of Indian States & UTs
+  static const List<String> _indianStates = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 
+    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 
+    'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 
+    'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar', 'Chandigarh', 'Dadra & Nagar Haveli', 'Delhi', 
+    'Jammu & Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+  ];
 
   @override
   void initState() {
@@ -34,6 +49,7 @@ class _SettingsTabState extends State<SettingsTab> {
         _gstPercentCtrl.text = (data['gstPercentage'] ?? 0).toString();
         _addressCtrl.text = (data['address'] ?? '').toString();
         _gstNumberCtrl.text = (data['gstNumber'] ?? '').toString();
+        _selectedState = data['state'] ?? 'Maharashtra';
       }
     }
     if (mounted) setState(() => _loading = false);
@@ -50,6 +66,7 @@ class _SettingsTabState extends State<SettingsTab> {
         'gstPercentage': double.tryParse(_gstPercentCtrl.text) ?? 0,
         'address': _addressCtrl.text.trim(),
         'gstNumber': _gstNumberCtrl.text.trim(),
+        'state': _selectedState,
         'updatedAt': FieldValue.serverTimestamp(),
         if (auth.restaurantName != null) 'name': auth.restaurantName,
       }, SetOptions(merge: true));
@@ -165,8 +182,96 @@ class _SettingsTabState extends State<SettingsTab> {
               ],
             ),
           ),
+
+          const SizedBox(height: 32),
+          _buildPrinterSection(context),
+          const SizedBox(height: 48),
         ],
       ),
+    );
+  }
+
+  Widget _buildPrinterSection(BuildContext context) {
+    if (Platform.isWindows) return const SizedBox.shrink(); // USB is handled differently or auto-detected
+
+    final printerService = context.watch<BluetoothPrinterService>();
+    final isConnected = printerService.isConnected;
+    final printerName = printerService.selectedDevice?.name ?? "No Printer Connected";
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader("Hardware & Printing", Icons.print_rounded, Colors.orange),
+        const SizedBox(height: 24),
+        Container(
+          constraints: const BoxConstraints(maxWidth: 500),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141615),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("BLUETOOTH THERMAL PRINTER", 
+                style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isConnected ? Colors.greenAccent.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                      color: isConnected ? Colors.greenAccent : Colors.redAccent,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          printerName.toUpperCase(),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        Text(
+                          isConnected ? "Active & Ready" : "Disconnected",
+                          style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.redAccent, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const BluetoothPrinterSettingsScreen()),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFFCDD22),
+                    side: const BorderSide(color: Color(0xFFFCDD22)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text("CONFIGURE PRINTER", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

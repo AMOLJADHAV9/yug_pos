@@ -50,6 +50,8 @@ dependencies:
   http: ^1.2.1
   esc_pos_utils_plus: any
   flutter_pos_printer_platform_image_3: ^1.2.4
+  wifi_iot: ^0.3.19
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:

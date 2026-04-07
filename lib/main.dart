@@ -16,6 +16,8 @@ import 'screens/cashier/cashier_dashboard.dart';
 import 'screens/cashier/cashier_dashboard_v2.dart';
 import 'screens/auth/unauthorized_screen.dart';
 import 'services/usb_printer_service.dart';
+import 'services/bluetooth_printer_service.dart';
+import 'services/wifi_service.dart';
 import 'utils/navigator_utils.dart';
 
 class GlobalHttpOverrides extends HttpOverrides {
@@ -36,34 +38,14 @@ void main() async {
   HttpOverrides.global = GlobalHttpOverrides();
   WidgetsFlutterBinding.ensureInitialized();
   
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
-  if (kIsWeb) {
-    // Web-specific settings to avoid assertion errors
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: false,
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
     );
-    // Disable runtime font fetching on web — prevents google_fonts from
-    // making network requests during CanvasKit initialization which causes
-    // the engine to crash with unresolved JS promises.
-    GoogleFonts.config.allowRuntimeFetching = false;
-  } else if (Platform.isAndroid || Platform.isIOS) {
-    // Mobile: persistence is safe and useful
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-    );
-  } else {
-    // Desktop (Windows/Linux/macOS): Firestore's C++ SDK fires cache callbacks
-    // on background threads, violating Flutter's platform-channel threading rules
-    // and causing "Lost connection to device" crashes. Disable persistence entirely.
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: false,
-    );
+  } catch (e) {
+    debugPrint("Firebase init error: $e");
   }
-
+  
   runApp(const WaiterPosApp());
 }
 
@@ -77,9 +59,12 @@ class WaiterPosApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => UsbPrinterService()),
+        ChangeNotifierProvider(create: (_) => BluetoothPrinterService()),
+        ChangeNotifierProvider(create: (_) => WifiService()),
       ],
       child: MaterialApp(
-        navigatorKey: rootNavigatorKey,
+        // Removed navigatorKey temporarily to fix "Empty History" crash
+        // navigatorKey: rootNavigatorKey, 
         title: 'YUG POS',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -93,9 +78,9 @@ class WaiterPosApp extends StatelessWidget {
             background: Color(0xFF141615),
             onSurface: Colors.white,
           ),
-          scaffoldBackgroundColor: Color(0xFF141615),
+          scaffoldBackgroundColor: const Color(0xFF141615),
           cardTheme: CardThemeData(
-            color: const Color(0xFF1A1C1B), // Slightly lighter for cards
+            color: const Color(0xFF1A1C1B),
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
@@ -116,7 +101,7 @@ class WaiterPosApp extends StatelessWidget {
             bodyMedium: GoogleFonts.inter(color: Colors.white70),
           ),
         ),
-        home: const AuthWrapper(key: ValueKey('auth_root')),
+        home: const AuthWrapper(),
       ),
     );
   }

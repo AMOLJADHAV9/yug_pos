@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +9,7 @@ import '../../../models/menu_item.dart';
 import '../../../models/table_model.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../services/report_service.dart';
+import '../../../services/bluetooth_printer_service.dart';
 import '../../../services/usb_printer_service.dart';
 import '../../../utils/navigator_utils.dart';
 
@@ -254,11 +256,15 @@ class _OrdersTabState extends State<OrdersTab> {
                                  final docId = doc.id;
                                  final alreadyBilled = data['status'] == 'billed';
 
-                                 // ── STEP 1: Firestore first (main thread, no native plugins) ──
+                                 // ── STEP 1: Firestore Settle ──
+                                 final currentRestaurantId = context.read<AuthService>().restaurantId;
+                                 int? receiptNo;
                                  if (!alreadyBilled) {
                                    try {
-                                     await ReportService.settleOrder(
-                                       docId: docId,
+                                     receiptNo = await ReportService.recordRevenueAndSettle(
+                                       orderId: docId,
+                                       restaurantId: currentRestaurantId!,
+                                       total: (data['totalAmount'] ?? 0).toDouble(),
                                        paymentMode: paymentMode,
                                      );
                                    } catch (e) {
@@ -269,34 +275,25 @@ class _OrdersTabState extends State<OrdersTab> {
                                          backgroundColor: Colors.red,
                                        ));
                                      }
-                                     return; // abort — don't print if save failed
+                                     return;
                                    }
                                  }
 
-                                 // ── STEP 2: Generate receipt bytes (pure Dart, safe) ──
-                                 final bytes = await ReportService.generateFinalBillBytes(
-                                   data: data,
+                                 // ── STEP 2: Smart Print (Silent Thermal or PDF Fallback) ──
+                                 final bt = context.read<BluetoothPrinterService>();
+                                 final usb = context.read<UsbPrinterService>();
+                                 final isAndroid = !kIsWeb && Platform.isAndroid;
+
+                                 await ReportService.printFinalBill(
+                                   orderData: data,
+                                   orderId: docId,
+                                   subtotal: (data['totalAmount'] ?? 0).toDouble(),
                                    total: (data['totalAmount'] ?? 0).toDouble(),
                                    paymentMode: paymentMode,
                                    hotelName: hotelName,
+                                   receiptNum: receiptNo?.toString() ?? data['receiptNumber']?.toString(),
+                                   printerService: isAndroid ? bt : usb,
                                  );
-
-                                 // ── STEP 3: Print (native USB — isolated via microtask) ──
-                                 // Using Future.microtask gives Flutter's event loop a clean
-                                 // boundary so the USB plugin's background thread callbacks
-                                 // cannot interfere with Firebase platform channels.
-                                 if (printerService.hasSavedPrinter) {
-                                   Future.microtask(() async {
-                                     try {
-                                       await printerService.printRawBytes(bytes);
-                                     } catch (e) {
-                                       debugPrint('Print error (bill already saved): $e');
-                                     }
-                                   });
-                                 } else {
-                                   // PDF fallback — no native USB involved
-                                   await ReportService.printOrderReceipt(data, docId);
-                                 }
 
                                  if (mounted) {
                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

@@ -14,6 +14,7 @@ import 'tabs/orders_tab.dart';
 import 'tabs/analytics_tab.dart';
 import 'tabs/takeaway_tab.dart';
 import 'tabs/settings_tab.dart';
+import 'tabs/wifi_settings_tab.dart';
 import '../order/online_orders_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -226,6 +227,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     {'icon': Icons.table_bar, 'label': 'Tables'},
     {'icon': Icons.cloud_download, 'label': 'Online'},
     {'icon': Icons.settings, 'label': 'Settings'},
+    {'icon': Icons.wifi, 'label': 'WiFi'},
   ];
 
   // Specific indices for the Bottom Navbar
@@ -337,6 +339,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 TablesTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
                 const OnlineOrdersScreen(isTab: true),
                 const SettingsTab(),
+                const WifiSettingsTab(),
               ],
             ),
             bottomNavigationBar: (isMobile && _selectedIndex == 1) 
@@ -548,6 +551,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       TablesTab(onTabRequested: (index) => setState(() => _selectedIndex = index)),
                       const OnlineOrdersScreen(isTab: true),
                       const SettingsTab(),
+                      const WifiSettingsTab(),
                     ],
                   ),
                 ),

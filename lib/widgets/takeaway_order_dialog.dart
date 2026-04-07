@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +10,7 @@ import '../models/menu_item.dart';
 import '../providers/cart_provider.dart';
 import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
+import '../services/bluetooth_printer_service.dart';
 import '../utils/debouncer.dart';
 
 class TakeawayOrderDialog extends StatefulWidget {
@@ -629,47 +633,37 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
       'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
       'customerName': customerName,
       'waiterName': waiterName,
+      'restaurantId': restaurantId, // CRITICAL: Added for receipt metadata retrieval
       'totalAmount': total,
       'items': _selectedItems.map((i) => {'name': i.item.name, 'quantity': i.quantity, 'price': i.item.price}).toList(),
     };
 
-    final printerService = context.read<UsbPrinterService>();
+    final usb = context.read<UsbPrinterService>();
+    final bt = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    final dynamic printerService = isAndroid ? bt : usb;
     final paymentMode = _paymentMethod;
     final hotelName = context.read<AuthService>().restaurantName ?? "YUG POS";
 
-    // STEP 1: Settle Firestore while main thread is clean (no USB calls yet)
-    await ReportService.settleOrder(docId: orderRef.id, paymentMode: paymentMode);
+    // STEP 1: Settle Firestore (main thread)
+    final receiptNo = await ReportService.recordRevenueAndSettle(
+      orderId: orderRef.id,
+      restaurantId: restaurantId!,
+      total: total,
+      paymentMode: paymentMode,
+    );
 
-    if (printerService.hasSavedPrinter) {
-      // STEP 2: Generate Bill bytes (pure Dart, safe)
-      final billBytes = await ReportService.generateFinalBillBytes(
-        data: kotData,
-        total: total,
-        paymentMode: paymentMode,
-        hotelName: hotelName,
-      );
-
-      // STEP 3: Fire USB print isolated in microtask
-      Future.microtask(() async {
-        try {
-          await ReportService.printBytesIsolated(printerService, billBytes);
-        } catch (e) {
-          debugPrint('Print error (order already saved): $e');
-        }
-      });
-    } else {
-      // PDF fallback — only Final Bill
-      await ReportService.printFinalBill(
-        orderData: kotData,
-        orderId: orderRef.id,
-        subtotal: total,
-        cgst: 0.0,
-        sgst: 0.0,
-        total: total,
-        paymentMode: paymentMode,
-        hotelName: hotelName,
-      );
-    }
+    // STEP 2: Smart Print (Thermal if configured, else PDF fallback)
+    await ReportService.printFinalBill(
+      orderData: kotData,
+      orderId: orderRef.id,
+      subtotal: total,
+      total: total,
+      paymentMode: paymentMode,
+      hotelName: hotelName,
+      receiptNum: receiptNo.toString(),
+      printerService: printerService,
+    );
 
     if (mounted) {
       Navigator.pop(context);

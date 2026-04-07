@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
+import '../../services/bluetooth_printer_service.dart';
+import '../../services/usb_printer_service.dart';
 import '../../models/table_model.dart';
 import '../../utils/navigator_utils.dart';
 import '../../services/report_service.dart';
@@ -3006,6 +3009,10 @@ class _CashierDashboardState extends State<CashierDashboard> {
       
       final String pMode = customPaymentMode ?? orderData['paymentMode'] as String? ?? "Cash/Unpaid";
       
+      final bt = context.read<BluetoothPrinterService>();
+      final usb = context.read<UsbPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+
       // Print the Premium Final Bill
       await ReportService.printFinalBill(
         orderData: orderData,
@@ -3016,6 +3023,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
         total: total,
         paymentMode: pMode,
         hotelName: restaurantName,
+        printerService: isAndroid ? bt : usb,
       );
       
       if (mounted) {

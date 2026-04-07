@@ -1,9 +1,13 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../services/usb_printer_service.dart';
+import '../../services/bluetooth_printer_service.dart';
 import '../providers/cart_provider.dart';
 
 class CartViewContent extends StatefulWidget {
@@ -366,6 +370,7 @@ class _CartViewContentState extends State<CartViewContent> {
         'waiterName': waiterName,
         'cashierName': cashierName,
         'kotNumber': kotNumber,
+        'restaurantId': restaurantId, // CRITICAL: Added for receipt metadata retrieval
         'createdAt': Timestamp.now(),
         'totalAmount': cart.totalAmount, // Added for receipt printing
         'items': cart.items.map((i) => {
@@ -374,17 +379,18 @@ class _CartViewContentState extends State<CartViewContent> {
           'price': i.item.price,
         }).toList(),
       };
-      final printerService = context.read<UsbPrinterService>();
-      final hasUsbPrinter = printerService.hasSavedPrinter;
+      final usb = context.read<UsbPrinterService>();
+      final bt = context.read<BluetoothPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final dynamic printerService = isAndroid ? bt : usb;
 
       // Auto-Print KOT for Waiter (only if NOT printing the final bill/settling)
       if (!printBill) {
-        if (hasUsbPrinter) {
-          final bytes = await ReportService.generateKOTBytes(kotData);
-          await ReportService.printBytesIsolated(printerService, bytes);
-        } else {
-          await ReportService.printKOTReceipt(kotData, orderId);
-        }
+        await ReportService.printKOTReceipt(
+          kotData, 
+          orderId, 
+          printerService: isAndroid ? bt : usb,
+        );
       }
       
       // If BILL is pressed, print the final bill and settle
@@ -415,33 +421,18 @@ class _CartViewContentState extends State<CartViewContent> {
         printData['paymentMode'] = paymentMode;
 
         // STEP 2: Generate bytes (pure Dart)
-        if (hasUsbPrinter) {
-          final bytes = await ReportService.generateFinalBillBytes(
-            data: printData,
-            total: finalTotal,
-            paymentMode: paymentMode,
-            hotelName: auth.restaurantName ?? "YUG POS",
-          );
-          // STEP 3: Print isolated in microtask
-          Future.microtask(() async {
-            try {
-              await ReportService.printBytesIsolated(printerService, bytes);
-            } catch (e) {
-              debugPrint('Print error: $e');
-            }
-          });
-        } else {
-          await ReportService.printFinalBill(
-            orderData: printData,
-            orderId: orderId,
-            subtotal: finalTotal,
-            cgst: 0.0,
-            sgst: 0.0,
-            total: finalTotal,
-            paymentMode: paymentMode,
-            hotelName: auth.restaurantName ?? "YUG POS",
-          );
-        }
+        // STEP 2: Generate bytes
+        // STEP 2: Smart Print (Thermal if configured, else PDF fallback)
+        await ReportService.printFinalBill(
+          orderData: printData,
+          orderId: orderId,
+          subtotal: finalTotal,
+          total: finalTotal,
+          paymentMode: paymentMode,
+          hotelName: auth.restaurantName ?? "YUG POS",
+          receiptNum: newReceiptNumber.toString(),
+          printerService: isAndroid ? bt : usb,
+        );
       }
 
         if (mounted) {
@@ -564,18 +555,25 @@ class _CartViewContentState extends State<CartViewContent> {
         );
         
         final printData = Map<String, dynamic>.from(tableOrderData);
+        printData['restaurantId'] = restaurantId; // Added for receipt metadata
         printData['receiptNumber'] = newReceiptNumber;
         printData['paymentMode'] = selectedPaymentMode;
 
-        // Print bill
+        final usb = context.read<UsbPrinterService>();
+        final bt = context.read<BluetoothPrinterService>();
+        final isAndroid = !kIsWeb && Platform.isAndroid;
+        final dynamic printerService = isAndroid ? bt : usb;
+
+        // Smart Print (Thermal if configured, else PDF fallback)
         await ReportService.printFinalBill(
           orderData: printData,
           orderId: currentOrderId,
           subtotal: (tableOrderData['totalAmount'] as num).toDouble(),
-          cgst: 0, sgst: 0,
           total: (tableOrderData['totalAmount'] as num).toDouble(),
           paymentMode: selectedPaymentMode,
           hotelName: auth.restaurantName ?? "YUG POS",
+          receiptNum: newReceiptNumber.toString(),
+          printerService: isAndroid ? bt : usb,
         );
 
         // Clear table

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -6,7 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'usb_printer_service.dart';
+import 'bluetooth_printer_service.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
 class ReportService {
@@ -19,9 +22,15 @@ class ReportService {
   static Future<void> _safePrint({
     required String name,
     required Future<Uint8List> Function(PdfPageFormat) onLayout,
+    BluetoothPrinterService? btService,
   }) async {
     if (!kIsWeb && Platform.isAndroid) {
-       // Optional: Add small delay for Android 7 stability if needed
+      if (btService != null && btService.isConnected) {
+        // If we have a direct BT connection, ideally we'd print directly.
+        // For now, since _safePrint is PDF-focused, we'll keep it as is
+        // but the caller should ideally use ESC/POS instead.
+        debugPrint("Direct BT printing available. Bypassing system print?");
+      }
     }
     if (!kIsWeb && Platform.isWindows) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -39,11 +48,13 @@ class ReportService {
           return {
             'name': resData?['name'] ?? defaultName,
             'address': resData?['address'] ?? defaultAddress,
+            'state': resData?['state'] ?? '', // Added state
+            'gstNumber': resData?['gstNumber'] ?? '',
           };
         }
       } catch (_) {}
     }
-    return {'name': defaultName, 'address': defaultAddress};
+    return {'name': defaultName, 'address': defaultAddress, 'state': '', 'gstNumber': ''};
   }
 
   static Future<pw.ImageProvider> _loadLogo() async {
@@ -98,15 +109,15 @@ class ReportService {
   // 58mm  = 58 / 25.4 * 72 = 164.41 pt
   // 3 inch = 3 * 72 = 216.00 pt
   static const double _width58mm = 164.41;
-  static const double _width75mm = 216.00; // kept name for compatibility; used as 3-inch width
+  static const double _width3inch = 216.00; // 3 inches * 72 points
   static const PaperSize _defaultReceiptPaperSize = PaperSize.mm80;
 
   // Standard thermal page format: defaults to 58mm but builds dynamically
+  // Standard thermal page format: defaults to 3-inch (216pt)
   static PdfPageFormat _getThermalFormat(double width) => PdfPageFormat(
-        width,
+        216.0, // Fixed at 3 inches for professional consistency
         100 * PdfPageFormat.cm, // 1 meter max height per page
-        // Keep margins minimal so printed content starts near left edge.
-        marginAll: 2,
+        marginAll: 0, // Maximize width usage
       );
 
   // Dynamic content wrapper: always use available printable width.
@@ -515,7 +526,22 @@ class ReportService {
 
   // â”€â”€ KOT RECEIPT (Professional Layout) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static Future<void> printKOTReceipt(
-      Map<String, dynamic> data, String orderId) async {
+      Map<String, dynamic> data, String orderId, {dynamic printerService, bool forcePdf = false}) async {
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    
+    // ── Bluetooth / USB Silent Print (Android) ──
+    if (isAndroid && !forcePdf && printerService != null &&
+        (printerService.hasSavedPrinter || printerService.isConnected)) {
+      try {
+        final bytes = await generateKOTBytes(data, paperSize: _defaultReceiptPaperSize);
+        await printBytesIsolated(printerService, bytes);
+        return;
+      } catch (e) {
+        debugPrint("BT KOT print error, falling back to PDF: $e");
+        // fall through to PDF below
+      }
+    }
+
     final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
     final roboto = await PdfGoogleFonts.robotoRegular();
@@ -538,37 +564,37 @@ class ReportService {
             build: (pw.Context context) => _receiptWrapper(format.width, [
               // â”€â”€ Header â”€â”€
               pw.Center(
-                child: pw.Text("KOT #${data['kotNo'] ?? 1}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                child: pw.Text("KOT #${data['kotNo'] ?? 1}", style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
               ),
-              pw.SizedBox(height: 1),
+              pw.SizedBox(height: 2),
               pw.Center(
                 child: pw.Text(_formatOrderTypeDisplay(data),
-                    style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               ),
-              pw.SizedBox(height: 1),
+              pw.SizedBox(height: 4),
               
               // â”€â”€ Meta Info â”€â”€
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text(_formatOrderTypeDisplay(data).toUpperCase(), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-                  pw.Text("Time: ${DateFormat('hh:mm a').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text(_formatOrderTypeDisplay(data).toUpperCase(), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text("Time: ${DateFormat('hh:mm a').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 11)),
                 ]
               ),
-              pw.SizedBox(height: 1),
+              pw.SizedBox(height: 4),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text("Order ID: #${orderId.substring(0, 6).toUpperCase()}", style: const pw.TextStyle(fontSize: 6)),
-                  pw.Text("Waiter: ${(data['waiterName'] ?? 'Counter').toString().toUpperCase()}", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text("Waiter: ${(data['waiterName'] ?? 'Counter').toString().toUpperCase()}", style: const pw.TextStyle(fontSize: 11)),
+                  pw.Text("Cashier: ${(data['cashierName'] ?? 'Staff').toString().toUpperCase()}", style: const pw.TextStyle(fontSize: 11)),
                 ],
               ),
               _thickDash(),
 
               // â”€â”€ Column headers â”€â”€
               pw.Row(children: [
-                pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
-                pw.Expanded(flex: 3, child: pw.Text("ITEM", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
+                pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 3, child: pw.Text("ITEM", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
               ]),
               _dash(),
 
@@ -579,12 +605,12 @@ class ReportService {
                 final itemQty = (item['quantity'] as num?)?.toInt() ?? 1;
                 
                 return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 0.5),
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
                   child: pw.Row(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                    pw.Expanded(flex: 1, child: pw.Text("$itemQty", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
-                    pw.Expanded(flex: 3, child: pw.Text(itemName, style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold))),
+                    pw.Expanded(flex: 1, child: pw.Text("$itemQty", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
+                    pw.Expanded(flex: 3, child: pw.Text(itemName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
                   ]),
                 );
               }),
@@ -612,6 +638,7 @@ class ReportService {
     final logo = await _loadLogo();
     final resDetails = await _getRestaurantDetails(data, restaurantName, "Market Road, City");
     final actualHotelName = resDetails['name']!;
+    final actualGst = resDetails['gstNumber']!;
 
     await _safePrint(
       name: 'Order_${orderId.substring(0, 8)}.pdf',
@@ -625,6 +652,7 @@ class ReportService {
               pw.Center(child: pw.Image(logo, width: 35, height: 35)),
               pw.SizedBox(height: 1),
               pw.Center(child: pw.Text(actualHotelName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+              if (actualGst.isNotEmpty) pw.Center(child: pw.Text("GSTIN: $actualGst", style: const pw.TextStyle(fontSize: 6))),
               pw.Center(child: pw.Text("ORDER SLIP", style: const pw.TextStyle(fontSize: 6))),
               _thickDash(),
               pw.Row(
@@ -647,7 +675,7 @@ class ReportService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text("CUSTOMER: ${(data['customerName'] ?? 'Walk-in').toUpperCase()}", 
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
                     if (data['customerContact']?.toString().isNotEmpty ?? false)
                       pw.Text("PHONE: ${data['customerContact']}", style: const pw.TextStyle(fontSize: 6)),
                     if ((data['orderType'] ?? '').toString().toLowerCase() == 'delivery' && 
@@ -659,9 +687,9 @@ class ReportService {
               ],
               _dash(),
               pw.Row(children: [
-                pw.Expanded(flex: 3, child: pw.Text("Item", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.Expanded(flex: 1, child: pw.Text("Qty", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
-                pw.Expanded(flex: 2, child: pw.Text("Amt", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 3, child: pw.Text("Item", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6))),
+                pw.Expanded(flex: 1, child: pw.Text("Qty", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 2, child: pw.Text("Amt", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6), textAlign: pw.TextAlign.right)),
               ]),
               _dash(),
               ...items.map((item) {
@@ -672,9 +700,9 @@ class ReportService {
                     child: pw.Row(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Expanded(flex: 3, child: pw.Text("${item['name']}", style: const pw.TextStyle(fontSize: 8))),
-                        pw.Expanded(flex: 1, child: pw.Text("$qty", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                        pw.Expanded(flex: 2, child: pw.Text("â‚¹${(price * qty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                        pw.Expanded(flex: 3, child: pw.Text("${item['name']}", style: const pw.TextStyle(fontSize: 6))),
+                        pw.Expanded(flex: 1, child: pw.Text("$qty", style: const pw.TextStyle(fontSize: 6), textAlign: pw.TextAlign.center)),
+                        pw.Expanded(flex: 2, child: pw.Text("â‚¹${(price * qty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
                       ],
                     ),
                   );
@@ -688,8 +716,8 @@ class ReportService {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                   pw.Text("TOTAL (EST.)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                   pw.Text("₹${(_getDouble(data['totalAmount']) * (1 + (data['gstPercentage'] ?? 0) / 100)).toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                   pw.Text("TOTAL (EST.)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
+                   pw.Text("₹${(_getDouble(data['totalAmount']) * (1 + (data['gstPercentage'] ?? 0) / 100)).toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
                 ],
               ),
               _thickDash(),
@@ -716,7 +744,42 @@ class ReportService {
     double gstPercentage = 0,
     String hotelName = "YUG POS",
     String address = "Market Road, City",
+    String? receiptNum,
+    dynamic printerService,
+    bool forcePdf = false,
   }) async {
+    final resDetails = await _getRestaurantDetails(orderData, hotelName, address);
+    final actualHotelName = resDetails['name'] ?? hotelName;
+    final actualAddress = resDetails['address'] ?? address;
+    final actualState = resDetails['state'] ?? ''; // Added state
+    final actualGst = resDetails['gstNumber'] ?? '';
+
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    // ── Bluetooth / USB Silent Print (Android only, when printer is ready) ──
+    if (isAndroid && !forcePdf && printerService != null &&
+        (printerService.hasSavedPrinter || printerService.isConnected)) {
+      try {
+        final bytes = await generateFinalBillBytes(
+          data: {
+            ...orderData,
+            if (receiptNum != null) 'receiptNumber': receiptNum,
+          },
+          total: total,
+          paymentMode: paymentMode,
+          hotelName: actualHotelName,
+          address: actualAddress,
+          state: actualState, // Pass state
+          gstNumber: actualGst,
+          paperSize: _defaultReceiptPaperSize,
+        );
+        await printBytesIsolated(printerService, bytes);
+        return;
+      } catch (e) {
+        debugPrint("BT Bill print error, falling back to PDF: $e");
+        // fall through to PDF below
+      }
+    }
+
     final items = _groupItems(orderData['items'] as List? ?? []);
     final date = _getDateTime(orderData['billedAt']);
     final dateStr = DateFormat('dd-MM-yyyy').format(date);
@@ -727,14 +790,11 @@ class ReportService {
     final robotoItalic = await PdfGoogleFonts.robotoItalic();
     final theme = pw.ThemeData.withFont(base: roboto, bold: robotoBold, italic: robotoItalic);
 
-    final receiptNum = orderData['receiptNumber'] ?? orderId.substring(0, 6);
+    final billNum = receiptNum ?? orderData['receiptNumber']?.toString() ?? orderId.substring(0, 6);
     final logo = await _loadLogo();
-    final resDetails = await _getRestaurantDetails(orderData, hotelName, address);
-    final actualHotelName = resDetails['name']!;
-    final actualAddress = resDetails['address']!;
 
     await _safePrint(
-      name: 'Invoice_$receiptNum.pdf',
+      name: 'Invoice_$billNum.pdf',
       onLayout: (PdfPageFormat format) async {
         final pdf = pw.Document();
         pdf.addPage(
@@ -747,10 +807,11 @@ class ReportService {
               
               // â”€â”€ Header â”€â”€
               pw.Center(child: pw.Image(logo, width: 35, height: 35)),
-              pw.SizedBox(height: 1),
-              pw.Center(child: pw.Text(actualHotelName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-              pw.Center(child: pw.Text(actualAddress, style: const pw.TextStyle(fontSize: 6), textAlign: pw.TextAlign.center)),
-              pw.SizedBox(height: 1),
+              pw.SizedBox(height: 2),
+              pw.Center(child: pw.Text(actualHotelName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+              pw.Center(child: pw.Text(actualAddress, style: const pw.TextStyle(fontSize: 10), textAlign: pw.TextAlign.center)),
+              if (actualGst.isNotEmpty) pw.Center(child: pw.Text("GSTIN: $actualGst", style: const pw.TextStyle(fontSize: 8))),
+              pw.SizedBox(height: 2),
               
               pw.Center(child: pw.Container(
                 padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -758,32 +819,38 @@ class ReportService {
                   color: PdfColors.grey200,
                   borderRadius: pw.BorderRadius.circular(4),
                 ),
-                child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
               )),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 6),
               
               // â”€â”€ Meta Data Grid â”€â”€
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text("Bill No: $receiptNum", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
+                  pw.Text("Bill No: $billNum", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
                   pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 6)),
                 ]
               ),
-              pw.SizedBox(height: 1),
+              pw.SizedBox(height: 2),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text(_formatOrderTypeDisplay(orderData, isFinalBill: true), style: const pw.TextStyle(fontSize: 6)),
-                  pw.Text("Time: $timeStr", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text(_formatOrderTypeDisplay(orderData, isFinalBill: true), style: const pw.TextStyle(fontSize: 11)),
+                  pw.Text("Time: $timeStr", style: const pw.TextStyle(fontSize: 11)),
                 ]
               ),
-              pw.SizedBox(height: 1),
-              pw.Text("Waiter: ${orderData['waiterName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 6)),
+              pw.SizedBox(height: 2),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Waiter: ${orderData['waiterName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 6)),
+                  pw.Text("Cashier: ${orderData['cashierName'] ?? 'Staff'}", style: const pw.TextStyle(fontSize: 6)),
+                ]
+              ),
               
               // â”€â”€ Customer Info (Delivery/Takeaway Only) â”€â”€
               if (printType == 'delivery' || printType == 'takeaway') ...[
-                pw.SizedBox(height: 1),
+                pw.SizedBox(height: 2),
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
@@ -796,7 +863,7 @@ class ReportService {
                       pw.Text("ADDRESS: ${orderData['deliveryAddress']}", style: const pw.TextStyle(fontSize: 6)),
                   ],
                 ),
-                pw.SizedBox(height: 1),
+                pw.SizedBox(height: 2),
               ],
               
               _thickDash(),
@@ -818,7 +885,7 @@ class ReportService {
                 final itemPrice = (item['price'] as num?)?.toDouble() ?? 0.0;
                 
                 return pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 0.5),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
                       child: pw.Row(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
@@ -843,30 +910,30 @@ class ReportService {
               // â”€â”€ Grand Total â”€â”€
               pw.Container(
                 color: PdfColors.grey100,
-                padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                padding: const pw.EdgeInsets.symmetric(vertical: 4),
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text("GRAND TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                    pw.Text("₹${total.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    pw.Text("GRAND TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
+                    pw.Text("₹${total.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
                   ]
                 )
               ),
               _thickDash(),
 
               // â”€â”€ Footer â”€â”€
-              pw.SizedBox(height: 8),
+              pw.SizedBox(height: 12),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text("PAYMENT: ${paymentMode.toUpperCase()}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
-                  pw.Text("STATUS: PAID", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                  pw.Text("PAYMENT: ${paymentMode.toUpperCase()}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
+                  pw.Text("STATUS: PAID", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold)),
                 ]
               ),
               pw.SizedBox(height: 4),
               pw.Center(child: pw.Text("Thank you! Visit Again", style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 6))),
-              pw.SizedBox(height: 1),
-              pw.Center(child: pw.Text("Powered by YUG POS", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey600))),
+              pw.SizedBox(height: 2),
+              pw.Center(child: pw.Text("Powered by YUG POS", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600))),
               pw.SizedBox(height: 2),
             ]);
           },
@@ -883,8 +950,8 @@ class ReportService {
         child: pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text(label, style: const pw.TextStyle(fontSize: 6)),
-            pw.Text(value, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
+            pw.Text(label, style: const pw.TextStyle(fontSize: 11)),
+            pw.Text(value, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
           ],
         ),
       );
@@ -1063,7 +1130,7 @@ class ReportService {
   );
 
   // â”€â”€ ESC/POS GENERATORS (Thermal Printers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  static Future<List<int>> generateKOTBytes(Map<String, dynamic> data, {PaperSize paperSize = PaperSize.mm58}) async {
+  static Future<List<int>> generateKOTBytes(Map<String, dynamic> data, {PaperSize paperSize = _defaultReceiptPaperSize}) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(paperSize, profile);
     List<int> bytes = [];
@@ -1077,31 +1144,39 @@ class ReportService {
     final divider = _lineOf(pageChars, ch: '-');
 
     // Header
+    final resDetails = await _getRestaurantDetails(data, "YUGPOS", "");
+    final actualName = resDetails['name'] ?? "YUGPOS";
+    final actualGst = resDetails['gstNumber'] ?? "";
+    final actualState = resDetails['state'] ?? "";
+
     bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text("YUGPOS", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
+    bytes += generator.text(actualName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    if (actualGst.isNotEmpty) bytes += generator.text("GSTIN: $actualGst");
+    if (actualState.isNotEmpty) bytes += generator.text("State: ${actualState.toUpperCase()}");
     bytes += generator.text("KITCHEN ORDER TICKET", styles: const PosStyles(bold: true));
     bytes += generator.text("KOT #$kotNo", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
-    bytes += generator.text(tableName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.text(tableName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left));
 
-    // Meta details
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
-    bytes += generator.text("WAITER : ${waiterName.toString().toUpperCase()}");
+    // Meta details (WAITER, TIME) in size1/FontA
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left));
+    bytes += generator.text("WAITER : ${(data['waiterName'] ?? 'Counter').toString().toUpperCase()}", styles: const PosStyles(bold: true));
+    bytes += generator.text("CASHIER: ${(data['cashierName'] ?? 'Staff').toString().toUpperCase()}", styles: const PosStyles(bold: true));
     bytes += generator.text("TIME   : $timeStr");
 
     // Customer info for delivery/takeaway
     final orderType = (data['orderType'] ?? '').toString().toLowerCase();
     if (orderType == 'delivery' || orderType == 'takeaway') {
       final custName = (data['customerName'] ?? 'Walk-in').toString().toUpperCase();
-      bytes += generator.text("CUSTOMER: $custName", styles: const PosStyles(bold: true));
+      bytes += generator.text("CUSTOMER: $custName", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size1, bold: true));
       if (orderType == 'delivery' && data['deliveryAddress'] != null) {
-        bytes += generator.text("ADDR: ${data['deliveryAddress']}", styles: const PosStyles(fontType: PosFontType.fontB));
+        bytes += generator.text("ADDR: ${data['deliveryAddress']}");
       }
     }
 
-    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
-    bytes += generator.text("QTY ITEM", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
-    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left));
+    bytes += generator.text("QTY ITEM", styles: const PosStyles(bold: true));
+    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left));
 
     final qtyW = paperSize == PaperSize.mm58 ? 3 : 4;
     final itemW = pageChars - qtyW - 1;
@@ -1111,16 +1186,16 @@ class ReportService {
       final lines = _wrapText((item['name'] ?? '').toString().toUpperCase(), itemW);
       for (var i = 0; i < lines.length; i++) {
         final prefix = i == 0 ? _fitRight("$qty", qtyW) : (' ' * qtyW);
-        bytes += generator.text("$prefix ${_fitLeft(lines[i], itemW)}", styles: const PosStyles(bold: true, fontType: PosFontType.fontB));
+        bytes += generator.text("$prefix ${_fitLeft(lines[i], itemW)}", styles: const PosStyles(bold: true));
       }
     }
 
-    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left));
 
     // Note
     if (note.isNotEmpty) {
-      bytes += generator.text("Note : $note", styles: const PosStyles(bold: true, fontType: PosFontType.fontA));
-      bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+      bytes += generator.text("Note : $note", styles: const PosStyles(bold: true));
+      bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left));
     }
 
     bytes += generator.feed(2);
@@ -1134,6 +1209,7 @@ class ReportService {
     required String paymentMode,
     String hotelName = "YUG POS",
     String address = "",
+    String state = "", // Added state
     String gstNumber = "",
     PaperSize paperSize = _defaultReceiptPaperSize,
   }) async {
@@ -1142,9 +1218,9 @@ class ReportService {
     List<int> bytes = [];
 
     final pageChars = _thermalChars(paperSize);
-    // Keep final bill content centered on wider paper for equal left/right whitespace.
+    // Use wider column widths for 80mm/3inch paper.
     final contentChars = paperSize == PaperSize.mm58 ? pageChars : 48;
-    final leftPad = ((pageChars - contentChars) / 8).floor() + (paperSize == PaperSize.mm58 ? 0 : 3);
+    final leftPad = paperSize == PaperSize.mm58 ? 0 : 2;
     final rightPad = pageChars - contentChars - leftPad;
     final divider = _lineOf(contentChars, ch: '-');
     final thickDivider = _lineOf(contentChars, ch: '=');
@@ -1181,7 +1257,7 @@ class ReportService {
         _fitLeft(_clipText(line, contentChars), contentChars) +
         (' ' * rightPad);
 
-    void addLine(String line, {PosStyles style = const PosStyles(fontType: PosFontType.fontB)}) {
+    void addLine(String line, {PosStyles style = const PosStyles()}) {
       bytes += generator.text(padLine(line), styles: style);
     }
 
@@ -1219,14 +1295,15 @@ class ReportService {
 
     // Header
     bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB));
+    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center));
     if (address.isNotEmpty) bytes += generator.text(address);
+    if (state.isNotEmpty) bytes += generator.text(state.toUpperCase()); // Added State
     if (gstNumber.isNotEmpty) bytes += generator.text("GSTIN: $gstNumber");
-    bytes += generator.text("TAX INVOICE", styles: const PosStyles(bold: true));
+    bytes += generator.text("TAX INVOICE", styles: const PosStyles(bold: true, height: PosTextSize.size1));
     addLine(divider);
 
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left));
     addLine(twoColKvLine(
       leftKey: "Bill No",
       leftValue: receiptNum.isEmpty ? "N/A" : receiptNum,
@@ -1250,7 +1327,7 @@ class ReportService {
     final orderTypeStr = (data['orderType'] ?? '').toString().toLowerCase();
     if (orderTypeStr == 'delivery' || orderTypeStr == 'takeaway') {
       final customer = (data['customerName'] ?? 'Walk-in').toString();
-      addLine(kvLine("CUSTOMER", customer.toUpperCase()));
+      addLine(kvLine("CUSTOMER", customer.toUpperCase()), style: const PosStyles(bold: true));
       final phone = (data['customerContact'] ?? '').toString();
       if (phone.isNotEmpty) addLine(kvLine("PHONE", phone));
       final addr = (data['deliveryAddress'] ?? '').toString();
@@ -1309,17 +1386,17 @@ class ReportService {
     addLine(thickDivider);
     bytes += generator.setStyles(const PosStyles(align: PosAlign.left, bold: true));
     addLine(kvLine("GRAND TOTAL", "INR ${computedGrand.toStringAsFixed(2)}"),
-        style: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1, fontType: PosFontType.fontB));
+        style: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
     addLine(thickDivider);
 
     // Footer
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB));
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.left));
     addLine(kvLine("PAYMENT", paymentMode.toUpperCase()));
     addLine(kvLine("STATUS", "PAID"));
     // Keep footer compact to reduce paper usage.
-    bytes += generator.setStyles(const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB));
+    bytes += generator.setStyles(const PosStyles(align: PosAlign.center));
     bytes += generator.text("Thank you! Visit Again");
-    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(bold: true));
+    bytes += generator.text(hotelName.toUpperCase(), styles: const PosStyles(bold: true, height: PosTextSize.size1));
 
     bytes += generator.feed(1);
     bytes += generator.cut();
@@ -1328,15 +1405,29 @@ class ReportService {
 
   /// Updates Firestore order status to 'billed' and adds timestamp.
   /// Helper to isolate native USB printing from the main thread.
+  /// Helper to isolate native printing from the main thread.
+  /// Supports both UsbPrinterService (Windows) and BluetoothPrinterService (Android).
   static Future<void> printBytesIsolated(
-      UsbPrinterService printerService, List<int> bytes) async {
-    Future.microtask(() async {
-      try {
-        await printerService.printRawBytes(bytes);
-      } catch (e) {
-        debugPrint('Print error (isolated): $e');
+      dynamic printerService, List<int> bytes) async {
+    try {
+      bool success = false;
+      if (printerService is UsbPrinterService) {
+        success = await printerService.printRawBytes(bytes);
+      } else if (printerService is BluetoothPrinterService) {
+        success = await printerService.printRawBytes(bytes);
+      } else {
+        debugPrint('[Printer] Unknown printer service type.');
+        return;
       }
-    });
+      if (!success) {
+        debugPrint('[Printer] printRawBytes returned false — printer may be disconnected.');
+        throw Exception('Printer returned failure. Check Bluetooth connection.');
+      }
+      debugPrint('[Printer] ✅ Print sent successfully.');
+    } catch (e) {
+      debugPrint('[Printer] ❌ Error: $e');
+      rethrow; // let caller handle it (e.g., fall back to PDF)
+    }
   }
 
   static Future<int> recordRevenueAndSettle({

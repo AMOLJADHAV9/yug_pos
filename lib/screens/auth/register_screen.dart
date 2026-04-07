@@ -17,8 +17,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _addressCtrl = TextEditingController(); // Added address
   final _gstCtrl = TextEditingController(); // Added GST Controller
   bool _loading = false;
-  bool _obscurePassword = true; // Added for password visibility toggle
-  
+  bool _obscurePassword = true;
+  // List of Indian States & UTs
+  static const List<String> _indianStates = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 
+    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 
+    'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 
+    'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar', 'Chandigarh', 'Dadra & Nagar Haveli', 'Delhi', 
+    'Jammu & Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+  ];
+
+  String _selectedState = 'Maharashtra';
+
   void _register() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty || _nameCtrl.text.isEmpty || _resNameCtrl.text.isEmpty) return;
     setState(() => _loading = true);
@@ -28,8 +40,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       password: _passCtrl.text.trim(),
       name: _nameCtrl.text.trim(),
       restaurantName: _resNameCtrl.text.trim(),
-      address: _addressCtrl.text.trim(), // Pass Address
-      gstNumber: _gstCtrl.text.trim(), // Pass GST Number
+      address: _addressCtrl.text.trim(),
+      state: _selectedState, // Pass State
+      gstNumber: _gstCtrl.text.trim(),
       role: 'admin',
     );
     
@@ -45,7 +58,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           content: Text('Registration successful!'),
           backgroundColor: Colors.green,
         ));
-        Navigator.pop(context); // Go back to AuthWrapper
+        Navigator.pop(context);
       }
     }
   }
@@ -87,82 +100,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   const SizedBox(height: 8),
                   const Text("Register your restaurant dashboard", style: TextStyle(color: Colors.white54), textAlign: TextAlign.center,),
                   const SizedBox(height: 32),
-                  TextField(
-                    controller: _nameCtrl,
+                  _buildTextField(_nameCtrl, 'Full Name', Icons.person_outline),
+                  const SizedBox(height: 16),
+                  _buildTextField(_resNameCtrl, 'Restaurant Name', Icons.restaurant),
+                  const SizedBox(height: 16),
+                  _buildTextField(_addressCtrl, 'Restaurant Address', Icons.location_on_outlined),
+                  const SizedBox(height: 16),
+                  
+                  // State Dropdown
+                  DropdownButtonFormField<String>(
+                    value: _selectedState,
+                    dropdownColor: const Color(0xFF141615),
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      labelText: 'Full Name',
+                      labelText: 'State',
                       labelStyle: const TextStyle(color: Colors.white60),
-                      prefixIcon: const Icon(Icons.person_outline, color: Colors.white38),
+                      prefixIcon: const Icon(Icons.map_outlined, color: Colors.white38),
                       filled: true,
                       fillColor: const Color(0xFF141615),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
                     ),
-                    textInputAction: TextInputAction.next,
+                    items: _indianStates.map((state) => DropdownMenuItem(
+                      value: state,
+                      child: Text(state),
+                    )).toList(),
+                    onChanged: (val) => setState(() => _selectedState = val!),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _resNameCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'Restaurant Name',
-                      labelStyle: const TextStyle(color: Colors.white60),
-                      prefixIcon: const Icon(Icons.restaurant, color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF141615),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
-                    ),
-                    textInputAction: TextInputAction.next,
-                  ),
+                  
+                  _buildTextField(_emailCtrl, 'Email', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _addressCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'Restaurant Address',
-                      labelStyle: const TextStyle(color: Colors.white60),
-                      prefixIcon: const Icon(Icons.location_on_outlined, color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF141615),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
-                    ),
-                    textInputAction: TextInputAction.next,
-                  ),
+                  _buildTextField(_gstCtrl, 'GST Number (Optional)', Icons.receipt_long_outlined),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _emailCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      labelStyle: const TextStyle(color: Colors.white60),
-                      prefixIcon: const Icon(Icons.email_outlined, color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF141615),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _gstCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'GST Number (Optional)',
-                      labelStyle: const TextStyle(color: Colors.white60),
-                      prefixIcon: const Icon(Icons.receipt_long_outlined, color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF141615),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
-                    ),
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 16),
+                  
                   TextField(
                     controller: _passCtrl,
                     style: const TextStyle(color: Colors.white),
@@ -205,6 +176,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {TextInputType keyboardType = TextInputType.text}) {
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white60),
+        prefixIcon: Icon(icon, color: Colors.white38),
+        filled: true,
+        fillColor: const Color(0xFF141615),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFCDD22))),
+      ),
+      keyboardType: keyboardType,
+      textInputAction: TextInputAction.next,
     );
   }
 }

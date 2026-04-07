@@ -80,9 +80,9 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               children: [
-                _buildDrawerItem(Icons.dashboard_outlined, "Dashboard", true, () => Navigator.pop(context)),
+                _buildDrawerItem(Icons.dashboard_outlined, "Dashboard", true, () => Scaffold.of(context).closeDrawer()),
                 _buildDrawerItem(Icons.assessment_outlined, "Reports & History", false, () {
-                  Navigator.pop(context);
+                  Scaffold.of(context).closeDrawer();
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const CashierReportsScreen()));
                 }),
                 _buildDrawerItem(Icons.settings_outlined, "Settings", false, () {}),
