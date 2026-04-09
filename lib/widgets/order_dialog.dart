@@ -14,6 +14,7 @@ import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../utils/debouncer.dart';
+import 'menu_item_card.dart';
 
 class CommonOrderDialog extends StatefulWidget {
   final TableModel table;
@@ -414,7 +415,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                           crossAxisCount: cols,
                           crossAxisSpacing: 4,
                           mainAxisSpacing: 4,
-                          childAspectRatio: 0.72,
+                          childAspectRatio: 1.0,
                         ),
                         itemCount: filteredItems.length,
                         itemBuilder: (context, index) {
@@ -423,7 +424,11 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                           final count = cartIdx >= 0 ? _selectedItems[cartIdx].quantity : 0;
                           final isSelected = count > 0;
 
-                          return InkWell(
+                          return MenuItemCard(
+                            item: item,
+                            isSelected: isSelected,
+                            quantity: count,
+                            isMobile: true, // Use mobile style for dialog grids
                             onTap: () => setState(() {
                               if (cartIdx >= 0) {
                                 _selectedItems[cartIdx].quantity++;
@@ -431,55 +436,6 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                                 _selectedItems.add(CartItem(item: item));
                               }
                             }),
-                            child: Stack(
-                              children: [
-                                Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? const Color(0xFFFCDD22).withOpacity(0.08) : const Color(0xFF141615),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: isSelected ? const Color(0xFFFCDD22) : Colors.white.withOpacity(0.05)),
-                                    ),
-                                    child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF141615).withOpacity(0.4),
-                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
-                                          ),
-                                          clipBehavior: Clip.antiAlias,
-                                          child: item.imageUrl != null 
-                                              ? Image.network(item.imageUrl!, fit: BoxFit.cover, width: double.infinity)
-                                              : const Center(child: Icon(Icons.fastfood, size: 20, color: Colors.white10)),
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                            const SizedBox(height: 2),
-                                            Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(color: isSelected ? const Color(0xFFFCDD22) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 10)),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (isSelected)
-                                  Positioned(
-                                    top: 2, right: 2,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                      decoration: BoxDecoration(color: const Color(0xFFFCDD22), borderRadius: BorderRadius.circular(8)),
-                                      child: Text("$count", style: const TextStyle(color: Color(0xFF141615), fontSize: 8, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ),
-                              ],
-                            ),
                           );
                         },
                       );

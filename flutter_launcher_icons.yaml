@@ -1,0 +1,9 @@
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  windows: true
+  web:
+    generate: true
+    image_path: "assets/images/yug-poslogo.png"
+  image_path: "assets/images/yug-poslogo.png"
+  min_sdk_android: 21

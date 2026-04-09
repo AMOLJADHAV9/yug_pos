@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../services/usb_printer_service.dart';
@@ -248,9 +249,17 @@ class _CartViewContentState extends State<CartViewContent> {
     
     setState(() => _isSubmitting = true);
     final firestore = FirebaseFirestore.instance;
-    final batch = firestore.batch();
 
     try {
+      final auth = context.read<AuthService>();
+      final restaurantId = auth.restaurantId;
+      if (restaurantId == null) throw Exception("Restaurant ID not found");
+
+      // Fetch GST settings
+      final settingsDoc = await firestore.collection('settings').doc(restaurantId).get();
+      final settings = settingsDoc.data();
+      final double _gstPercentage = (settings?['gstPercentage'] ?? 5.0).toDouble();
+
       String? tableName;
       Map<String, dynamic>? tableData;
       
@@ -265,47 +274,49 @@ class _CartViewContentState extends State<CartViewContent> {
         tableName = cart.orderType == OrderType.takeaway ? "TAKEAWAY" : "DELIVERY";
       }
 
-      String orderId;
-      final cartTotal = cart.totalAmount;
-      final cartItemsSummary = cart.items.map((i) => {
-        'id': i.item.id,
-        'name': i.item.name,
-        'price': i.item.price,
-        'quantity': i.quantity,
-        'category': i.item.category,
-      }).toList();
+      final String orderId = cart.activeOrderId ?? (isDineIn && tableData?['currentOrderId'] != null 
+          ? tableData!['currentOrderId'] 
+          : firestore.collection('orders').doc().id);
+      
+      final orderRef = firestore.collection('orders').doc(orderId);
+      final bool isNewOrder = cart.activeOrderId == null && (tableData?['currentOrderId'] == null || !isDineIn);
 
-      final auth = context.read<AuthService>();
-      final restaurantId = auth.restaurantId;
-      final customerName = cart.customerName ?? 'Walk-in';
-      final waiterName = cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter';
+      final subtotal = cart.totalAmount;
+      final total = subtotal * (1 + (_gstPercentage / 100));
+      final int totalItemsCount = cart.totalItems;
+      final int kotTimestamp = DateTime.now().millisecondsSinceEpoch;
+      
+      int kotNo = 1;
+      final batch = firestore.batch();
 
-      // Check if we already have an active order for this table (Dine-In only)
-      if (isDineIn && tableData != null && tableData['currentOrderId'] != null) {
-        orderId = tableData['currentOrderId'];
-        final orderRef = firestore.collection('orders').doc(orderId);
-        batch.update(orderRef, {
-          'totalAmount': FieldValue.increment(cartTotal),
-          'items': FieldValue.arrayUnion(cartItemsSummary),
-        });
-      } else {
-        final orderRef = firestore.collection('orders').doc();
-        orderId = orderRef.id;
+      if (isNewOrder) {
         batch.set(orderRef, {
           'tableId': isDineIn ? cart.tableId : null,
           'tableName': tableName ?? 'Unknown',
           'orderType': cart.orderType.name,
-          'waiterName': waiterName,
-          'customerName': customerName,
+          'waiterName': cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter',
+          'customerName': cart.customerName ?? 'Walk-in',
           'status': 'active',
           'takeawayStatus': cart.orderType == OrderType.takeaway ? 'pending' : null,
           'deliveryStatus': cart.orderType == OrderType.delivery ? 'pending' : null,
           'isDelivered': false,
           'restaurantId': restaurantId,
           'createdAt': FieldValue.serverTimestamp(),
-          'totalAmount': cartTotal,
-          'totalItems': cart.totalItems,
-          'items': cartItemsSummary,
+          'totalAmount': total,
+          'subtotal': subtotal,
+          'totalItems': totalItemsCount,
+          'gstPercentage': _gstPercentage,
+          'kotCount': 1,
+          'items': cart.items.map((i) => {
+            'id': i.item.id,
+            'name': i.item.name,
+            'price': i.item.price,
+            'quantity': i.quantity,
+            'category': i.item.category,
+            'kotNo': 1,
+            'kotTimestamp': kotTimestamp,
+            'specialInstructions': i.specialInstructions,
+          }).toList(),
         });
         
         if (isDineIn && cart.tableId != null) {
@@ -314,77 +325,80 @@ class _CartViewContentState extends State<CartViewContent> {
             'currentOrderId': orderId,
           });
         }
+      } else {
+        // Fetch current order to get kotCount
+        final orderDoc = await orderRef.get();
+        if (orderDoc.exists) {
+          kotNo = (orderDoc.data()?['kotCount'] ?? 1) + 1;
+        }
+
+        batch.update(orderRef, {
+          'items': FieldValue.arrayUnion(cart.items.map((i) => {
+            'id': i.item.id,
+            'name': i.item.name,
+            'price': i.item.price,
+            'quantity': i.quantity,
+            'category': i.item.category,
+            'kotNo': kotNo,
+            'kotTimestamp': kotTimestamp,
+            'specialInstructions': i.specialInstructions,
+          }).toList()),
+          'totalAmount': FieldValue.increment(total),
+          'subtotal': FieldValue.increment(subtotal),
+          'totalItems': FieldValue.increment(totalItemsCount),
+          'gstPercentage': _gstPercentage,
+          'lastUpdatedAt': FieldValue.serverTimestamp(),
+          'kotCount': kotNo,
+        });
       }
 
+      // Create KOT record
       final kotRef = firestore.collection('kots').doc();
       final kotId = kotRef.id;
-      final kotNumber = kotId.substring(0, 6).toUpperCase();
-
-      final kotItems = cart.items.map((cartItem) => {
-        'menuItemId': cartItem.item.id,
-        'name': cartItem.item.name,
-        'quantity': cartItem.quantity,
-        'price': cartItem.item.price,
-        'specialInstructions': cartItem.specialInstructions,
-      }).toList();
+      final kNoStr = "KOT #$kotNo";
 
       batch.set(kotRef, {
         'orderId': orderId,
         'tableId': isDineIn ? cart.tableId : null,
         'tableName': tableName ?? 'Unknown',
         'orderType': cart.orderType.name,
-        'customerName': customerName,
-        'waiterName': waiterName,
+        'customerName': cart.customerName ?? 'Walk-in',
+        'waiterName': cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter',
         'status': 'Pending',
         'restaurantId': restaurantId,
-        'items': kotItems,
+        'kotNo': kotNo,
+        'kotId': kotId,
+        'items': cart.items.map((i) => {
+          'name': i.item.name,
+          'quantity': i.quantity,
+          'specialInstructions': i.specialInstructions,
+        }).toList(),
         'createdAt': FieldValue.serverTimestamp(),
-        'kotNumber': kotNumber,
       });
-
-      final itemsRef = firestore.collection('orders').doc(orderId).collection('items');
-      for (var cartItem in cart.items) {
-        final newItemRef = itemsRef.doc();
-        batch.set(newItemRef, {
-          'kotId': kotId,
-          'menuItemId': cartItem.item.id,
-          'name': cartItem.item.name,
-          'quantity': cartItem.quantity,
-          'price': cartItem.item.price,
-          'totalPrice': cartItem.totalPrice,
-          'specialInstructions': cartItem.specialInstructions,
-          'restaurantId': restaurantId,
-          'status': 'Pending',
-        });
-      }
 
       await batch.commit();
       
-      // Fetch cashier name for receipt
-      final cashierName = auth.userName ?? 'Staff';
-
-      // Prepare data for printing (needed for both KOT and Final Bill)
+      // Prepare data for printing
       final kotData = {
         'tableName': tableName ?? 'Unknown',
-        'customerName': customerName,
-        'waiterName': waiterName,
-        'cashierName': cashierName,
-        'kotNumber': kotNumber,
-        'restaurantId': restaurantId, // CRITICAL: Added for receipt metadata retrieval
+        'customerName': cart.customerName ?? 'Walk-in',
+        'waiterName': cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter',
+        'cashierName': auth.userName ?? 'Staff',
+        'kotNo': kotNo,
+        'restaurantId': restaurantId,
+        'orderType': cart.orderType.name,
         'createdAt': Timestamp.now(),
-        'totalAmount': cart.totalAmount, // Added for receipt printing
         'items': cart.items.map((i) => {
           'name': i.item.name,
           'quantity': i.quantity,
           'price': i.item.price,
         }).toList(),
       };
+
       final usb = context.read<UsbPrinterService>();
       final bt = context.read<BluetoothPrinterService>();
       final isAndroid = !kIsWeb && Platform.isAndroid;
-      final dynamic printerService = isAndroid ? bt : usb;
 
-      // Auto-Print KOT for Waiter (only if NOT printing the final bill/settling)
       if (!printBill) {
         await ReportService.printKOTReceipt(
           kotData, 
@@ -393,21 +407,17 @@ class _CartViewContentState extends State<CartViewContent> {
         );
       }
       
-      // If BILL is pressed, print the final bill and settle
       if (printBill) {
-        // STEP 1: Settle Firestore and Record Revenue
-        // Fetch full order total (previous + new items) for settlement
-        final orderDoc = await firestore.collection('orders').doc(orderId).get();
+        final orderDoc = await orderRef.get();
         final finalTotal = (orderDoc.data()?['totalAmount'] as num).toDouble();
 
         int newReceiptNumber = await ReportService.recordRevenueAndSettle(
           orderId: orderId,
-          restaurantId: restaurantId!,
+          restaurantId: restaurantId,
           total: finalTotal,
           paymentMode: paymentMode,
         );
 
-        // STEP 1.5: Clear table if Dine-In
         if (isDineIn && cart.tableId != null) {
           await firestore.collection('tables').doc(cart.tableId).update({
             'status': 'available',
@@ -415,18 +425,14 @@ class _CartViewContentState extends State<CartViewContent> {
           });
         }
 
-        // Add receipt number for printing
-        final printData = Map<String, dynamic>.from(kotData);
+        final printData = Map<String, dynamic>.from(orderDoc.data()!);
         printData['receiptNumber'] = newReceiptNumber;
         printData['paymentMode'] = paymentMode;
 
-        // STEP 2: Generate bytes (pure Dart)
-        // STEP 2: Generate bytes
-        // STEP 2: Smart Print (Thermal if configured, else PDF fallback)
         await ReportService.printFinalBill(
           orderData: printData,
           orderId: orderId,
-          subtotal: finalTotal,
+          subtotal: (orderDoc.data()?['subtotal'] as num?)?.toDouble() ?? finalTotal,
           total: finalTotal,
           paymentMode: paymentMode,
           hotelName: auth.restaurantName ?? "YUG POS",
@@ -435,18 +441,17 @@ class _CartViewContentState extends State<CartViewContent> {
         );
       }
 
-        if (mounted) {
-          setState(() => _isSubmitting = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Order Placed! KOT: ${kotId.substring(0, 6).toUpperCase()}'),
-            backgroundColor: Colors.green,
-          ));
-          cart.clearCart();
-          
-          if (widget.isBottomSheet && Navigator.canPop(context)) {
-             Navigator.pop(context);
-          }
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Order Placed! $kNoStr'),
+          backgroundColor: Colors.green,
+        ));
+        cart.clearCart();
+        if (widget.isBottomSheet && Navigator.canPop(context)) {
+           Navigator.pop(context);
         }
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);

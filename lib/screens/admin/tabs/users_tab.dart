@@ -74,17 +74,16 @@ class _UsersTabState extends State<UsersTab> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("Staff Management", 
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+                        Expanded(
+                          child: Text("Staff Management", 
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.refresh, color: Color(0xFFFCDD22)),
                           onPressed: () => setState(() {}),
                           tooltip: "Refresh Staff",
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.print, color: Color(0xFFFCDD22)),
-                          onPressed: () => _showPrinterSettings(context),
-                          tooltip: "Printer Setup",
                         ),
                       ],
                     ),

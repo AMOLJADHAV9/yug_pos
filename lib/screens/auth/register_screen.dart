@@ -110,6 +110,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   // State Dropdown
                   DropdownButtonFormField<String>(
                     value: _selectedState,
+                    isExpanded: true, // Fix horizontal overflow
                     dropdownColor: const Color(0xFF141615),
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
@@ -123,7 +124,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     items: _indianStates.map((state) => DropdownMenuItem(
                       value: state,
-                      child: Text(state),
+                      child: Text(state, overflow: TextOverflow.ellipsis),
                     )).toList(),
                     onChanged: (val) => setState(() => _selectedState = val!),
                   ),
@@ -197,3 +198,5 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
+
+

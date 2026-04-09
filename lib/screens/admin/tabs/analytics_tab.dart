@@ -307,7 +307,12 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             children: [
               const Icon(Icons.bar_chart, color: Color(0xFFFCDD22), size: 20),
               const SizedBox(width: 8),
-              Text("${now.year} Revenue Column Chart", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+              Expanded(
+                child: Text("${now.year} Revenue Trend", 
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -324,7 +329,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                     barRods: [
                       BarChartRodData(
                         toY: monthlyRevenue[i] ?? 0,
-                        width: 14,
+                        width: MediaQuery.of(context).size.width < 600 ? 8 : 14,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                         color: isCurrent ? const Color(0xFFFCDD22) : (isPast ? const Color(0xFFFCDD22).withOpacity(0.4) : Colors.white.withOpacity(0.1)),
                       ),
@@ -337,23 +342,27 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 40,
+                      reservedSize: 32,
                       getTitlesWidget: (v, meta) {
                         if (v == meta.max) return const SizedBox.shrink();
-                        if (v >= 1000) return Text('₹${(v / 1000).toStringAsFixed(0)}k', style: const TextStyle(fontSize: 9, color: Colors.white54));
-                        return Text('₹${v.toStringAsFixed(0)}', style: const TextStyle(fontSize: 9, color: Colors.white54));
+                        if (v >= 1000) return Text('${(v / 1000).toStringAsFixed(0)}k', style: const TextStyle(fontSize: 8, color: Colors.white54));
+                        return Text('${v.toStringAsFixed(0)}', style: const TextStyle(fontSize: 8, color: Colors.white54));
                       },
                     ),
                   ),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 28,
                       getTitlesWidget: (v, meta) {
                         final i = v.toInt();
                         if (i < 0 || i >= 12) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(top: 8.0),
-                          child: Text(monthNames[i], style: const TextStyle(fontSize: 9, color: Colors.white54)),
+                          child: Transform.rotate(
+                            angle: -0.6,
+                            child: Text(monthNames[i], style: const TextStyle(fontSize: 7, color: Colors.white54, fontWeight: FontWeight.bold)),
+                          ),
                         );
                       },
                     ),

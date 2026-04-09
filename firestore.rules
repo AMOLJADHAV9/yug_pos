@@ -3,11 +3,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper functions
+    // --- Helper Functions ---
     function isSignedIn() {
       return request.auth != null;
     }
     
+    // Basic user data lookup (cached within request)
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
@@ -18,111 +19,111 @@ service cloud.firestore {
 
     // Role helpers
     function isAdmin() {
-      return getUserData().role == 'admin';
+      return getUserData().get('role', 'none') == 'admin';
     }
     function isCashier() {
-      return getUserData().role == 'cashier';
+      return getUserData().get('role', 'none') == 'cashier';
     }
     function isWaiter() {
-      return getUserData().role == 'waiter';
+      return getUserData().get('role', 'none') == 'waiter';
     }
 
-    // For write operations:
-    // - create/update: `request.resource` exists
-    // - delete: `request.resource` is null; only `resource.data` exists
-    function getRestaurantIdForWrite() {
-      return (request.resource != null &&
-              request.resource.data != null &&
-              ('restaurantId' in request.resource.data))
-        ? request.resource.data.restaurantId
-        : (resource.data != null &&
-           ('restaurantId' in resource.data))
-          ? resource.data.restaurantId
-          // Legacy: if the document has no restaurantId at all, allow writes
-          // (matches `belongsToRestaurant()` behavior used for reads).
-          : getRestaurantId();
+    // Tenant check: verifies if a document's restaurantId field matches the user's restaurant
+    function belongsToRestaurant(data) {
+      return data != null && 
+             ('restaurantId' in data) && 
+             data.restaurantId == getRestaurantId();
     }
 
-    // Multi-tenant rule: User must belong to the restaurant owning the data
-    // During transition: Allow if restaurantId is missing (legacy) OR matches
-    function belongsToRestaurant(resourceData) {
-      return resourceData == null || !('restaurantId' in resourceData) || resourceData.restaurantId == getRestaurantId();
-    }
+    // --- Core Collections ---
 
-    function isForMyRestaurant(id) {
-       return id.get('restaurantId', 'NO') == getRestaurantId();
-    }
-
-    // User collection: Users can only see/edit their own data, Admins can see/create staff in their restaurant
+    // User collection: Users can only see/edit their own data, Admins can manage their restaurant's staff
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || (isAdmin() && resource.data.restaurantId == getRestaurantId()));
       allow create: if isSignedIn(); 
-      allow update: if isSignedIn() && (request.auth.uid == userId || (isAdmin() && resource.data.restaurantId == getRestaurantId()));
+      // Only admins can change roles. Users can update their own profile name/pin basics.
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'restaurantId'])) || 
+        (isAdmin() && belongsToRestaurant(resource.data))
+      );
+      allow delete: if false; // Deactivating profile status is preferred over deletion
     }
 
-    // Restaurants collection: Allow creation by any signed-in user, updates only by Admin
+    // Restaurants: Admin of the specific restaurant for updates
     match /restaurants/{resId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (resId == getRestaurantId() || isAdmin());
       allow create: if isSignedIn();
       allow update: if isSignedIn() && isAdmin() && resId == getRestaurantId();
+      allow delete: if false; // Safeguard against accidental business deletion
     }
 
-    // Menu: Read access for everyone in the restaurant, Write for Admin
+    // --- Business Configuration ---
+
+    match /settings/{resId} {
+      allow read: if isSignedIn() && resId == getRestaurantId();
+      allow write: if isSignedIn() && isAdmin() && resId == getRestaurantId();
+    }
+
     match /menu_categories/{catId} {
       allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow write: if isSignedIn() && isAdmin() && getRestaurantIdForWrite() == getRestaurantId();
-    }
-    match /menu_items/{itemId} {
-      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow write: if isSignedIn() && isAdmin() && getRestaurantIdForWrite() == getRestaurantId();
+      allow write: if isSignedIn() && isAdmin() && belongsToRestaurant(request.resource.data);
     }
 
-    // Tables & Sections
+    match /menu_items/{itemId} {
+      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow write: if isSignedIn() && isAdmin() && belongsToRestaurant(request.resource.data);
+    }
+
     match /sections/{secId} {
       allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow write: if isSignedIn() && isAdmin() && getRestaurantIdForWrite() == getRestaurantId();
+      allow write: if isSignedIn() && isAdmin() && belongsToRestaurant(request.resource.data);
     }
+
     match /tables/{tableId} {
       allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow write: if isSignedIn() && (isAdmin() || isCashier() || isWaiter()) && getRestaurantIdForWrite() == getRestaurantId();
+      // Waiters can update table status (occupied/available)
+      allow write: if isSignedIn() && (isAdmin() || isCashier() || isWaiter()) && 
+                    (belongsToRestaurant(resource.data) || belongsToRestaurant(request.resource.data));
     }
+
+    // --- Operations & Workflow ---
 
     // Orders & Items
     match /orders/{orderId} {
-      // Read order if the order doc belongs to the same restaurant.
-      // Also allow when the order references a table that belongs to the
-      // same restaurant (helps recover from legacy/data-mismatch where
-      // order.restaurantId is wrong but table.restaurantId is correct).
-      allow read: if isSignedIn() && (
-        belongsToRestaurant(resource.data) ||
-        (resource.data.tableId == null ? false :
-          belongsToRestaurant(
-            get(/databases/$(database)/documents/tables/$(resource.data.tableId)).data
-          )
-        )
+      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow create: if isSignedIn() && belongsToRestaurant(request.resource.data);
+      allow update: if isSignedIn() && belongsToRestaurant(resource.data) && (
+        // Safeguard: Waiters cannot mark as 'billed' or 'cancelled'
+        (isWaiter() && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']) || 
+          request.resource.data.status in ['preparing', 'ready']
+        )) || isAdmin() || isCashier()
       );
-      allow create: if isSignedIn() && request.resource.data.restaurantId == getRestaurantId();
-      allow update: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow delete: if isSignedIn() && isAdmin() && belongsToRestaurant(resource.data);
       
       match /items/{itemId} {
-        allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-        allow create: if isSignedIn() && request.resource.data.restaurantId == getRestaurantId();
-        allow update: if isSignedIn() && belongsToRestaurant(resource.data);
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (isAdmin() || isCashier() || isWaiter());
       }
     }
 
     // KOTs
     match /kots/{kotId} {
-      allow read: if isSignedIn() && belongsToRestaurant(resource.data);
-      allow create: if isSignedIn() && request.resource.data.restaurantId == getRestaurantId();
-      allow update, delete: if isSignedIn() && belongsToRestaurant(resource.data);
+      allow read, create: if isSignedIn() && belongsToRestaurant(request.resource.data);
+      allow update, delete: if isSignedIn() && isAdmin() && belongsToRestaurant(resource.data);
     }
 
-    // Daily Collections & Receipt Counters
+    // --- Financial & Analytics ---
+
     match /daily_collections/{docId} {
-      allow read: if isSignedIn() && (belongsToRestaurant(resource.data) || docId.startsWith(getRestaurantId() + "_"));
-      allow write: if isSignedIn() && (isAdmin() || isCashier()) && (request.resource.data.restaurantId == getRestaurantId() || docId.startsWith(getRestaurantId() + "_"));
+      // ONLY Admin and Cashier can view daily revenue and net totals
+      allow read: if isSignedIn() && (isAdmin() || isCashier()) && 
+                    (docId.startsWith(getRestaurantId() + "_") || belongsToRestaurant(resource.data));
+      // All staff can write (increment revenue on settlement)
+      allow write: if isSignedIn() && (isAdmin() || isCashier() || isWaiter()) && 
+                    (docId.startsWith(getRestaurantId() + "_") || belongsToRestaurant(resource.data));
     }
+    
     match /receipt_counters/{resId} {
       allow read, write: if isSignedIn() && resId == getRestaurantId();
     }

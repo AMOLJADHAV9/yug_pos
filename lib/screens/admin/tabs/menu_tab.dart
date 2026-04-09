@@ -1,3 +1,5 @@
+import '../../../widgets/menu_item_card.dart';
+import '../../../models/menu_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/urban_piper_service.dart';
 import 'package:provider/provider.dart';
+import 'dart:io' show File;
 
 class MenuTab extends StatefulWidget {
   const MenuTab({super.key});
@@ -42,6 +45,22 @@ class _MenuTabState extends State<MenuTab> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: const Color(0xFFFCDD22).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: const Color(0xFFFCDD22), size: 18),
+        ),
+        const SizedBox(width: 12),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        const SizedBox(width: 12),
+        Expanded(child: Divider(color: const Color(0xFFFCDD22).withOpacity(0.2), thickness: 1.5)),
+      ],
     );
   }
 
@@ -238,81 +257,124 @@ class _MenuTabState extends State<MenuTab> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isMobile = constraints.maxWidth < 600;
-              int crossAxis = constraints.maxWidth > 1000 ? 8 : (constraints.maxWidth > 800 ? 7 : (constraints.maxWidth > 600 ? 6 : 5));
+              int crossAxis = constraints.maxWidth > 1000 ? 8 : (constraints.maxWidth > 800 ? 7 : (constraints.maxWidth > 600 ? 6 : 3));
               
-              return GridView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxis, 
-                  crossAxisSpacing: 4, 
-                  mainAxisSpacing: 4,
-                  childAspectRatio: isMobile ? 1.0 : 0.7, 
-                ),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final data = items[index].data() as Map<String, dynamic>;
-                  final available = data['isAvailable'] ?? true;
-                  const Color accentColor = Color(0xFFFCDD22); // Yellow theme color
+              // Group items by category
+              Map<String, List<QueryDocumentSnapshot>> groupedItems = {};
+              for (var doc in items) {
+                final data = doc.data() as Map<String, dynamic>;
+                String cat = data['category'] ?? 'General Items';
+                if (!groupedItems.containsKey(cat)) groupedItems[cat] = [];
+                groupedItems[cat]!.add(doc);
+              }
+              final categories = groupedItems.keys.toList()..sort();
 
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF141615),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.05)),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                if (data['imageUrl'] != null)
-                                  Image.network(data['imageUrl'], fit: BoxFit.cover)
-                                else
-                                  Container(color: accentColor.withOpacity(0.05), child: Icon(Icons.restaurant, color: accentColor.withOpacity(0.2), size: 24)),
-                                if (!available) Container(color: Colors.black45, child: const Center(child: Text("OFF", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 8)))),
-                                // Top-left Switch overlay
-                                Positioned(
-                                  top: 2, left: 2, 
-                                  child: Transform.scale(
-                                    scale: 0.5, 
-                                    child: Switch(
-                                      value: available, 
-                                      onChanged: (v) => _firestore.collection('menu_items').doc(items[index].id).update({'isAvailable': v}),
-                                      activeColor: Colors.green,
-                                      inactiveThumbColor: Colors.red,
+              if (items.isEmpty) return const Center(child: Text("No items found."));
+
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                itemCount: categories.length,
+                itemBuilder: (context, catIndex) {
+                  final catName = categories[catIndex];
+                  final catItems = groupedItems[catName]!;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12, top: 4),
+                        child: _buildSectionHeader(catName.toUpperCase(), Icons.restaurant_menu, const Color(0xFFFCDD22)),
+                      ),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxis, 
+                          crossAxisSpacing: 8, 
+                          mainAxisSpacing: 8,
+                          childAspectRatio: isMobile ? 0.82 : 1.0,
+                        ),
+                        itemCount: catItems.length,
+                        itemBuilder: (context, index) {
+                          final data = catItems[index].data() as Map<String, dynamic>;
+                          final available = data['isAvailable'] ?? true;
+                          const Color accentColor = Color(0xFFFCDD22); // Yellow theme color
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF141615),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white.withOpacity(0.05)),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        if (data['imageUrl'] != null && data['imageUrl'].toString().isNotEmpty)
+                                          Image.network(
+                                            data['imageUrl'], 
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              color: accentColor.withOpacity(0.05),
+                                              child: Icon(Icons.restaurant, color: accentColor.withOpacity(0.2), size: 18),
+                                            ),
+                                            loadingBuilder: (context, child, progress) {
+                                              if (progress == null) return child;
+                                              return Container(color: accentColor.withOpacity(0.02), child: const Center(child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1, color: Colors.white10))));
+                                            },
+                                          )
+                                        else
+                                          Container(color: accentColor.withOpacity(0.05), child: Icon(Icons.restaurant, color: accentColor.withOpacity(0.2), size: 20)),
+                                        
+                                        if (!available) Container(color: Colors.black45, child: const Center(child: Text("OFF", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 8)))),
+                                        Positioned(
+                                          top: -8, left: -8, 
+                                          child: Transform.scale(
+                                            scale: 0.4, 
+                                            child: Switch(
+                                              value: available, 
+                                              onChanged: (v) => _firestore.collection('menu_items').doc(catItems[index].id).update({'isAvailable': v}),
+                                              activeColor: Colors.green,
+                                              inactiveThumbColor: Colors.red,
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(top: 4, right: 4, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: const Color(0xFF141615).withOpacity(0.8), borderRadius: BorderRadius.circular(4)), child: Text("₹${data['price']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 8, color: Colors.white)))),
+                                      ],
                                     ),
                                   ),
-                                ),
-                                Positioned(top: 2, right: 2, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: const Color(0xFF141615).withOpacity(0.7), borderRadius: BorderRadius.circular(4)), child: Text("₹${data['price']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.white)))),
-                              ],
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 6),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(data['name'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                        Text(data['category'] ?? 'Gen', style: TextStyle(color: accentColor.withOpacity(0.8), fontSize: 7, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            GestureDetector(onTap: () => _showItemDialog(id: catItems[index].id, initialData: data, restaurantId: restaurantId), child: Icon(Icons.edit, size: 12, color: const Color(0xFFFCDD22).withOpacity(0.7))),
+                                            const SizedBox(width: 12),
+                                            GestureDetector(onTap: () => _deleteItem(catItems[index].id, data['imageUrl']), child: Icon(Icons.delete, size: 12, color: Colors.redAccent.withOpacity(0.7))),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(data['name'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                Text(data['category'] ?? 'Gen', style: TextStyle(color: accentColor.withOpacity(0.8), fontSize: 8, fontWeight: FontWeight.w600)),
-                                const SizedBox(height: 4),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    GestureDetector(onTap: () => _showItemDialog(id: items[index].id, initialData: data, restaurantId: restaurantId), child: Icon(Icons.edit, size: 14, color: const Color(0xFFFCDD22).withOpacity(0.7))),
-                                    const SizedBox(width: 12),
-                                    GestureDetector(onTap: () => _firestore.collection('menu_items').doc(items[index].id).delete(), child: Icon(Icons.delete, size: 14, color: Colors.redAccent.withOpacity(0.7))),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
-                    ),
+                      const SizedBox(height: 32),
+                    ],
                   );
                 },
               );
@@ -440,6 +502,32 @@ class _MenuTabState extends State<MenuTab> {
       ),
     );
   }
+
+  Future<void> _deleteItem(String id, String? imageUrl) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141615),
+        title: const Text("Delete Item", style: TextStyle(color: Colors.white)),
+        content: const Text("Are you sure you want to delete this menu item?", style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _firestore.collection('menu_items').doc(id).delete();
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        try {
+          await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+        } catch (e) {
+          debugPrint("Error deleting image from storage: $e");
+        }
+      }
+    }
+  }
 }
 
 class ItemEditDialog extends StatefulWidget {
@@ -475,16 +563,63 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
   }
 
   Future<void> _pickImage() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image);
-    if (result != null && result.files.single.bytes != null) {
-      setState(() => loading = true);
-      try {
-        final ref = FirebaseStorage.instance.ref('menu/${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await ref.putData(result.files.single.bytes!);
-        final url = await ref.getDownloadURL();
-        setState(() => imageUrl = url);
-      } finally {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: kIsWeb, // Only need bytes in memory for Web
+      );
+      
+      if (result != null) {
+        final platformFile = result.files.single;
+        
+        // Ensure we have something to upload (path on Desktop/Mobile, bytes on Web)
+        if (!kIsWeb && platformFile.path == null) return;
+        if (kIsWeb && platformFile.bytes == null) return;
+
+        setState(() => loading = true);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Uploading image..."), duration: Duration(seconds: 2))
+          );
+        }
+
+        final fileName = "${DateTime.now().millisecondsSinceEpoch}_${platformFile.name}";
+        final storageRef = FirebaseStorage.instance.ref('menu/$fileName');
+        
+        final metadata = SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {'uploaded_by': 'ldma_pos'},
+        );
+
+        UploadTask uploadTask;
+        if (kIsWeb) {
+          uploadTask = storageRef.putData(platformFile.bytes!, metadata);
+        } else {
+          uploadTask = storageRef.putFile(File(platformFile.path!), metadata);
+        }
+
+        final snapshot = await uploadTask;
+        final url = await snapshot.ref.getDownloadURL();
+        
+        setState(() {
+          imageUrl = url;
+          loading = false;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Image uploaded successfully!"), backgroundColor: Colors.green)
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Upload error: $e");
+      if (mounted) {
         setState(() => loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Upload failed: $e"), backgroundColor: Colors.red)
+        );
       }
     }
   }
@@ -504,70 +639,107 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
             focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFCDD22))),
           ),
         ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (imageUrl != null) 
-                ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(imageUrl!, height: 100, width: double.infinity, fit: BoxFit.cover)),
-              TextButton.icon(
-                onPressed: _pickImage, 
-                icon: const Icon(Icons.image, color: Color(0xFFFCDD22)), 
-                label: Text(imageUrl == null ? "Upload Image" : "Change Image", style: const TextStyle(color: Color(0xFFFCDD22))),
-              ),
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: "Item Name")),
-              TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: "Price (INR)"), keyboardType: TextInputType.number),
-              TextField(controller: descCtrl, decoration: const InputDecoration(labelText: "Description (Optional)")),
-              const SizedBox(height: 12),
-              kIsWeb 
-                ? FutureBuilder<QuerySnapshot>(
-                    future: FirebaseFirestore.instance.collection('menu_categories').where('restaurantId', isEqualTo: widget.restaurantId).get(),
-                    builder: (context, snap) => _buildCategoryDropdown(snap),
-                  )
-                : StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('menu_categories').where('restaurantId', isEqualTo: widget.restaurantId).snapshots(),
-                    builder: (context, snap) => _buildCategoryDropdown(snap),
+        child: SizedBox(
+          width: 450,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  child: MenuItemThumb(
+                    item: MenuItem(
+                      id: widget.id ?? '',
+                      name: nameCtrl.text,
+                      price: double.tryParse(priceCtrl.text) ?? 0,
+                      imageUrl: imageUrl,
+                      category: selectedCategory ?? '',
+                    ),
+                    radius: BorderRadius.circular(12),
+                    placeholderIconSize: 40,
                   ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                title: const Text("Available in POS", style: TextStyle(fontSize: 14, color: Colors.white)),
-                subtitle: const Text("Show/Hide in Table/Takeaway menu", style: TextStyle(fontSize: 11, color: Colors.white54)),
-                value: isAvailable, 
-                onChanged: (v) => setState(() => isAvailable = v),
-                activeColor: const Color(0xFFFCDD22),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-              SwitchListTile(
-                title: const Text("Available Online (Zomato/Swiggy)", style: TextStyle(fontSize: 14, color: Colors.white)),
-                subtitle: const Text("Sync to UrbanPiper Atlas", style: TextStyle(fontSize: 11, color: Colors.white54)),
-                value: availableOnline, 
-                onChanged: (v) => setState(() => availableOnline = v),
-                activeColor: Colors.purpleAccent,
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _pickImage, 
+                  icon: const Icon(Icons.image, color: Color(0xFFFCDD22)), 
+                  label: Text(imageUrl == null ? "Upload Image" : "Change Image", style: const TextStyle(color: Color(0xFFFCDD22))),
+                ),
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: "Item Name")),
+                TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: "Price (INR)"), keyboardType: TextInputType.number),
+                TextField(controller: descCtrl, decoration: const InputDecoration(labelText: "Description (Optional)")),
+                const SizedBox(height: 12),
+                kIsWeb 
+                  ? FutureBuilder<QuerySnapshot>(
+                      future: FirebaseFirestore.instance.collection('menu_categories').where('restaurantId', isEqualTo: widget.restaurantId).get(),
+                      builder: (context, snap) => _buildCategoryDropdown(snap),
+                    )
+                  : StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('menu_categories').where('restaurantId', isEqualTo: widget.restaurantId).snapshots(),
+                      builder: (context, snap) => _buildCategoryDropdown(snap),
+                    ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  title: const Text("Available in POS", style: TextStyle(fontSize: 14, color: Colors.white)),
+                  subtitle: const Text("Show/Hide in Table/Takeaway menu", style: TextStyle(fontSize: 11, color: Colors.white54)),
+                  value: isAvailable, 
+                  onChanged: (v) => setState(() => isAvailable = v),
+                  activeColor: const Color(0xFFFCDD22),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                SwitchListTile(
+                  title: const Text("Available Online (Zomato/Swiggy)", style: TextStyle(fontSize: 14, color: Colors.white)),
+                  subtitle: const Text("Sync to UrbanPiper Atlas", style: TextStyle(fontSize: 11, color: Colors.white54)),
+                  value: availableOnline, 
+                  onChanged: (v) => setState(() => availableOnline = v),
+                  activeColor: Colors.purpleAccent,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
           ),
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
         ElevatedButton(
-          onPressed: loading ? null : () {
-            final data = {
-              'name': nameCtrl.text.trim(),
-              'price': double.tryParse(priceCtrl.text) ?? 0.0,
-              'description': descCtrl.text.trim(),
-              'category': selectedCategory,
-              'imageUrl': imageUrl,
-              'isAvailable': isAvailable,
-              'availableOnline': availableOnline,
-              'restaurantId': widget.restaurantId,
-            };
-            if (widget.id == null) FirebaseFirestore.instance.collection('menu_items').add(data);
-            else FirebaseFirestore.instance.collection('menu_items').doc(widget.id).update(data);
-            Navigator.pop(context);
+          onPressed: loading ? null : () async {
+            setState(() => loading = true);
+            try {
+              final data = {
+                'name': nameCtrl.text.trim(),
+                'price': double.tryParse(priceCtrl.text) ?? 0.0,
+                'description': descCtrl.text.trim(),
+                'category': selectedCategory,
+                'imageUrl': imageUrl,
+                'isAvailable': isAvailable,
+                'availableOnline': availableOnline,
+                'restaurantId': widget.restaurantId,
+              };
+
+              // Cleanup old image if it was changed
+              final oldImageUrl = widget.initialData?['imageUrl'];
+              if (oldImageUrl != null && oldImageUrl != imageUrl) {
+                try {
+                  await FirebaseStorage.instance.refFromURL(oldImageUrl).delete();
+                } catch (e) {
+                  debugPrint("Error deleting old image: $e");
+                }
+              }
+
+              if (widget.id == null) await FirebaseFirestore.instance.collection('menu_items').add(data);
+              else await FirebaseFirestore.instance.collection('menu_items').doc(widget.id).update(data);
+              
+              if (mounted) Navigator.pop(context);
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+              }
+            } finally {
+              if (mounted) setState(() => loading = false);
+            }
           }, 
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
           child: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: const Color(0xFF141615))) : const Text("Save", style: TextStyle(fontWeight: FontWeight.bold))

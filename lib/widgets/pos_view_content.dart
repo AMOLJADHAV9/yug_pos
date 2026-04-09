@@ -14,6 +14,7 @@ import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../screens/cashier/v2_styles.dart';
+import 'menu_item_card.dart';
 
 class POSViewContent extends StatefulWidget {
   final bool isAdminTab;
@@ -42,6 +43,7 @@ class _POSViewContentState extends State<POSViewContent> {
   String? _gstNumber;
   String? _lastRestaurantId;
   int _mobileActiveIndex = 1; // 0: History, 1: Tables/Order, 2: Cart, 3: Reports, 4: Settings
+  bool _isSubmitting = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -123,7 +125,6 @@ class _POSViewContentState extends State<POSViewContent> {
               body: Column(
                 children: [
                   _buildMobileHeader(restaurantId, role),
-                  _buildMobileStatsCards(restaurantId),
                   Expanded(child: _buildMobileContentView(restaurantId, role)),
                 ],
               ),
@@ -435,7 +436,7 @@ class _POSViewContentState extends State<POSViewContent> {
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Select Printer", style: TextStyle(color: Colors.white)),
+              const Expanded(child: Text("Select Printer", style: TextStyle(color: Colors.white))),
               if (printer.isScanning)
                 const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
               else
@@ -639,10 +640,10 @@ class _POSViewContentState extends State<POSViewContent> {
         return GridView.builder(
           padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 8, vertical: 8),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
+            crossAxisCount: isMobile ? 3 : 2,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: isMobile ? 1.4 : 1.2,
+            childAspectRatio: isMobile ? 1.0 : 1.2,
           ),
           itemCount: tables.length,
           itemBuilder: (context, index) {
@@ -768,7 +769,12 @@ class _POSViewContentState extends State<POSViewContent> {
       await batch.commit();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order Cancelled Successfully"), backgroundColor: V2Colors.orange));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Cancel Error: $e"), backgroundColor: V2Colors.red));
+      final restaurantId = context.read<AuthService>().restaurantId;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("Cancel Error: $e | RID: $restaurantId | OID: ${table.currentOrderId}"), 
+        backgroundColor: V2Colors.red,
+        duration: const Duration(seconds: 5),
+      ));
     }
   }
 
@@ -890,30 +896,70 @@ class _POSViewContentState extends State<POSViewContent> {
 
   Widget _buildCategoryTabs(String? restaurantId) {
     return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('menu_categories').where('restaurantId', isEqualTo: restaurantId).snapshots(),
+      stream: _firestore
+          .collection('menu_categories')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .snapshots(),
       builder: (context, snapshot) {
         final cats = ['All'];
         if (snapshot.hasData) {
           cats.addAll(snapshot.data!.docs.map((d) => d['name'] as String));
         }
         return Container(
-          height: 40,
+          height: 48,
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: ListView(
+          child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            children: cats.map((c) => Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: ChoiceChip(
-                label: Text(c, style: TextStyle(fontSize: 9, color: _selectedCategory == c ? Colors.black : V2Colors.muted, fontWeight: FontWeight.bold)),
-                selected: _selectedCategory == c,
-                onSelected: (v) => setState(() => _selectedCategory = c),
-                backgroundColor: Colors.transparent,
-                selectedColor: V2Colors.yellow,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: V2Colors.border)),
-                showCheckmark: false,
-              ),
-            )).toList(),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            itemCount: cats.length,
+            itemBuilder: (context, index) {
+              final c = cats[index];
+              final isSel = _selectedCategory == c;
+              
+              // Title case conversion
+              final label = c.split(' ').map((word) {
+                if (word.isEmpty) return word;
+                return word[0].toUpperCase() + word.substring(1).toLowerCase();
+              }).join(' ');
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: InkWell(
+                  onTap: () => setState(() => _selectedCategory = c),
+                  borderRadius: BorderRadius.circular(8),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSel ? V2Colors.yellow : V2Colors.s3,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSel ? V2Colors.yellow : V2Colors.border,
+                        width: 1,
+                      ),
+                      boxShadow: isSel ? [
+                        BoxShadow(
+                          color: V2Colors.yellow.withOpacity(0.2),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        )
+                      ] : [],
+                    ),
+                    child: Center(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isSel ? Colors.black : V2Colors.text,
+                          fontWeight: isSel ? FontWeight.w900 : FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         );
       },
@@ -944,10 +990,10 @@ class _POSViewContentState extends State<POSViewContent> {
             return GridView.builder(
               padding: const EdgeInsets.all(8),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
+                crossAxisCount: isMobile ? 3 : 5,
                 crossAxisSpacing: 8,
                 mainAxisSpacing: 8,
-                childAspectRatio: isMobile ? 0.6 : 0.85,
+                childAspectRatio: isMobile ? 0.85 : 1.0,
               ),
               itemCount: items.length,
               itemBuilder: (context, index) {
@@ -955,7 +1001,8 @@ class _POSViewContentState extends State<POSViewContent> {
                 final cartQty = cart.items.where((i) => i.item.id == item.id).fold(0, (sum, i) => sum + i.quantity);
                 final isSelected = cartQty > 0;
 
-                return InkWell(
+                return MenuItemCard(
+                  item: item,
                   onTap: needsTable ? () {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text("⚠️ Please select a table first!"),
@@ -963,74 +1010,9 @@ class _POSViewContentState extends State<POSViewContent> {
                       duration: Duration(seconds: 1),
                     ));
                   } : () => cart.addItem(item),
-                  child: Container(
-                    decoration: isSelected 
-                      ? V2Styles.cardDecoration.copyWith(border: Border.all(color: V2Colors.yellow, width: 2))
-                      : V2Styles.cardDecoration,
-                    padding: const EdgeInsets.all(8),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-                          children: [
-                            if (isMobile)
-                              Container(
-                                height: 40, // Reduced from 60
-                                width: double.infinity,
-                                margin: const EdgeInsets.only(bottom: 4),
-                                child: _buildMenuItemThumb(item, isLarge: true),
-                              )
-                            else
-                              SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: _buildMenuItemThumb(item),
-                              ),
-                            const SizedBox(height: 2),
-                            Text(
-                              item.name, 
-                              textAlign: isMobile ? TextAlign.center : TextAlign.left, // Centered for grid look
-                              style: TextStyle(fontSize: isMobile ? 9 : 9, fontWeight: FontWeight.bold, height: 1.1), 
-                              maxLines: 2, 
-                              overflow: TextOverflow.ellipsis
-                            ),
-                            const SizedBox(height: 2),
-                            Text("₹${item.price.toStringAsFixed(0)}", style: TextStyle(fontSize: isMobile ? 9 : 10, color: V2Colors.yellow, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        if (isMobile)
-                          Positioned(
-                            right: 0, bottom: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(color: V2Colors.yellow, shape: BoxShape.circle),
-                              child: const Icon(Icons.add, size: 16, color: Colors.black),
-                            ),
-                          ),
-                        if (isSelected)
-                          Positioned(
-                            top: -12, right: -12,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: V2Colors.yellow,
-                                shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2))],
-                              ),
-                              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                              child: Center(
-                                child: Text(
-                                  "$cartQty", 
-                                  style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w900)
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+                  isSelected: isSelected,
+                  quantity: cartQty,
+                  isMobile: isMobile,
                 );
               },
             );
@@ -1040,37 +1022,6 @@ class _POSViewContentState extends State<POSViewContent> {
     );
   }
 
-  Widget _buildMenuItemThumb(MenuItem item, {bool isLarge = false}) {
-    final imageUrl = (item.imageUrl ?? '').trim();
-    final radius = BorderRadius.circular(isLarge ? 6 : 4);
-    final placeholder = Container(
-      decoration: BoxDecoration(
-        color: V2Colors.s3,
-        borderRadius: radius,
-        border: Border.all(color: V2Colors.border),
-      ),
-      child: Icon(
-        Icons.fastfood_rounded,
-        size: isLarge ? 22 : 12,
-        color: V2Colors.muted,
-      ),
-    );
-
-    if (imageUrl.isEmpty) return placeholder;
-
-    return ClipRRect(
-      borderRadius: radius,
-      child: Image.network(
-        imageUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => placeholder,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return placeholder;
-        },
-      ),
-    );
-  }
 
   // --- COL 3: CART ---
   Widget _buildColumnCart(String? restaurantId, UserRole role, {bool isMobile = false}) {
@@ -1203,7 +1154,7 @@ class _POSViewContentState extends State<POSViewContent> {
               SizedBox(
                 width: 34,
                 height: 34,
-                child: _buildMenuItemThumb(i.item),
+                child: MenuItemThumb(item: i.item, placeholderIconSize: 14),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1774,57 +1725,82 @@ class _POSViewContentState extends State<POSViewContent> {
   Future<void> _placeOrder(CartProvider cart) async {
     if (cart.items.isEmpty) return;
     final isDineIn = cart.orderType == OrderType.dineIn;
-    if (isDineIn && cart.tableId == null) return;
+    if (isDineIn && cart.tableId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a table for Dine-In orders")));
+      return;
+    }
     
-    final auth = context.read<AuthService>();
-    final restaurantId = auth.restaurantId;
-    if (restaurantId == null) return;
+    setState(() => _isSubmitting = true);
 
     try {
-      final batch = _firestore.batch();
-      final isNewOrder = cart.activeOrderId == null;
-      final orderId = cart.activeOrderId ?? _firestore.collection('orders').doc().id;
-      final orderRef = _firestore.collection('orders').doc(orderId);
+      final auth = context.read<AuthService>();
+      final restaurantId = auth.restaurantId;
+      if (restaurantId == null) throw Exception("Restaurant ID not found");
+
+      // Fetch GST settings
+      final settingsDoc = await _firestore.collection('settings').doc(restaurantId).get();
+      final settings = settingsDoc.data();
+      final double _gstPercentage = (settings?['gstPercentage'] ?? 5.0).toDouble();
+
+      String? tableName;
+      Map<String, dynamic>? tableData;
       
-      int? tokenNo = cart.activeTokenNo;
-      if (isNewOrder && (cart.orderType == OrderType.takeaway || cart.orderType == OrderType.delivery)) {
-        // Simple token increment (could be smarter)
-        tokenNo = (DateTime.now().millisecondsSinceEpoch % 1000);
+      if (isDineIn && cart.tableId != null) {
+        final tableRef = _firestore.collection('tables').doc(cart.tableId);
+        final tableDoc = await tableRef.get();
+        if (tableDoc.exists) {
+          tableData = tableDoc.data() as Map<String, dynamic>;
+          tableName = tableData['name'];
+        }
+      } else {
+        tableName = cart.orderType == OrderType.takeaway ? "TAKEAWAY" : "DELIVERY";
       }
 
-      final kotTimestamp = DateTime.now().millisecondsSinceEpoch;
-      final newItems = cart.items.map((i) => {
-        'name': i.item.name,
-        'price': i.item.price,
-        'quantity': i.quantity,
-        'category': i.item.category ?? 'General',
-        'kotTimestamp': kotTimestamp,
-      }).toList();
+      final String orderId = cart.activeOrderId ?? (isDineIn && tableData?['currentOrderId'] != null 
+          ? tableData!['currentOrderId'] 
+          : _firestore.collection('orders').doc().id);
+      
+      final orderRef = _firestore.collection('orders').doc(orderId);
+      final bool isNewOrder = cart.activeOrderId == null && (tableData?['currentOrderId'] == null || !isDineIn);
 
       final subtotal = cart.totalAmount;
       final total = subtotal * (1 + (_gstPercentage / 100));
-
+      final int totalItemsCount = cart.totalItems;
+      final int kotTimestamp = DateTime.now().millisecondsSinceEpoch;
+      
       int kotNo = 1;
+      final batch = _firestore.batch();
 
       if (isNewOrder) {
         batch.set(orderRef, {
+          'tableId': isDineIn ? cart.tableId : null,
+          'tableName': tableName ?? 'Unknown',
+          'orderType': cart.orderType.name,
+          'waiterName': cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter',
+          'customerName': cart.customerName ?? 'Walk-in',
+          'status': 'active',
+          'takeawayStatus': cart.orderType == OrderType.takeaway ? 'pending' : null,
+          'deliveryStatus': cart.orderType == OrderType.delivery ? 'pending' : null,
+          'isDelivered': false,
           'restaurantId': restaurantId,
-          'items': newItems.map((i) => {...i, 'kotNo': 1}).toList(),
+          'createdAt': FieldValue.serverTimestamp(),
           'totalAmount': total,
           'subtotal': subtotal,
+          'totalItems': totalItemsCount,
           'gstPercentage': _gstPercentage,
-          'status': 'new',
-          'createdAt': FieldValue.serverTimestamp(),
-          'orderType': cart.orderType.name,
-          'tableName': isDineIn ? cart.tableName : (cart.orderType == OrderType.takeaway ? "Takeaway" : "Delivery"),
-          'tableId': cart.tableId,
-          if (tokenNo != null) 'tokenNo': tokenNo,
-          'customerName': cart.customerName,
-          'customerContact': cart.customerContact,
-          'deliveryAddress': cart.deliveryAddress,
           'kotCount': 1,
+          'items': cart.items.map((i) => {
+            'id': i.item.id,
+            'name': i.item.name,
+            'price': i.item.price,
+            'quantity': i.quantity,
+            'category': i.item.category,
+            'kotNo': 1,
+            'kotTimestamp': kotTimestamp,
+            'specialInstructions': i.specialInstructions,
+          }).toList(),
         });
-
+        
         if (isDineIn && cart.tableId != null) {
           batch.update(_firestore.collection('tables').doc(cart.tableId), {
             'status': 'occupied',
@@ -1837,63 +1813,99 @@ class _POSViewContentState extends State<POSViewContent> {
         if (orderDoc.exists) {
           kotNo = (orderDoc.data()?['kotCount'] ?? 1) + 1;
         }
-        
+
         batch.update(orderRef, {
-          'items': FieldValue.arrayUnion(newItems.map((i) => {...i, 'kotNo': kotNo}).toList()),
+          'items': FieldValue.arrayUnion(cart.items.map((i) => {
+            'id': i.item.id,
+            'name': i.item.name,
+            'price': i.item.price,
+            'quantity': i.quantity,
+            'category': i.item.category,
+            'kotNo': kotNo,
+            'kotTimestamp': kotTimestamp,
+            'specialInstructions': i.specialInstructions,
+          }).toList()),
           'totalAmount': FieldValue.increment(total),
           'subtotal': FieldValue.increment(subtotal),
+          'totalItems': FieldValue.increment(totalItemsCount),
           'gstPercentage': _gstPercentage,
           'lastUpdatedAt': FieldValue.serverTimestamp(),
           'kotCount': kotNo,
         });
       }
 
-      // Create KOT
+      // Create KOT record
       final kotRef = _firestore.collection('kots').doc();
-      final kotData = {
+      final kotId = kotRef.id;
+      final kNoStr = "KOT #$kotNo";
+
+      batch.set(kotRef, {
         'restaurantId': restaurantId,
         'orderId': orderId,
-        if (tokenNo != null) 'tokenNo': tokenNo,
-        'tableId': isDineIn ? cart.tableId : cart.orderType.name,
-        'tableName': isDineIn ? (cart.tableName ?? 'Table') : (cart.orderType == OrderType.takeaway ? "Takeaway" : "Delivery"),
-        'items': newItems.map((i) => {'name': i['name'], 'quantity': i['quantity']}).toList(),
-        'waiterName': 'POS Dashboard',
+        'tableId': isDineIn ? cart.tableId : null,
+        'tableName': tableName ?? 'Unknown',
+        'orderType': cart.orderType.name,
+        'customerName': cart.customerName ?? 'Walk-in',
+        'waiterName': cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter',
         'status': 'Pending',
         'kotNo': kotNo,
-        'orderType': cart.orderType.name,
-        'customerName': cart.customerName,
-        'customerContact': cart.customerContact,
-        'deliveryAddress': cart.deliveryAddress,
-        'restaurantId': restaurantId, // CRITICAL: Added for receipt metadata retrieval
+        'kotId': kotId,
+        'items': cart.items.map((i) => {
+          'name': i.item.name,
+          'quantity': i.quantity,
+          'specialInstructions': i.specialInstructions,
+        }).toList(),
         'createdAt': FieldValue.serverTimestamp(),
-      };
-      batch.set(kotRef, kotData);
+      });
 
       await batch.commit();
+      
+      // Prepare data for printing
+      final kotData = {
+        'tableName': tableName ?? 'Unknown',
+        'customerName': cart.customerName ?? 'Walk-in',
+        'waiterName': cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter',
+        'cashierName': auth.userName ?? 'Staff',
+        'kotNo': kotNo,
+        'restaurantId': restaurantId,
+        'orderType': cart.orderType.name,
+        'createdAt': Timestamp.now(),
+        'items': cart.items.map((i) => {
+          'name': i.item.name,
+          'quantity': i.quantity,
+          'price': i.item.price,
+        }).toList(),
+      };
 
-      // Print KOT
-      try {
-        final usb = context.read<UsbPrinterService>();
-        final bt = context.read<BluetoothPrinterService>();
-        final isAndroid = !kIsWeb && Platform.isAndroid;
-        final dynamic printerService = isAndroid ? bt : usb;
+      final usb = context.read<UsbPrinterService>();
+      final bt = context.read<BluetoothPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
 
-      // Smart Print (Thermal if configured, else PDF fallback)
       await ReportService.printKOTReceipt(
         kotData, 
         orderId, 
         printerService: isAndroid ? bt : usb,
       );
-      } catch (e) {
-        debugPrint("KOT Print Error: $e");
-      }
 
-      cart.clearCart();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isNewOrder ? "Order placed!" : "Items added!"), backgroundColor: V2Colors.green));
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Order Placed! $kNoStr'),
+          backgroundColor: V2Colors.green,
+        ));
+        cart.clearCart();
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: V2Colors.red));
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to place order: $e'),
+          backgroundColor: V2Colors.red,
+        ));
+      }
     }
   }
+
 
   Future<void> _advanceOrder(String orderId, String currentStatus) async {
     String nextStatus;
@@ -2988,19 +3000,19 @@ class _POSViewContentState extends State<POSViewContent> {
                     child: Text("MAIN NAVIGATION", style: TextStyle(color: V2Colors.muted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   ),
                   _drawerItem(Icons.dashboard_outlined, "Dashboard", () {
-                    Scaffold.of(context).closeDrawer();
+                    _scaffoldKey.currentState?.closeDrawer();
                     widget.onTabSelect!(0);
                   }),
                   _drawerItem(Icons.people_outline, "Staff Management", () {
-                    Scaffold.of(context).closeDrawer();
+                    _scaffoldKey.currentState?.closeDrawer();
                     widget.onTabSelect!(3);
                   }),
                   _drawerItem(Icons.restaurant_menu_outlined, "Menu Management", () {
-                    Scaffold.of(context).closeDrawer();
+                    _scaffoldKey.currentState?.closeDrawer();
                     widget.onTabSelect!(4);
                   }),
                   _drawerItem(Icons.analytics_outlined, "Analytics", () {
-                    Scaffold.of(context).closeDrawer();
+                    _scaffoldKey.currentState?.closeDrawer();
                     widget.onTabSelect!(2);
                   }),
                   const Divider(color: V2Colors.border, indent: 16, endIndent: 16),
@@ -3010,21 +3022,19 @@ class _POSViewContentState extends State<POSViewContent> {
                   child: Text("POS ACTIONS", style: TextStyle(color: V2Colors.muted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
                 ),
                 _drawerItem(Icons.history_outlined, "Order History", () {
-                  Scaffold.of(context).closeDrawer();
+                  _scaffoldKey.currentState?.closeDrawer();
                   Navigator.push(context, MaterialPageRoute(builder: (context) => _buildFullHistoryPage(auth.restaurantId, auth.role)));
                 }),
                 _drawerItem(Icons.download_for_offline_outlined, "Download Daily Reports", () {
-                  Scaffold.of(context).closeDrawer();
+                  _scaffoldKey.currentState?.closeDrawer();
                   _showDownloadReportsDialog();
                 }),
                 _drawerItem(Icons.print_outlined, "Printer Settings", () {
-                  Scaffold.of(context).closeDrawer();
+                  _scaffoldKey.currentState?.closeDrawer();
                   _showPrinterSelectionDialog();
                 }),
-                const Divider(color: V2Colors.border, height: 24, indent: 20, endIndent: 20),
-                _drawerItem(Icons.help_outline, "Support", () {}),
                 _drawerItem(Icons.logout, "Logout Session", () {
-                  Scaffold.of(context).closeDrawer();
+                  _scaffoldKey.currentState?.closeDrawer();
                   auth.logout();
                 }, color: V2Colors.red),
               ],
@@ -3035,7 +3045,7 @@ class _POSViewContentState extends State<POSViewContent> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                const Text("v2.0.1 Stable", style: TextStyle(color: V2Colors.muted, fontSize: 10)),
+                const Text("v1.0.0 Stable", style: TextStyle(color: V2Colors.muted, fontSize: 10)),
                 Text("RES ID: ${auth.restaurantId?.substring(0, 8) ?? '...'}", style: const TextStyle(color: V2Colors.muted, fontSize: 8)),
               ],
             ),

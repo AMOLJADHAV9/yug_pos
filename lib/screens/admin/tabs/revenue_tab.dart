@@ -70,15 +70,17 @@ class _RevenueTabState extends State<RevenueTab> {
             ],
           ),
           const SizedBox(height: 16),
-          kIsWeb 
-            ? FutureBuilder<DocumentSnapshot>(
-                future: firestore.collection('daily_collections').doc("${restaurantId}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}").get(),
-                builder: (context, snapshot) => _buildTodayStats(context, snapshot, firestore, restaurantId),
-              )
-            : StreamBuilder<DocumentSnapshot>(
-                stream: firestore.collection('daily_collections').doc("${restaurantId}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}").snapshots(),
-                builder: (context, snapshot) => _buildTodayStats(context, snapshot, firestore, restaurantId),
-              ),
+          StreamBuilder<DocumentSnapshot>(
+            stream: firestore.collection('daily_collections')
+                .doc("${restaurantId}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}")
+                .snapshots(),
+            builder: (context, snapshot) {
+              final data = snapshot.hasData && snapshot.data!.exists 
+                  ? snapshot.data!.data() as Map<String, dynamic>?
+                  : null;
+              return _buildTodayStats(context, data, snapshot.error, firestore, restaurantId);
+            },
+          ),
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.only(left: 4),
@@ -87,13 +89,6 @@ class _RevenueTabState extends State<RevenueTab> {
           ),
           const SizedBox(height: 24),
           _buildRevenueAnalyticsLayout(firestore, restaurantId),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(child: _buildSectionHeader("Revenue Trend", Icons.bar_chart, Colors.blue)),
-            ],
-          ),
-          _buildMonthlyBarChart(firestore, startOfYear, restaurantId),
         ],
       ),
     );
@@ -137,34 +132,34 @@ class _RevenueTabState extends State<RevenueTab> {
         ),
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.max,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 24,
-                  height: 24,
+                  width: 22,
+                  height: 22,
                   decoration: BoxDecoration(
                     color: themeYellow.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Icon(icon, color: subtitleColor ?? themeYellow, size: 12),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(title,
                     style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 1),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(value,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: subtitleColor ?? themeYellow)),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: subtitleColor ?? themeYellow)),
                 ),
                 if (subtitle != null) ...[
-                  const SizedBox(height: 1),
+                  const SizedBox(height: 0),
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(subtitle,
@@ -189,6 +184,7 @@ class _RevenueTabState extends State<RevenueTab> {
       // Optimization: Fetch the latest 1000 orders globally and filter in-memory.
       // This avoids composite index requirements and handles orders with missing restaurantId.
       stream: firestore.collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId)
           .orderBy('createdAt', descending: true)
           .limit(1000)
           .snapshots(),
@@ -638,7 +634,7 @@ class _RevenueTabState extends State<RevenueTab> {
             },
           );
   }
-  Widget _buildTodayStats(BuildContext context, AsyncSnapshot<DocumentSnapshot> snapshot, FirebaseFirestore firestore, String? restaurantId) {
+  Widget _buildTodayStats(BuildContext context, Map<String, dynamic>? data, Object? error, FirebaseFirestore firestore, String? restaurantId) {
     double todayRevenue = 0;
     double todayTableRevenue = 0;
     double todayTakeawayRevenue = 0;
@@ -652,45 +648,23 @@ class _RevenueTabState extends State<RevenueTab> {
     double todayCashRevenue = 0;
     double todayUpiRevenue = 0;
 
-    if (snapshot.hasError) {
-      debugPrint("AdminDashboard: Error fetching stats: ${snapshot.error}");
-      return Container(
-        height: 100,
-        decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.withOpacity(0.3)),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.redAccent),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                snapshot.error.toString().contains('permission-denied')
-                  ? "Access Denied: Please check your permissions or re-login."
-                  : "Unable to load today's stats. Please try again.",
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-      );
+    if (error != null) {
+      debugPrint("AdminDashboard: Error fetching stats: $error");
+      // Gracefully hide error message as per user request and return empty placeholder or zeroed cards
+      return const SizedBox.shrink(); 
     }
 
-    if (snapshot.hasData && snapshot.data!.exists) {
-      final data = snapshot.data!.data() as Map<String, dynamic>;
+    if (data != null) {
       todayRevenue = (data['netCollection'] ?? 0).toDouble();
       todayTableRevenue = (data['tableCollection'] ?? 0).toDouble();
       todayTakeawayRevenue = (data['takeawayCollection'] ?? 0).toDouble();
       todayDeliveryRevenue = (data['deliveryCollection'] ?? 0).toDouble();
       todayOnlineRevenue = (data['onlineCollection'] ?? 0).toDouble();
-      billCount = data['billCount'] ?? 0;
-      takeawayCount = data['takeawayCount'] ?? 0;
-      deliveryCount = data['deliveryCount'] ?? 0;
-      tableCount = data['tableCount'] ?? 0;
-      onlineCount = data['onlineCount'] ?? 0;
+      billCount = (data['billCount'] ?? 0).toInt();
+      takeawayCount = (data['takeawayCount'] ?? 0).toInt();
+      deliveryCount = (data['deliveryCount'] ?? 0).toInt();
+      tableCount = (data['tableCount'] ?? 0).toInt();
+      onlineCount = (data['onlineCount'] ?? 0).toInt();
       todayCashRevenue = (data['cashCollection'] ?? 0).toDouble();
       todayUpiRevenue = (data['upiCollection'] ?? 0).toDouble();
     }
@@ -699,10 +673,10 @@ class _RevenueTabState extends State<RevenueTab> {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: width > 900 ? 5 : (width > 600 ? 4 : (width < 300 ? 2 : 3)), 
+      crossAxisCount: width > 900 ? 5 : (width > 600 ? 4 : (width < 320 ? 2 : 3)), 
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
-      childAspectRatio: width > 600 ? 1.0 : 0.95,
+      childAspectRatio: width > 600 ? 1.0 : 0.85,
       children: [
         _buildStatCard(
           "Daily Total", 
@@ -894,15 +868,14 @@ class _RevenueTabState extends State<RevenueTab> {
       // may not contain `restaurantId`. Your security rules can still allow
       // reads via `tableId -> tables.restaurantId`, so we fetch without the
       // strict `restaurantId` filter and then filter in-memory.
-      Query query = FirebaseFirestore.instance.collection('orders');
+      Query query = FirebaseFirestore.instance.collection('orders')
+          .where('restaurantId', isEqualTo: restaurantId);
       
       if (type == 'Pending') {
         query = query.where('status', whereIn: ['open', 'kotSent', 'Preparing'])
                      .orderBy('createdAt', descending: true)
                      .limit(500);
       } else {
-        // Fetch the 1000 most recently CREATED orders to ensure we cover today's activity,
-        // then filter by status and settlement/creation date in-memory.
         query = query.orderBy('createdAt', descending: true).limit(1000);
       }
 

@@ -528,9 +528,10 @@ class ReportService {
   static Future<void> printKOTReceipt(
       Map<String, dynamic> data, String orderId, {dynamic printerService, bool forcePdf = false}) async {
     final isAndroid = !kIsWeb && Platform.isAndroid;
-    
-    // ── Bluetooth / USB Silent Print (Android) ──
-    if (isAndroid && !forcePdf && printerService != null &&
+    final isWindows = !kIsWeb && Platform.isWindows;
+
+    // ── Bluetooth / USB Silent Print (Android & Windows) ──
+    if ((isAndroid || isWindows) && !forcePdf && printerService != null &&
         (printerService.hasSavedPrinter || printerService.isConnected)) {
       try {
         final bytes = await generateKOTBytes(data, paperSize: _defaultReceiptPaperSize);
@@ -626,7 +627,7 @@ class ReportService {
 
   // â”€â”€ ORDER RECEIPT (waiter copy) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static Future<void> printOrderReceipt(
-      Map<String, dynamic> data, String orderId, {String restaurantName = "YUG POS"}) async {
+      Map<String, dynamic> data, String orderId, {String restaurantName = "YUG POS", dynamic printerService, bool forcePdf = false}) async {
     final items = _groupItems(data['items'] as List? ?? []);
     final date = _getDateTime(data['createdAt']);
 
@@ -638,7 +639,33 @@ class ReportService {
     final logo = await _loadLogo();
     final resDetails = await _getRestaurantDetails(data, restaurantName, "Market Road, City");
     final actualHotelName = resDetails['name']!;
+    final actualAddress = resDetails['address'] ?? "Market Road, City";
+    final actualState = resDetails['state'] ?? "";
     final actualGst = resDetails['gstNumber']!;
+
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    final isWindows = !kIsWeb && Platform.isWindows;
+
+    // ── Bluetooth / USB Silent Print (Android & Windows) ──
+    if ((isAndroid || isWindows) && !forcePdf && printerService != null &&
+        (printerService.hasSavedPrinter || printerService.isConnected)) {
+      try {
+        final bytes = await generateFinalBillBytes(
+          data: data,
+          total: _getDouble(data['totalAmount']),
+          paymentMode: 'PREVIEW',
+          hotelName: actualHotelName,
+          address: actualAddress,
+          state: actualState,
+          gstNumber: actualGst,
+          paperSize: _defaultReceiptPaperSize,
+        );
+        await printBytesIsolated(printerService, bytes);
+        return;
+      } catch (e) {
+        debugPrint("Silent Order Receipt print error, falling back to PDF: $e");
+      }
+    }
 
     await _safePrint(
       name: 'Order_${orderId.substring(0, 8)}.pdf',
@@ -751,12 +778,14 @@ class ReportService {
     final resDetails = await _getRestaurantDetails(orderData, hotelName, address);
     final actualHotelName = resDetails['name'] ?? hotelName;
     final actualAddress = resDetails['address'] ?? address;
-    final actualState = resDetails['state'] ?? ''; // Added state
+    final actualState = resDetails['state'] ?? '';
     final actualGst = resDetails['gstNumber'] ?? '';
 
     final isAndroid = !kIsWeb && Platform.isAndroid;
-    // ── Bluetooth / USB Silent Print (Android only, when printer is ready) ──
-    if (isAndroid && !forcePdf && printerService != null &&
+    final isWindows = !kIsWeb && Platform.isWindows;
+
+    // ── Bluetooth / USB Silent Print (Android & Windows) ──
+    if ((isAndroid || isWindows) && !forcePdf && printerService != null &&
         (printerService.hasSavedPrinter || printerService.isConnected)) {
       try {
         final bytes = await generateFinalBillBytes(
@@ -1143,17 +1172,8 @@ class ReportService {
     final pageChars = _thermalChars(paperSize);
     final divider = _lineOf(pageChars, ch: '-');
 
-    // Header
-    final resDetails = await _getRestaurantDetails(data, "YUGPOS", "");
-    final actualName = resDetails['name'] ?? "YUGPOS";
-    final actualGst = resDetails['gstNumber'] ?? "";
-    final actualState = resDetails['state'] ?? "";
-
+    // KOT and Table info
     bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text(actualName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
-    if (actualGst.isNotEmpty) bytes += generator.text("GSTIN: $actualGst");
-    if (actualState.isNotEmpty) bytes += generator.text("State: ${actualState.toUpperCase()}");
-    bytes += generator.text("KITCHEN ORDER TICKET", styles: const PosStyles(bold: true));
     bytes += generator.text("KOT #$kotNo", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
     bytes += generator.text(tableName.toUpperCase(), styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
     bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left));
@@ -1164,15 +1184,6 @@ class ReportService {
     bytes += generator.text("CASHIER: ${(data['cashierName'] ?? 'Staff').toString().toUpperCase()}", styles: const PosStyles(bold: true));
     bytes += generator.text("TIME   : $timeStr");
 
-    // Customer info for delivery/takeaway
-    final orderType = (data['orderType'] ?? '').toString().toLowerCase();
-    if (orderType == 'delivery' || orderType == 'takeaway') {
-      final custName = (data['customerName'] ?? 'Walk-in').toString().toUpperCase();
-      bytes += generator.text("CUSTOMER: $custName", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size1, bold: true));
-      if (orderType == 'delivery' && data['deliveryAddress'] != null) {
-        bytes += generator.text("ADDR: ${data['deliveryAddress']}");
-      }
-    }
 
     bytes += generator.text(divider, styles: const PosStyles(align: PosAlign.left));
     bytes += generator.text("QTY ITEM", styles: const PosStyles(bold: true));
@@ -1475,6 +1486,7 @@ class ReportService {
 
       await collRef.set({
         'restaurantId': restaurantId,
+        'date': today,
         'netCollection': FieldValue.increment(total),
         'grossCollection': FieldValue.increment(total),
         'billCount': FieldValue.increment(1),
@@ -1514,6 +1526,7 @@ class ReportService {
           newReceiptNumber = 1;
           transaction.set(collRef, {
             'restaurantId': restaurantId,
+            'date': today,
             'netCollection': total,
             'grossCollection': total,
             'billCount': 1,
