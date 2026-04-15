@@ -10,6 +10,7 @@ import '../../services/report_service.dart';
 import '../../services/usb_printer_service.dart';
 import '../../services/bluetooth_printer_service.dart';
 import '../providers/cart_provider.dart';
+import '../utils/navigator_utils.dart';
 
 class CartViewContent extends StatefulWidget {
   final bool isBottomSheet;
@@ -146,7 +147,7 @@ class _CartViewContentState extends State<CartViewContent> {
                     child: OutlinedButton.icon(
                       onPressed: () {
                         // Close sheet so the cashier/waiter can continue ordering.
-                        if (Navigator.canPop(context)) Navigator.pop(context);
+                        safePop(context);
                       },
                       icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
                       label: const Text(
@@ -240,7 +241,9 @@ class _CartViewContentState extends State<CartViewContent> {
     return content;
   }
 
-  Future<void> _placeOrder(CartProvider cart, BuildContext context, {bool printBill = false, String paymentMode = "Cash"}) async {
+  Future<void> _placeOrder(CartProvider cart, BuildContext context, {bool printBill = false, String paymentMode = "Cash", bool skipGuard = false}) async {
+    if (!skipGuard && _isSubmitting) return;
+    
     final isDineIn = cart.orderType == OrderType.dineIn;
     if (isDineIn && cart.tableId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a table for Dine-In orders")));
@@ -442,28 +445,32 @@ class _CartViewContentState extends State<CartViewContent> {
       }
 
       if (mounted) {
-        setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Order Placed! $kNoStr'),
           backgroundColor: Colors.green,
         ));
         cart.clearCart();
-        if (widget.isBottomSheet && Navigator.canPop(context)) {
-           Navigator.pop(context);
+        if (widget.isBottomSheet) {
+           safePop(context);
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Failed to place order: $e'),
           backgroundColor: Colors.red,
         ));
       }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
   Future<void> _handleAdminSettle(CartProvider cart, AuthService auth) async {
+    if (_isSubmitting) return;
+
     // Determine if there is something to settle
     bool hasCartItems = cart.items.isNotEmpty;
     bool hasTableOrder = false;
@@ -522,9 +529,9 @@ class _CartViewContentState extends State<CartViewContent> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text("Cancel")),
+            TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
             ElevatedButton(
-              onPressed: () => Navigator.pop(c, true),
+              onPressed: () => safePop(c, true),
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
               child: const Text("SETTLE & CLEAR"),
             ),
@@ -540,7 +547,7 @@ class _CartViewContentState extends State<CartViewContent> {
     try {
       if (hasCartItems) {
         // Scenario A: Items in cart - first place KOT then settle
-        await _placeOrder(cart, context, printBill: true, paymentMode: selectedPaymentMode);
+        await _placeOrder(cart, context, printBill: true, paymentMode: selectedPaymentMode, skipGuard: true);
       } else if (hasTableOrder && currentOrderId != null && tableOrderData != null) {
         // Scenario B: Cart is empty but table has an existing order
         final firestore = FirebaseFirestore.instance;
@@ -590,7 +597,7 @@ class _CartViewContentState extends State<CartViewContent> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Table Settled! Mode: ${selectedPaymentMode.toUpperCase()}"), backgroundColor: Colors.green));
           cart.clearCart();
-          if (widget.isBottomSheet) Navigator.pop(context);
+          if (widget.isBottomSheet) safePop(context);
         }
       }
     } catch (e) {
@@ -636,9 +643,9 @@ class _CartViewContentState extends State<CartViewContent> {
           title: const Text("Clear Table?", style: TextStyle(color: Colors.white)),
           content: const Text("This will reset the table status without recording revenue. Continue?", style: TextStyle(color: Colors.white70)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+            TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
             TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed: () => safePop(ctx, true),
               style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
               child: const Text("CLEAR"),
             ),
@@ -656,7 +663,7 @@ class _CartViewContentState extends State<CartViewContent> {
           cart.clearCart();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Table cleared successfully.")));
-            if (widget.isBottomSheet) Navigator.pop(context);
+            if (widget.isBottomSheet) safePop(context);
           }
         } catch (e) {
           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));

@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../models/table_model.dart';
 import '../../utils/debouncer.dart';
 import 'menu_screen.dart';
+import '../../utils/navigator_utils.dart';
 
 class OrderSummaryScreen extends StatefulWidget {
   final TableModel table;
@@ -179,9 +180,9 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: const Color(0xFFFCDD22).withOpacity(0.1))),
         content: const Text('This will notify the cashier and lock the order from adding new items.', style: TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+          TextButton(onPressed: () => safePop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true), 
+            onPressed: () => safePop(context, true), 
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
             child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold))
           ),

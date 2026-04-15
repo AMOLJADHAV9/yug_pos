@@ -62,6 +62,11 @@ class WifiService extends ChangeNotifier {
       return;
     }
 
+    if (kIsWeb || !Platform.isAndroid && !Platform.isIOS) {
+      debugPrint("[WifiService] Scanning not supported on this platform.");
+      return;
+    }
+
     _isScanning = true;
     _networks = [];
     notifyListeners();
@@ -94,6 +99,11 @@ class WifiService extends ChangeNotifier {
 
   Future<bool> connect(String ssid, String password) async {
     debugPrint("[WifiService] Attempting to connect to $ssid...");
+    if (kIsWeb || !Platform.isAndroid && !Platform.isIOS) {
+      debugPrint("[WifiService] Connection not supported on this platform.");
+      return false;
+    }
+    
     try {
       final success = await WiFiForIoTPlugin.connect(
         ssid,
@@ -117,6 +127,8 @@ class WifiService extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    if (kIsWeb || !Platform.isAndroid && !Platform.isIOS) return;
+    
     try {
       await WiFiForIoTPlugin.disconnect();
       await WiFiForIoTPlugin.forceWifiUsage(false);
@@ -129,8 +141,13 @@ class WifiService extends ChangeNotifier {
   }
 
   Future<void> refreshStatus() async {
-    _currentSsid = await WiFiForIoTPlugin.getSSID();
-    _isConnected = await WiFiForIoTPlugin.isConnected();
-    notifyListeners();
+    if (kIsWeb || !Platform.isAndroid && !Platform.isIOS) return;
+    try {
+      _currentSsid = await WiFiForIoTPlugin.getSSID();
+      _isConnected = await WiFiForIoTPlugin.isConnected();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("[WifiService] Refresh status error: $e");
+    }
   }
 }

@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../widgets/takeaway_order_dialog.dart';
 import '../../services/report_service.dart';
 import '../../services/usb_printer_service.dart';
+import '../../utils/navigator_utils.dart';
 
 class TakeawayListScreen extends StatefulWidget {
   const TakeawayListScreen({super.key});
@@ -355,7 +356,7 @@ class _TakeawayListScreenState extends State<TakeawayListScreen> with SingleTick
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
-                      Navigator.pop(context);
+                      safePop(context);
                       _finalizeOrder(orderId, 'Cash', statusField);
                     },
                   ),
@@ -372,7 +373,7 @@ class _TakeawayListScreenState extends State<TakeawayListScreen> with SingleTick
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
-                      Navigator.pop(context);
+                      safePop(context);
                       _finalizeOrder(orderId, 'UPI', statusField);
                     },
                   ),
@@ -393,8 +394,8 @@ class _TakeawayListScreenState extends State<TakeawayListScreen> with SingleTick
         title: const Text("Finalize Order?", style: TextStyle(color: Colors.white)),
         content: Text("Confirming payment via $paymentMode and generating bill.", style: const TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text("Confirm & Bill")),
+          TextButton(onPressed: () => safePop(context, false), child: const Text("Cancel")),
+          ElevatedButton(onPressed: () => safePop(context, true), child: const Text("Confirm & Bill")),
         ],
       ),
     );

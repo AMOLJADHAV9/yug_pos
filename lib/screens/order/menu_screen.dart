@@ -7,6 +7,7 @@ import '../../models/menu_item.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/cart_bottom_sheet.dart';
 import '../../widgets/cart_view_content.dart';
+import '../../utils/navigator_utils.dart';
 
 class MenuScreen extends StatefulWidget {
   final TableModel table;
@@ -324,11 +325,11 @@ class _MenuScreenState extends State<MenuScreen> {
                 ],
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                TextButton(onPressed: () => safePop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
                 ElevatedButton(
                   onPressed: () {
                     context.read<CartProvider>().addItem(item, quantity: quantity, instructions: instructions);
-                    Navigator.pop(context);
+                    safePop(context);
                   }, 
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFCDD22),

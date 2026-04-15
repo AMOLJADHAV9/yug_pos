@@ -12,6 +12,7 @@ import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../utils/debouncer.dart';
+import '../utils/navigator_utils.dart';
 import 'menu_item_card.dart';
 
 class TakeawayOrderDialog extends StatefulWidget {
@@ -32,6 +33,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
   final TextEditingController _searchController = TextEditingController();
   final List<CartItem> _selectedItems = [];
   final Debouncer _debouncer = Debouncer(milliseconds: 1000);
+  bool _isSubmitting = false;
 
   // Removed _phoneController
   final TextEditingController _nameController = TextEditingController();
@@ -137,7 +139,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
                   Text(widget.orderType == 'delivery' ? "Home Delivery" : "Parcel / Pickup", style: const TextStyle(color: Color(0xFFFCDD22), fontSize: 11)),
                 ],
               ),
-              IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
+              IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => safePop(context)),
             ],
           ),
         ),
@@ -478,7 +480,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
               ),
               const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: _selectedItems.isEmpty ? null : () => _submitOrder(),
+                onPressed: (_selectedItems.isEmpty || _isSubmitting) ? null : () => _submitOrder(),
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615), padding: const EdgeInsets.symmetric(vertical: 14)),
                 child: Text(widget.orderType == 'delivery' ? "PLACE DELIVERY ORDER" : "PLACE TAKEAWAY ORDER", style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
@@ -499,7 +501,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
          children: [
            Text("Total: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: const Color(0xFF141615), fontWeight: FontWeight.bold, fontSize: 18)),
            ElevatedButton(
-             onPressed: () => _submitOrder(),
+             onPressed: _isSubmitting ? null : () => _submitOrder(),
              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF141615), foregroundColor: Colors.white),
              child: const Text("PLACE ORDER"),
            ),
@@ -509,123 +511,137 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
   }
 
   void _submitOrder() async {
-    final auth = context.read<AuthService>();
-    final restaurantId = auth.restaurantId;
-    final waiterName = auth.role == UserRole.admin ? "Admin" : (auth.role == UserRole.cashier ? "Cashier" : "Waiter");
-    
-    final address = _addressController.text.trim();
-    final deliveryBoy = _deliveryBoyController.text.trim();
-    final cName = _nameController.text.trim();
-    final cPhone = _phoneController.text.trim();
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
 
-    // Validation for Delivery (Address only now)
-    if (widget.orderType == 'delivery' && address.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Delivery address is required."), backgroundColor: Colors.red));
+    try {
+      final auth = context.read<AuthService>();
+      final restaurantId = auth.restaurantId;
+      final waiterName = auth.role == UserRole.admin ? "Admin" : (auth.role == UserRole.cashier ? "Cashier" : "Waiter");
+      
+      final address = _addressController.text.trim();
+      final deliveryBoy = _deliveryBoyController.text.trim();
+      final cName = _nameController.text.trim();
+      final cPhone = _phoneController.text.trim();
+
+      // Validation for Delivery (Address only now)
+      if (widget.orderType == 'delivery' && address.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Delivery address is required."), backgroundColor: Colors.red));
+        }
+        return;
       }
-      return;
-    }
 
-    final customerName = cName.isNotEmpty ? cName : (widget.orderType == 'delivery' ? "Delivery Customer" : "Takeaway");
-    final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
+      final customerName = cName.isNotEmpty ? cName : (widget.orderType == 'delivery' ? "Delivery Customer" : "Takeaway");
+      final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
 
-    final firestore = FirebaseFirestore.instance;
-    final batch = firestore.batch();
-    final orderRef = firestore.collection('orders').doc();
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      final orderRef = firestore.collection('orders').doc();
 
-    batch.set(orderRef, {
-      'orderType': widget.orderType,
-      'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
-      'tableId': widget.orderType,
-      'customerName': customerName,
-      'customerPhone': cPhone.isNotEmpty ? cPhone : null,
-      'deliveryAddress': address,
-      'deliveryBoy': deliveryBoy.isEmpty ? null : deliveryBoy,
-      'deliveryStatus': widget.orderType == 'delivery' ? 'pending' : null,
-      'takeawayStatus': widget.orderType == 'takeaway' ? 'pending' : null,
-      'paymentMethod': _paymentMethod,
-      'status': 'open',
-      'isDelivered': false,
-      'restaurantId': restaurantId,
-      'waiterName': waiterName,
-      'createdAt': FieldValue.serverTimestamp(),
-      'totalAmount': total,
-      'items': _selectedItems.map((i) => {
-        'id': i.item.id,
-        'name': i.item.name,
-        'price': i.item.price,
-        'quantity': i.quantity,
-      }).toList(),
-    });
+      batch.set(orderRef, {
+        'orderType': widget.orderType,
+        'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
+        'tableId': widget.orderType,
+        'customerName': customerName,
+        'customerPhone': cPhone.isNotEmpty ? cPhone : null,
+        'deliveryAddress': address,
+        'deliveryBoy': deliveryBoy.isEmpty ? null : deliveryBoy,
+        'deliveryStatus': widget.orderType == 'delivery' ? 'pending' : null,
+        'takeawayStatus': widget.orderType == 'takeaway' ? 'pending' : null,
+        'paymentMethod': _paymentMethod,
+        'status': 'open',
+        'isDelivered': false,
+        'restaurantId': restaurantId,
+        'waiterName': waiterName,
+        'createdAt': FieldValue.serverTimestamp(),
+        'totalAmount': total,
+        'items': _selectedItems.map((i) => {
+          'id': i.item.id,
+          'name': i.item.name,
+          'price': i.item.price,
+          'quantity': i.quantity,
+        }).toList(),
+      });
 
-    final itemsRef = orderRef.collection('items');
-    for (var i in _selectedItems) {
-      batch.set(itemsRef.doc(), {
-        'menuItemId': i.item.id,
-        'name': i.item.name,
-        'price': i.item.price,
-        'quantity': i.quantity,
-        'totalPrice': i.item.price * i.quantity,
+      final itemsRef = orderRef.collection('items');
+      for (var i in _selectedItems) {
+        batch.set(itemsRef.doc(), {
+          'menuItemId': i.item.id,
+          'name': i.item.name,
+          'price': i.item.price,
+          'quantity': i.quantity,
+          'totalPrice': i.item.price * i.quantity,
+          'status': 'Pending',
+          'restaurantId': restaurantId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      final kotRef = firestore.collection('kots').doc();
+      batch.set(kotRef, {
+        'orderId': orderRef.id,
+        'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
+        'tableId': widget.orderType,
+        'customerName': customerName,
         'status': 'Pending',
         'restaurantId': restaurantId,
         'createdAt': FieldValue.serverTimestamp(),
+        'waiterName': waiterName,
+        'items': _selectedItems.map((i) => {'name': i.item.name, 'quantity': i.quantity}).toList(),
       });
-    }
 
-    final kotRef = firestore.collection('kots').doc();
-    batch.set(kotRef, {
-      'orderId': orderRef.id,
-      'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
-      'tableId': widget.orderType,
-      'customerName': customerName,
-      'status': 'Pending',
-      'restaurantId': restaurantId,
-      'createdAt': FieldValue.serverTimestamp(),
-      'waiterName': waiterName,
-      'items': _selectedItems.map((i) => {'name': i.item.name, 'quantity': i.quantity}).toList(),
-    });
+      await batch.commit();
+      
+      final kotData = {
+        'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
+        'customerName': customerName,
+        'waiterName': waiterName,
+        'restaurantId': restaurantId, 
+        'totalAmount': total,
+        'items': _selectedItems.map((i) => {'name': i.item.name, 'quantity': i.quantity, 'price': i.item.price}).toList(),
+      };
 
-    await batch.commit();
-    
-    final kotData = {
-      'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
-      'customerName': customerName,
-      'waiterName': waiterName,
-      'restaurantId': restaurantId, // CRITICAL: Added for receipt metadata retrieval
-      'totalAmount': total,
-      'items': _selectedItems.map((i) => {'name': i.item.name, 'quantity': i.quantity, 'price': i.item.price}).toList(),
-    };
+      final usb = context.read<UsbPrinterService>();
+      final bt = context.read<BluetoothPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final dynamic printerService = isAndroid ? bt : usb;
+      final paymentMode = _paymentMethod;
+      final hotelName = context.read<AuthService>().restaurantName ?? "YUG POS";
 
-    final usb = context.read<UsbPrinterService>();
-    final bt = context.read<BluetoothPrinterService>();
-    final isAndroid = !kIsWeb && Platform.isAndroid;
-    final dynamic printerService = isAndroid ? bt : usb;
-    final paymentMode = _paymentMethod;
-    final hotelName = context.read<AuthService>().restaurantName ?? "YUG POS";
+      // STEP 1: Settle Firestore (main thread)
+      final receiptNo = await ReportService.recordRevenueAndSettle(
+        orderId: orderRef.id,
+        restaurantId: restaurantId!,
+        total: total,
+        paymentMode: paymentMode,
+      );
 
-    // STEP 1: Settle Firestore (main thread)
-    final receiptNo = await ReportService.recordRevenueAndSettle(
-      orderId: orderRef.id,
-      restaurantId: restaurantId!,
-      total: total,
-      paymentMode: paymentMode,
-    );
+      // STEP 2: Smart Print (Thermal if configured, else PDF fallback)
+      await ReportService.printFinalBill(
+        orderData: kotData,
+        orderId: orderRef.id,
+        subtotal: total,
+        total: total,
+        paymentMode: paymentMode,
+        hotelName: hotelName,
+        receiptNum: receiptNo.toString(),
+        printerService: printerService,
+      );
 
-    // STEP 2: Smart Print (Thermal if configured, else PDF fallback)
-    await ReportService.printFinalBill(
-      orderData: kotData,
-      orderId: orderRef.id,
-      subtotal: total,
-      total: total,
-      paymentMode: paymentMode,
-      hotelName: hotelName,
-      receiptNum: receiptNo.toString(),
-      printerService: printerService,
-    );
-
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.orderType == 'delivery' ? "Delivery Order Placed!" : "Takeaway Order Placed!"), backgroundColor: Colors.green));
+      if (mounted) {
+        safePop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.orderType == 'delivery' ? "Delivery Order Placed!" : "Takeaway Order Placed!"), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
+
 }

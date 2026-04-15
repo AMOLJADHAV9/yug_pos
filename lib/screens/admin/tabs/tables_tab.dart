@@ -620,12 +620,12 @@ class _TablesTabState extends State<TablesTab> {
         child: TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: "e.g. Ground Floor")),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+        TextButton(onPressed: () => safePop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
         ElevatedButton(
           onPressed: () {
             if (nameCtrl.text.isNotEmpty) {
               _firestore.collection('sections').add({'name': nameCtrl.text.trim(), 'restaurantId': restaurantId});
-              Navigator.pop(context);
+              safePop(context);
             }
           }, 
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
@@ -696,9 +696,9 @@ class _TableEditDialogState extends State<TableEditDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+        TextButton(onPressed: () => safePop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
         if (widget.table != null)
-          TextButton(onPressed: () { _firestore.collection('tables').doc(widget.table!.id).delete(); Navigator.pop(context); }, child: const Text("Delete", style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () { _firestore.collection('tables').doc(widget.table!.id).delete(); safePop(context); }, child: const Text("Delete", style: TextStyle(color: Colors.red))),
         ElevatedButton(
           onPressed: () {
             if (nameCtrl.text.isNotEmpty && selectedSection != null) {
@@ -714,7 +714,7 @@ class _TableEditDialogState extends State<TableEditDialog> {
               } else {
                 _firestore.collection('tables').doc(widget.table!.id).update(data);
               }
-              Navigator.pop(context);
+              safePop(context);
             }
           }, 
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),

@@ -106,6 +106,8 @@ class AuthService extends ChangeNotifier {
     String? address, 
     String? state, // Added state
     String? gstNumber,
+    double cgst = 2.5,
+    double sgst = 2.5,
     String role = 'admin',
   }) async {
     try {
@@ -117,6 +119,8 @@ class AuthService extends ChangeNotifier {
         'address': address,
         'state': state, // Added state
         'gstNumber': gstNumber,
+        'cgst': cgst,
+        'sgst': sgst,
         'createdAt': FieldValue.serverTimestamp(),
         'adminUid': credential.user!.uid,
       });
@@ -137,9 +141,11 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return null;
     } on FirebaseAuthException catch (e) {
-      return e.message;
+      debugPrint("Registration error [${e.code}]: ${e.message}");
+      return "[${e.code}] ${e.message}";
     } catch (e) {
-      return e.toString();
+      debugPrint("Registration error: $e");
+      return "Something went wrong: ${e.toString()}";
     }
   }
 
@@ -169,9 +175,11 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return null;
     } on FirebaseAuthException catch (e) {
-      return e.message;
+      debugPrint("Auth error [${e.code}]: ${e.message}");
+      return "[${e.code}] ${e.message}";
     } catch (e) {
-      return e.toString();
+      debugPrint("Login error: $e");
+      return "Something went wrong: ${e.toString()}";
     }
   }
 

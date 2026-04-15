@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/pos_view_content.dart';
 import './v2_styles.dart';
+import '../../widgets/connectivity_indicators.dart';
 import './reports_screen.dart';
+import '../../utils/navigator_utils.dart';
 
 class CashierDashboardV2 extends StatefulWidget {
   const CashierDashboardV2({super.key});
@@ -60,7 +62,7 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
                     width: 132,
                     height: 46,
                     child: Image.asset(
-                      'lib/assets/img/yug-poslogo.png',
+                      'assets/images/yug-poslogo.png',
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -87,6 +89,11 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
                 }),
                 _buildDrawerItem(Icons.settings_outlined, "Settings", false, () {}),
                 _buildDrawerItem(Icons.help_outline, "Support", false, () {}),
+                const SizedBox(height: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: ConnectivityIndicators(),
+                ),
               ],
             ),
           ),
@@ -109,10 +116,10 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
                       title: const Text("Logout?", style: TextStyle(color: Colors.white, fontSize: 16)),
                       content: const Text("Are you sure you want to end your session?", style: TextStyle(color: V2Colors.muted, fontSize: 13)),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+                        TextButton(onPressed: () => safePop(context, false), child: const Text("Cancel")),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                          onPressed: () => Navigator.pop(context, true), 
+                          onPressed: () => safePop(context, true), 
                           child: const Text("Logout")
                         ),
                       ],

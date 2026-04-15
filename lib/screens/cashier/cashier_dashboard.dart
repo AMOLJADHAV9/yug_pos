@@ -21,6 +21,7 @@ import '../../widgets/cart_view_content.dart';
 import 'revenue_dashboard.dart'; 
 import 'order_history_screen.dart';
 import 'recent_bills_screen.dart';
+import '../../widgets/connectivity_indicators.dart';
 
 class CashierDashboard extends StatefulWidget {
   const CashierDashboard({super.key});
@@ -98,7 +99,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                         width: 150,
                         height: 58,
                         child: Image.asset(
-                          'lib/assets/img/yug-poslogo.png',
+                          'assets/images/yug-poslogo.png',
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -114,7 +115,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
               leading: const Icon(Icons.receipt_long, color: Color(0xFFFCDD22)),
               title: const Text('Recent Bills'),
               onTap: () {
-                Navigator.pop(context);
+                safePop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const RecentBillsScreen()));
               },
             ),
@@ -130,7 +131,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
               leading: const Icon(Icons.print, color: Colors.blueAccent),
               title: const Text('Daily Collection Print'),
               onTap: () {
-                Navigator.pop(context);
+                safePop(context);
                 _downloadDailyCollection(restaurantId, restaurantName);
               },
             ),
@@ -138,7 +139,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
               leading: const Icon(Icons.settings),
               title: const Text('Menu/Table Setup'),
               onTap: () {
-                Navigator.pop(context);
+                safePop(context);
                 _showManagementMenu();
               },
             ),
@@ -146,7 +147,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
               leading: const Icon(Icons.shopping_bag, color: Color(0xFFFCDD22)),
               title: const Text('Tk/Del Orders'),
               onTap: () {
-                Navigator.pop(context);
+                safePop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const TakeawayListScreen()));
               },
             ),
@@ -154,9 +155,13 @@ class _CashierDashboardState extends State<CashierDashboard> {
               leading: const Icon(Icons.cloud_download, color: Colors.blueAccent),
               title: const Text('Online Orders (Z/S)'),
               onTap: () {
-                Navigator.pop(context);
+                safePop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const OnlineOrdersScreen()));
               },
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ConnectivityIndicators(),
             ),
             const Divider(),
             ListTile(
@@ -549,11 +554,11 @@ class _CashierDashboardState extends State<CashierDashboard> {
         title: const Text("Delete Table?"),
         content: Text("Are you sure you want to delete ${table.name}?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
               await _firestore.collection('tables').doc(table.id).delete();
-              if (mounted) Navigator.pop(context);
+              if (mounted) safePop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text("DELETE"),
@@ -719,7 +724,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
             leading: const Icon(Icons.fastfood, color: Colors.blue),
             title: const Text("Add New Menu Item"),
             onTap: () {
-              Navigator.pop(context);
+              safePop(context);
               // I'll link to the Admin Menu Tab logic or a simple form
               _showAddMenuItemDialog();
             },
@@ -729,7 +734,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
             title: const Text("Create Temporary Table"),
             enabled: !_hasCreatedTempTable,
             onTap: () {
-              Navigator.pop(context);
+              safePop(context);
               _showAddTableDialog();
             },
           ),
@@ -737,7 +742,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
             leading: const Icon(Icons.receipt_long, color: Colors.green),
             title: const Text("Order Oversight (History)"),
             onTap: () {
-              Navigator.pop(context);
+              safePop(context);
               _showOrderOversightDialog();
             },
           ),
@@ -778,7 +783,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
            ],
          ),
          actions: [
-           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+           TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
            ElevatedButton(
              onPressed: () async {
                if (nameCtrl.text.isNotEmpty && priceCtrl.text.isNotEmpty && selectedCategory != null) {
@@ -789,7 +794,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                     'isAvailable': true,
                     'restaurantId': context.read<AuthService>().restaurantId,
                   });
-                  if (mounted) Navigator.pop(context);
+                  if (mounted) safePop(context);
                }
              }, 
              child: const Text("Save")
@@ -807,7 +812,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
         title: const Text("Create Temp Table"),
         content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: "Table Number/Name")),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
               if (nameCtrl.text.isNotEmpty) {
@@ -819,7 +824,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                    'restaurantId': context.read<AuthService>().restaurantId,
                  });
                  setState(() => _hasCreatedTempTable = true);
-                 if (mounted) Navigator.pop(context);
+                 if (mounted) safePop(context);
               }
             },
             child: const Text("Create"),
@@ -855,7 +860,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
        builder: (context) => AlertDialog(
          title: const Text("Start New Order"),
          content: const Text("To place a new order, please select an available (green) table from the dashboard grid."),
-         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
+         actions: [TextButton(onPressed: () => safePop(context), child: const Text("OK"))],
        ),
      );
   }
@@ -891,7 +896,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(),
               icon: const Icon(Icons.close, color: Colors.white54), 
-              onPressed: () => Navigator.pop(context)
+              onPressed: () => safePop(context)
             ),
           ],
         ),
@@ -1074,7 +1079,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                               onPressed: () => _showAddItemDialog(table.currentOrderId!, orderData),
                             ),
                             const SizedBox(width: 8),
-                            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                            IconButton(icon: const Icon(Icons.close), onPressed: () => safePop(context)),
                           ],
                         ),
                       ],
@@ -1267,7 +1272,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
+          TextButton(onPressed: () => safePop(context), child: const Text("Close")),
           ElevatedButton(
             onPressed: () async {
               if (reasonController.text.trim().isEmpty) {
@@ -1300,8 +1305,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
               await batch.commit();
 
               if (mounted) {
-                Navigator.pop(context); // Dialog
-                Navigator.pop(context); // Panel
+                safePop(context); // Dialog
+                safePop(context); // Panel
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order cancelled and table cleared.")));
               }
             },
@@ -1439,7 +1444,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
+            TextButton(onPressed: () => safePop(context), child: const Text("Close")),
             ElevatedButton(
               onPressed: () => _processBilling(table, orderData, subtotal, cgst, sgst, grandTotal, selectedPaymentMode),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
@@ -1733,11 +1738,11 @@ class _CashierDashboardState extends State<CashierDashboard> {
                                   'restaurantId': auth.restaurantId,
                                   'items': [{'name': data['name'], 'quantity': 1}],
                                   'waiterName': 'Cashier',
-                                  'status': 'Pending',
+                                   'status': 'Pending',
                                   'createdAt': FieldValue.serverTimestamp(),
                                 });
 
-                                if (mounted) Navigator.pop(context);
+                                if (mounted) safePop(context);
                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Added ${data['name']}")));
                               },
                             ),

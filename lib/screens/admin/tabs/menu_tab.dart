@@ -9,6 +9,7 @@ import '../../../services/auth_service.dart';
 import '../../../services/urban_piper_service.dart';
 import 'package:provider/provider.dart';
 import 'dart:io' show File;
+import '../../../utils/navigator_utils.dart';
 
 class MenuTab extends StatefulWidget {
   const MenuTab({super.key});
@@ -419,13 +420,13 @@ class _MenuTabState extends State<MenuTab> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+          TextButton(onPressed: () => safePop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
           ElevatedButton(
             onPressed: () {
               final data = {'name': nameCtrl.text.trim(), 'order': int.tryParse(orderCtrl.text) ?? 1, 'isVisible': isVisible, 'restaurantId': restaurantId};
               if (id == null) _firestore.collection('menu_categories').add(data);
               else _firestore.collection('menu_categories').doc(id).update(data);
-              Navigator.pop(context);
+              safePop(context);
             }, 
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
             child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -478,14 +479,14 @@ class _MenuTabState extends State<MenuTab> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+            TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
             ElevatedButton(
               onPressed: syncing ? null : () async {
                 setDialogState(() => syncing = true);
                 final service = UrbanPiperService();
                 final success = await service.syncMenu(restaurantId!, apiCtrl.text.trim(), userCtrl.text.trim());
                 if (mounted) {
-                  Navigator.pop(context);
+                  safePop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(success ? "Menu synchronization started!" : "Sync failed. Check credentials."),
@@ -511,8 +512,8 @@ class _MenuTabState extends State<MenuTab> {
         title: const Text("Delete Item", style: TextStyle(color: Colors.white)),
         content: const Text("Are you sure you want to delete this menu item?", style: TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => safePop(ctx, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => safePop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -703,7 +704,7 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+        TextButton(onPressed: () => safePop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
         ElevatedButton(
           onPressed: loading ? null : () async {
             setState(() => loading = true);
@@ -732,7 +733,7 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
               if (widget.id == null) await FirebaseFirestore.instance.collection('menu_items').add(data);
               else await FirebaseFirestore.instance.collection('menu_items').doc(widget.id).update(data);
               
-              if (mounted) Navigator.pop(context);
+              if (mounted) safePop(context);
             } catch (e) {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));

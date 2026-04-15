@@ -6,21 +6,23 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Safely pops the current route if and only if there's a route to pop,
 /// ensuring the root history stack is never emptied.
-void safePop([BuildContext? context]) {
+void safePop<T>([BuildContext? context, T? result]) {
   try {
-    if (context != null) {
-      final nav = Navigator.of(context);
-      if (nav.canPop()) {
-        nav.pop();
+    // 1. Try popping from the provided context first (e.g. closing a dialog)
+    if (context != null && context.mounted) {
+      final NavigatorState? nav = Navigator.maybeOf(context);
+      if (nav != null && nav.canPop()) {
+        nav.pop(result);
         return;
       }
     }
     
+    // 2. Fallback to root navigator if context-based pop failed or context was null
     final state = rootNavigatorKey.currentState;
-    if (state != null && state.canPop()) {
-      state.pop();
+    if (state != null && state.mounted && state.canPop()) {
+      state.pop(result);
     }
   } catch (e) {
-    debugPrint("SafePop Error: $e");
+    debugPrint("SafePop Handled Error: $e");
   }
 }

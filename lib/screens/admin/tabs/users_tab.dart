@@ -8,6 +8,7 @@ import '../../../services/auth_service.dart';
 import '../../../services/usb_printer_service.dart';
 import '../../../services/bluetooth_printer_service.dart';
 import '../../../services/report_service.dart';
+import '../../../utils/navigator_utils.dart';
 
 class UsersTab extends StatefulWidget {
   const UsersTab({super.key});
@@ -369,7 +370,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
       } else {
-        Navigator.pop(context);
+        safePop(context);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Staff user created successfully!"), backgroundColor: Colors.green));
       }
     }
@@ -412,7 +413,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+        TextButton(onPressed: () => safePop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
         ElevatedButton(
           onPressed: _loading ? null : _create, 
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), foregroundColor: const Color(0xFF141615)),
@@ -492,7 +493,7 @@ class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> with Sing
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => safePop(context),
           child: const Text("CLOSE", style: TextStyle(color: Colors.white54)),
         ),
       ],

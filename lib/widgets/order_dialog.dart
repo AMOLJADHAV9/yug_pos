@@ -30,6 +30,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   final TextEditingController _searchController = TextEditingController();
   final List<CartItem> _selectedItems = [];
   final Debouncer _debouncer = Debouncer(milliseconds: 1000);
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -340,7 +341,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
                  Text("Total: ₹${_selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity)).toStringAsFixed(0)}", 
                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFFCDD22))),
                  const SizedBox(width: 16),
-                 IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
+                 IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => safePop(context)),
               ],
             ),
           ],
@@ -539,7 +540,7 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
               ),
               const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: _selectedItems.isEmpty ? null : () => _debouncer.run(() => _submitOrder()),
+                onPressed: (_selectedItems.isEmpty || _isSubmitting) ? null : () => _debouncer.run(() => _submitOrder()),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFCDD22),
                   foregroundColor: const Color(0xFF141615),
@@ -556,104 +557,121 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   }
 
   void _submitOrder() async {
-    final auth = context.read<AuthService>();
-    final waiterDisplayName = auth.role == UserRole.admin 
-        ? "Admin (${auth.currentUser?.email?.split('@')[0] ?? 'Admin'})" 
-        : "Cashier";
-    final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
-    const customerName = "Walk-in";
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
 
-    final firestore = FirebaseFirestore.instance;
-    final batch = firestore.batch();
-    final orderRef = firestore.collection('orders').doc();
-    
-    batch.set(orderRef, {
-      'tableId': widget.table.id,
-      'tableName': widget.table.name,
-      'waiterName': waiterDisplayName,
-      'customerName': customerName,
-      'status': 'open',
-      'restaurantId': auth.restaurantId,
-      'createdAt': FieldValue.serverTimestamp(),
-      'totalAmount': total,
-      'items': _selectedItems.map((i) => {
-        'id': i.item.id,
-        'name': i.item.name,
-        'price': i.item.price,
-        'quantity': i.quantity,
-        'category': i.item.category,
-      }).toList(),
-    });
+    try {
+      final auth = context.read<AuthService>();
+      final waiterDisplayName = auth.role == UserRole.admin 
+          ? "Admin (${auth.currentUser?.email?.split('@')[0] ?? 'Admin'})" 
+          : "Cashier";
+      final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
+      const customerName = "Walk-in";
 
-    final itemsRef = orderRef.collection('items');
-    for (var i in _selectedItems) {
-      batch.set(itemsRef.doc(), {
-        'menuItemId': i.item.id,
-        'name': i.item.name,
-        'price': i.item.price,
-        'quantity': i.quantity,
-        'totalPrice': i.item.price * i.quantity,
-        'category': i.item.category,
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      final orderRef = firestore.collection('orders').doc();
+      
+      batch.set(orderRef, {
+        'tableId': widget.table.id,
+        'tableName': widget.table.name,
+        'waiterName': waiterDisplayName,
+        'customerName': customerName,
+        'status': 'open',
         'restaurantId': auth.restaurantId,
-        'status': 'Pending',
         'createdAt': FieldValue.serverTimestamp(),
+        'totalAmount': total,
+        'items': _selectedItems.map((i) => {
+          'id': i.item.id,
+          'name': i.item.name,
+          'price': i.item.price,
+          'quantity': i.quantity,
+          'category': i.item.category,
+        }).toList(),
       });
-    }
 
-    final kotRef = firestore.collection('kots').doc();
-    batch.set(kotRef, {
-      'orderId': orderRef.id,
-      'tableId': widget.table.id,
-      'tableName': widget.table.name,
-      'customerName': customerName,
-      'status': 'Pending',
-      'restaurantId': auth.restaurantId,
-      'createdAt': FieldValue.serverTimestamp(),
-      'waiterName': waiterDisplayName,
-      'items': _selectedItems.map((i) => {
-        'name': i.item.name,
-        'quantity': i.quantity,
-      }).toList(),
-    });
+      final itemsRef = orderRef.collection('items');
+      for (var i in _selectedItems) {
+        batch.set(itemsRef.doc(), {
+          'menuItemId': i.item.id,
+          'name': i.item.name,
+          'price': i.item.price,
+          'quantity': i.quantity,
+          'totalPrice': i.item.price * i.quantity,
+          'category': i.item.category,
+          'restaurantId': auth.restaurantId,
+          'status': 'Pending',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
 
-    final tableRef = firestore.collection('tables').doc(widget.table.id);
-    batch.update(tableRef, {
-      'status': TableStatus.occupied.name,
-      'currentOrderId': orderRef.id,
-    });
+      final kotRef = firestore.collection('kots').doc();
+      batch.set(kotRef, {
+        'orderId': orderRef.id,
+        'tableId': widget.table.id,
+        'tableName': widget.table.name,
+        'customerName': customerName,
+        'status': 'Pending',
+        'restaurantId': auth.restaurantId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'waiterName': waiterDisplayName,
+        'items': _selectedItems.map((i) => {
+          'name': i.item.name,
+          'quantity': i.quantity,
+        }).toList(),
+      });
 
-    await batch.commit();
+      final tableRef = firestore.collection('tables').doc(widget.table.id);
+      batch.update(tableRef, {
+        'status': TableStatus.occupied.name,
+        'currentOrderId': orderRef.id,
+      });
 
-    final kotData = {
-      'tableName': widget.table.name,
-      'customerName': customerName,
-      'waiterName': waiterDisplayName,
-      'restaurantId': auth.restaurantId, // CRITICAL: Added for receipt metadata retrieval
-      'items': _selectedItems.map((i) => {
-        'name': i.item.name,
-        'quantity': i.quantity,
-        'price': i.item.price,
-      }).toList(),
-    };
-    
-    final usb = context.read<UsbPrinterService>();
-    final bt = context.read<BluetoothPrinterService>();
-    final isAndroid = !kIsWeb && Platform.isAndroid;
-    final dynamic printerService = isAndroid ? bt : usb;
+      await batch.commit();
 
-    if (printerService.hasSavedPrinter || printerService.isConnected) {
-      final bytes = await ReportService.generateKOTBytes(kotData, paperSize: isAndroid ? PaperSize.mm58 : PaperSize.mm80);
-      await ReportService.printBytesIsolated(printerService, bytes);
-    } else {
-      await ReportService.printKOTReceipt(kotData, orderRef.id);
-    }
+      final kotData = {
+        'tableName': widget.table.name,
+        'customerName': customerName,
+        'waiterName': waiterDisplayName,
+        'restaurantId': auth.restaurantId, // CRITICAL: Added for receipt metadata retrieval
+        'items': _selectedItems.map((i) => {
+          'name': i.item.name,
+          'quantity': i.quantity,
+          'price': i.item.price,
+        }).toList(),
+      };
+      
+      final usb = context.read<UsbPrinterService>();
+      final bt = context.read<BluetoothPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final dynamic printerService = isAndroid ? bt : usb;
 
-    if (mounted) {
-      safePop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Order placed successfully!"), 
-        backgroundColor: Colors.green
-      ));
+      if (printerService.hasSavedPrinter || printerService.isConnected) {
+        final bytes = await ReportService.generateKOTBytes(kotData, paperSize: isAndroid ? PaperSize.mm58 : PaperSize.mm80);
+        await ReportService.printBytesIsolated(printerService, bytes);
+      } else {
+        await ReportService.printKOTReceipt(kotData, orderRef.id);
+      }
+
+      if (mounted) {
+        safePop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Order placed successfully!"), 
+          backgroundColor: Colors.green
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("Failed to place order: $e"),
+          backgroundColor: Colors.red
+        ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
+
 }

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../services/report_service.dart';
 import '../../../services/auth_service.dart';
 import 'package:provider/provider.dart';
+import '../../../utils/navigator_utils.dart';
 
 class RevenueTab extends StatefulWidget {
   final Function(int)? onTabRequested;
@@ -181,8 +182,8 @@ class _RevenueTabState extends State<RevenueTab> {
     final endOfToday = startOfToday.add(const Duration(days: 1));
 
     return StreamBuilder<QuerySnapshot>(
-      // Optimization: Fetch the latest 1000 orders globally and filter in-memory.
-      // This avoids composite index requirements and handles orders with missing restaurantId.
+      // IMPORTANT: Filters on one field (restaurantId) and sorting on another (createdAt) 
+      // REQUIRES a composite index in Firestore.
       stream: firestore.collection('orders')
           .where('restaurantId', isEqualTo: restaurantId)
           .orderBy('createdAt', descending: true)
@@ -649,9 +650,20 @@ class _RevenueTabState extends State<RevenueTab> {
     double todayUpiRevenue = 0;
 
     if (error != null) {
-      debugPrint("AdminDashboard: Error fetching stats: $error");
-      // Gracefully hide error message as per user request and return empty placeholder or zeroed cards
-      return const SizedBox.shrink(); 
+      debugPrint("AdminDashboard: Error fetching stats from daily_collections: $error - RestaurantID: $restaurantId");
+      // Gracefully show error message or zero values if permission is denied
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.orange, size: 32),
+              const SizedBox(height: 8),
+              Text("Permissions error: $error", style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ],
+          ),
+        ),
+      );
     }
 
     if (data != null) {
@@ -670,88 +682,115 @@ class _RevenueTabState extends State<RevenueTab> {
     }
 
     final width = MediaQuery.of(context).size.width;
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: width > 900 ? 5 : (width > 600 ? 4 : (width < 320 ? 2 : 3)), 
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: width > 600 ? 1.0 : 0.85,
+
+    Widget buildHorizontalSection(String title, List<Widget> children) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12, top: 8),
+            child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white54, letterSpacing: 1.2)),
+          ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: children.map((c) => SizedBox(
+              width: width > 900 ? 220 : (width > 600 ? 180 : (width / 2) - 16),
+              child: c
+            )).toList(),
+          ),
+          const SizedBox(height: 24),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildStatCard(
-          "Daily Total", 
-          "₹${todayRevenue.toStringAsFixed(0)}", 
-          Icons.currency_rupee, 
-          Colors.green,
-          subtitle: "Total ($billCount Bills)",
-          onTap: () => _showTodayDetails('Total'),
-        ),
-        _buildStatCard(
-          "Table Sales", 
-          "₹${todayTableRevenue.toStringAsFixed(0)}", 
-          Icons.restaurant, 
-          const Color(0xFFFCDD22),
-          subtitle: "$tableCount Orders",
-          onTap: () => _showTodayDetails('table'),
-        ),
-        _buildStatCard(
-          "Takeaway Sales", 
-          "₹${todayTakeawayRevenue.toStringAsFixed(0)}", 
-          Icons.shopping_bag, 
-          Colors.purpleAccent,
-          subtitle: "$takeawayCount Orders",
-          onTap: () => _showTodayDetails('takeaway'),
-        ),
-        _buildStatCard(
-          "Delivery Sales", 
-          "₹${todayDeliveryRevenue.toStringAsFixed(0)}", 
-          Icons.delivery_dining, 
-          Colors.deepOrange,
-          subtitle: "$deliveryCount Orders",
-          onTap: () => _showTodayDetails('delivery'),
-        ),
-        _buildOnlineSourceCard(
-          firestore,
-          restaurantId,
-          sourceKey: 'zomato',
-          title: "Zomato",
-          color: Colors.redAccent,
-          icon: Icons.local_mall,
-        ),
-        _buildOnlineSourceCard(
-          firestore,
-          restaurantId,
-          sourceKey: 'swiggy',
-          title: "Swiggy",
-          color: Colors.orangeAccent,
-          icon: Icons.delivery_dining,
-        ),
-        _buildOnlineSourceCard(
-          firestore,
-          restaurantId,
-          sourceKey: 'uber',
-          title: "Uber",
-          color: Colors.greenAccent,
-          icon: Icons.local_taxi,
-        ),
-        _buildStatCard(
-          "Cash Sales", 
-          "₹${todayCashRevenue.toStringAsFixed(0)}", 
-          Icons.payments, 
-          Colors.greenAccent,
-          subtitle: "Total Cash",
-          onTap: () => _showTodayDetails('Total'),
-        ),
-        _buildStatCard(
-          "UPI Sales", 
-          "₹${todayUpiRevenue.toStringAsFixed(0)}", 
-          Icons.qr_code_scanner, 
-          Colors.blue,
-          subtitle: "Total UPI",
-          onTap: () => _showTodayDetails('Total'),
-        ),
-        _buildActiveTablesCard(firestore, restaurantId, onTap: () => widget.onTabRequested?.call(4)),
-        _buildPendingKotsCard(firestore, restaurantId, onTap: () => _showTodayDetails('Pending')),
+        buildHorizontalSection("TOTAL SALES", [
+          _buildStatCard(
+            "Daily Total", 
+            "₹${todayRevenue.toStringAsFixed(0)}", 
+            Icons.currency_rupee, 
+            Colors.green,
+            subtitle: "Total ($billCount Bills)",
+            onTap: () => _showTodayDetails('Total'),
+          ),
+        ]),
+        buildHorizontalSection("ORDER TYPES", [
+          _buildStatCard(
+            "Table Sales", 
+            "₹${todayTableRevenue.toStringAsFixed(0)}", 
+            Icons.restaurant, 
+            const Color(0xFFFCDD22),
+            subtitle: "$tableCount Orders",
+            onTap: () => _showTodayDetails('table'),
+          ),
+          _buildStatCard(
+            "Takeaway Sales", 
+            "₹${todayTakeawayRevenue.toStringAsFixed(0)}", 
+            Icons.shopping_bag, 
+            Colors.purpleAccent,
+            subtitle: "$takeawayCount Orders",
+            onTap: () => _showTodayDetails('takeaway'),
+          ),
+          _buildStatCard(
+            "Delivery Sales", 
+            "₹${todayDeliveryRevenue.toStringAsFixed(0)}", 
+            Icons.delivery_dining, 
+            Colors.deepOrange,
+            subtitle: "$deliveryCount Orders",
+            onTap: () => _showTodayDetails('delivery'),
+          ),
+        ]),
+        buildHorizontalSection("AGGREGATORS", [
+          _buildOnlineSourceCard(
+            firestore,
+            restaurantId,
+            sourceKey: 'zomato',
+            title: "Zomato",
+            color: Colors.redAccent,
+            icon: Icons.local_mall,
+          ),
+          _buildOnlineSourceCard(
+            firestore,
+            restaurantId,
+            sourceKey: 'swiggy',
+            title: "Swiggy",
+            color: Colors.orangeAccent,
+            icon: Icons.delivery_dining,
+          ),
+          _buildOnlineSourceCard(
+            firestore,
+            restaurantId,
+            sourceKey: 'uber',
+            title: "Uber",
+            color: Colors.greenAccent,
+            icon: Icons.local_taxi,
+          ),
+        ]),
+        buildHorizontalSection("PAYMENT MODES", [
+          _buildStatCard(
+            "Cash Sales", 
+            "₹${todayCashRevenue.toStringAsFixed(0)}", 
+            Icons.payments, 
+            Colors.greenAccent,
+            subtitle: "Total Cash",
+            onTap: () => _showTodayDetails('Total'),
+          ),
+          _buildStatCard(
+            "UPI Sales", 
+            "₹${todayUpiRevenue.toStringAsFixed(0)}", 
+            Icons.qr_code_scanner, 
+            Colors.blue,
+            subtitle: "Total UPI",
+            onTap: () => _showTodayDetails('Total'),
+          ),
+        ]),
+        buildHorizontalSection("OPERATIONAL STATUS", [
+          _buildActiveTablesCard(firestore, restaurantId, onTap: () => widget.onTabRequested?.call(4)),
+          _buildPendingKotsCard(firestore, restaurantId, onTap: () => _showTodayDetails('Pending')),
+        ]),
       ],
     );
   }
@@ -881,7 +920,7 @@ class _RevenueTabState extends State<RevenueTab> {
 
       final snapshot = await query.get();
       if (mounted) {
-        Navigator.pop(context);
+        safePop(context);
         Future.microtask(() {
           if (mounted) {
             List<QueryDocumentSnapshot> docs = snapshot.docs;
@@ -982,7 +1021,7 @@ class _RevenueTabState extends State<RevenueTab> {
         });
       }
     } catch (e) {
-      if (mounted) Navigator.pop(context);
+      if (mounted) safePop(context);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
@@ -1001,7 +1040,7 @@ class _RevenueTabState extends State<RevenueTab> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
+            IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => safePop(context)),
           ],
         ),
         contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),

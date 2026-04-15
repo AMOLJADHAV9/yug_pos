@@ -14,6 +14,7 @@ import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../screens/cashier/v2_styles.dart';
+import '../utils/navigator_utils.dart';
 import 'menu_item_card.dart';
 
 class POSViewContent extends StatefulWidget {
@@ -44,6 +45,8 @@ class _POSViewContentState extends State<POSViewContent> {
   String? _lastRestaurantId;
   int _mobileActiveIndex = 1; // 0: History, 1: Tables/Order, 2: Cart, 3: Reports, 4: Settings
   bool _isSubmitting = false;
+  bool _isProcessingBilling = false;
+  bool _showMobileHistoryList = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -163,7 +166,7 @@ class _POSViewContentState extends State<POSViewContent> {
             const SizedBox(width: 12),
           ],
           Text(
-            isWaiter ? "⚡ YUG POS (WAITER)" : (role == UserRole.cashier ? "⚡ YUG POS (CASHIER)" : "⚡ YUG POS"), 
+            isWaiter ? " YUG POS (WAITER)" : (role == UserRole.cashier ? " YUG POS (CASHIER)" : " YUG POS"), 
             style: V2Styles.logo
           ),
           const SizedBox(width: 16),
@@ -388,7 +391,7 @@ class _POSViewContentState extends State<POSViewContent> {
                           return ListTile(
                             onTap: () async {
                               await bt.selectDevice(dev);
-                              if (mounted) Navigator.pop(ctx);
+                              if (mounted) safePop(context);
                             },
                             leading: Icon(Icons.bluetooth, color: isSel ? V2Colors.green : Colors.white54),
                             title: Text(dev.name ?? "Unknown", style: const TextStyle(color: Colors.white, fontSize: 13)),
@@ -467,7 +470,7 @@ class _POSViewContentState extends State<POSViewContent> {
                         return ListTile(
                           onTap: () async {
                             await printer.selectDevice(device);
-                            if (mounted) Navigator.pop(context);
+                            if (mounted) safePop(context);
                           },
                           leading: Icon(Icons.print, color: isSelected ? V2Colors.green : Colors.white54),
                           title: Text(device.name ?? "Unknown", style: const TextStyle(color: Colors.white)),
@@ -691,24 +694,24 @@ class _POSViewContentState extends State<POSViewContent> {
         title: Text("Table ${table.name}", style: const TextStyle(color: Colors.white)),
         content: const Text("What would you like to do?", style: TextStyle(color: V2Colors.muted)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context);
+              safePop(context);
               await _cancelOrder(table);
             },
             child: const Text("Cancel Order", style: TextStyle(color: V2Colors.red)),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context);
+              safePop(context);
               await _quickSettleTable(table);
             },
             child: const Text("Print & Bill", style: TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold)),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
+              safePop(context);
               if (table.currentOrderId != null) {
                 context.read<CartProvider>().setActiveOrder(
                   table.currentOrderId!,
@@ -795,7 +798,7 @@ class _POSViewContentState extends State<POSViewContent> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
               if (nameCtrl.text.isNotEmpty) {
@@ -807,7 +810,7 @@ class _POSViewContentState extends State<POSViewContent> {
                   'capacity': 4,
                   'restaurantId': restaurantId,
                 });
-                if (mounted) Navigator.pop(context);
+                if (mounted) safePop(context);
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: V2Colors.yellow),
@@ -871,23 +874,38 @@ class _POSViewContentState extends State<POSViewContent> {
 
   Widget _buildSearchBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       color: V2Colors.s2,
       child: Container(
-        height: 32,
+        height: 38,
         decoration: BoxDecoration(
-          color: V2Colors.s3,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: V2Colors.border),
+          color: V2Colors.s1, // Use a slightly darker color for depth
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: V2Colors.border, width: 1.5),
         ),
-        child: TextField(
-          controller: _searchController,
-          style: const TextStyle(color: V2Colors.text, fontSize: 11),
-          decoration: const InputDecoration(
-            hintText: "🔍 Search menu...",
-            hintStyle: TextStyle(color: V2Colors.muted, fontSize: 11),
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Center(
+          child: TextField(
+            controller: _searchController,
+            style: const TextStyle(color: V2Colors.text, fontSize: 13),
+            textAlignVertical: TextAlignVertical.center,
+            decoration: InputDecoration(
+              hintText: "Search menu...",
+              hintStyle: const TextStyle(color: V2Colors.muted, fontSize: 13),
+              prefixIcon: const Icon(Icons.search_rounded, color: V2Colors.yellow, size: 20),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 16),
+                      color: V2Colors.muted,
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              border: InputBorder.none,
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
         ),
       ),
@@ -1470,6 +1488,14 @@ class _POSViewContentState extends State<POSViewContent> {
                       onPressed: () => _showOrderDetailDialog(id, o),
                       tooltip: "View Details",
                     ),
+                    if (context.read<AuthService>().role == UserRole.admin || context.read<AuthService>().role == UserRole.cashier)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 13, color: V2Colors.red),
+                        padding: const EdgeInsets.only(left: 4),
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _confirmDeleteBill(id, o),
+                        tooltip: "Delete Bill",
+                      ),
                   ],
                 ),
               ),
@@ -1611,7 +1637,7 @@ class _POSViewContentState extends State<POSViewContent> {
                 Text("Placed at $timeStr", style: const TextStyle(color: V2Colors.muted, fontSize: 10)),
               ],
             ),
-            IconButton(icon: const Icon(Icons.close, color: V2Colors.muted, size: 20), onPressed: () => Navigator.pop(context)),
+            IconButton(icon: const Icon(Icons.close, color: V2Colors.muted, size: 20), onPressed: () => safePop(context)),
           ],
         ),
         content: SizedBox(
@@ -1715,11 +1741,124 @@ class _POSViewContentState extends State<POSViewContent> {
                   Text("₹${total.toStringAsFixed(0)}", style: const TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 20)),
                 ],
               ),
+              if (context.read<AuthService>().role == UserRole.admin || context.read<AuthService>().role == UserRole.cashier) ...[
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      safePop(context);
+                      _confirmDeleteBill(id, o);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: V2Colors.red.withOpacity(0.1),
+                      foregroundColor: V2Colors.red,
+                      side: const BorderSide(color: V2Colors.red, width: 1),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.delete_forever, size: 16),
+                    label: const Text("DELETE BILL", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _confirmDeleteBill(String id, Map<String, dynamic> o) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: V2Colors.s1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: V2Colors.border)),
+        title: const Text("DELETE BILL?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        content: const Text(
+          "This will permanently delete the bill and subtract the amount from the daily revenue report. Are you sure?",
+          style: TextStyle(color: V2Colors.muted, fontSize: 12),
+        ),
+        actions: [
+          TextButton(onPressed: () => safePop(context), child: const Text("CANCEL", style: TextStyle(color: V2Colors.muted))),
+          ElevatedButton(
+            onPressed: () {
+              safePop(context);
+              _deleteBill(id, o);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: V2Colors.red),
+            child: const Text("DELETE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteBill(String orderId, Map<String, dynamic> data) async {
+    try {
+      final auth = context.read<AuthService>();
+      final restaurantId = auth.restaurantId;
+      if (restaurantId == null) return;
+
+      final billedAt = (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                       (data['completedAt'] as Timestamp?)?.toDate() ?? 
+                       (data['createdAt'] as Timestamp?)?.toDate() ?? 
+                       DateTime.now();
+      final dateStr = DateFormat('yyyy-MM-dd').format(billedAt);
+      final collectionId = "${restaurantId}_$dateStr";
+      final total = ((data['totalAmount'] ?? data['grandTotal'] ?? 0) as num).toDouble();
+
+      final orderTypeStr = (data['orderType'] as String?)?.toLowerCase() ?? '';
+      final orderSource = (data['orderSource'] as String?)?.toLowerCase() ?? '';
+      final bool isTakeaway = orderTypeStr == 'takeaway' || data['tableName'] == 'Takeaway';
+      final bool isDelivery = orderTypeStr == 'delivery' || orderSource == 'delivery';
+      final bool isOnline = orderTypeStr == 'online' || orderSource == 'zomato' || orderSource == 'swiggy';
+
+      final batch = _firestore.batch();
+      batch.delete(_firestore.collection('orders').doc(orderId));
+
+      final revUpdate = <String, dynamic>{
+        'netCollection': FieldValue.increment(-total),
+        'grossCollection': FieldValue.increment(-total),
+        'billCount': FieldValue.increment(-1),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (isOnline) {
+        revUpdate['onlineCollection'] = FieldValue.increment(-total);
+        revUpdate['onlineCount'] = FieldValue.increment(-1);
+      } else if (isTakeaway) {
+        revUpdate['takeawayCollection'] = FieldValue.increment(-total);
+        revUpdate['takeawayCount'] = FieldValue.increment(-1);
+      } else if (isDelivery) {
+        revUpdate['deliveryCollection'] = FieldValue.increment(-total);
+        revUpdate['deliveryCount'] = FieldValue.increment(-1);
+      } else {
+        revUpdate['tableCollection'] = FieldValue.increment(-total);
+        revUpdate['tableCount'] = FieldValue.increment(-1);
+      }
+
+      // Adjust Payment Method Totals
+      final String paymentMode = (data['paymentMode'] ?? '').toString().toLowerCase();
+      if (paymentMode == 'upi') {
+        revUpdate['upiCollection'] = FieldValue.increment(-total);
+      } else if (paymentMode == 'cash') {
+        revUpdate['cashCollection'] = FieldValue.increment(-total);
+      }
+
+      batch.update(_firestore.collection('daily_collections').doc(collectionId), revUpdate);
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bill deleted and revenue adjusted."), backgroundColor: V2Colors.red));
+        setState(() {}); 
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Delete Error: $e"), backgroundColor: V2Colors.red));
+      }
+    }
   }
 
   Future<void> _placeOrder(CartProvider cart) async {
@@ -1958,6 +2097,7 @@ class _POSViewContentState extends State<POSViewContent> {
     String? gstNumber;
     if (resId != null) {
       final doc = await _firestore.collection('restaurants').doc(resId).get();
+      if (!mounted) return;
       if (doc.exists) {
         gstPercent = (doc.data()?['gstPercentage'] ?? 0).toDouble();
         gstNumber = doc.data()?['gstNumber'];
@@ -2076,21 +2216,51 @@ class _POSViewContentState extends State<POSViewContent> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-              ElevatedButton(
-                onPressed: () => _processBilling(
-                  items: items, subtotal: subtotal, paymentMode: selectedMode,
-                  orderType: orderType, tableId: tableId, tableName: tableName, onComplete: onComplete,
-                  existingOrderId: orderId,
-                  customerName: displayCustName,
-                  customerContact: displayCustContact,
-                  deliveryAddress: displayCustAddr,
-                  serviceCharge: scAmt,
-                  discount: dsAmt,
-                  gst: gstAmt,
-                  gstPercentage: gstPercent,
-                  gstNumber: gstNumber ?? "",
+              TextButton(onPressed: _isProcessingBilling ? null : () => safePop(context), child: const Text("Cancel")),
+              ElevatedButton.icon(
+                onPressed: _isProcessingBilling ? null : () async {
+                  setState(() => _isProcessingBilling = true);
+                  await _processBilling(
+                    items: items, subtotal: subtotal, paymentMode: selectedMode,
+                    orderType: orderType, tableId: tableId, tableName: tableName, onComplete: onComplete,
+                    existingOrderId: orderId,
+                    customerName: displayCustName,
+                    customerContact: displayCustContact,
+                    deliveryAddress: displayCustAddr,
+                    serviceCharge: scAmt,
+                    discount: dsAmt,
+                    gst: gstAmt,
+                    gstPercentage: gstPercent,
+                    gstNumber: gstNumber ?? "",
+                    sharePdf: true,
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: V2Colors.yellow, 
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
+                icon: const Icon(Icons.share, size: 18),
+                label: const Text("Share PDF"),
+              ),
+              ElevatedButton(
+                onPressed: _isProcessingBilling ? null : () async {
+                  setState(() => _isProcessingBilling = true);
+                  await _processBilling(
+                    items: items, subtotal: subtotal, paymentMode: selectedMode,
+                    orderType: orderType, tableId: tableId, tableName: tableName, onComplete: onComplete,
+                    existingOrderId: orderId,
+                    customerName: displayCustName,
+                    customerContact: displayCustContact,
+                    deliveryAddress: displayCustAddr,
+                    serviceCharge: scAmt,
+                    discount: dsAmt,
+                    gst: gstAmt,
+                    gstPercentage: gstPercent,
+                    gstNumber: gstNumber ?? "",
+                  );
+                },
                 style: ElevatedButton.styleFrom(backgroundColor: V2Colors.green, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
                 child: const Text("Process & Print"),
               ),
@@ -2175,6 +2345,7 @@ class _POSViewContentState extends State<POSViewContent> {
     String? customerName,
     String? customerContact,
     String? deliveryAddress,
+    bool sharePdf = false,
   }) async {
     final auth = context.read<AuthService>();
     final cart = context.read<CartProvider>();
@@ -2261,28 +2432,53 @@ class _POSViewContentState extends State<POSViewContent> {
       };
 
       // Smart Print (Thermal if configured, else PDF fallback)
-      await ReportService.printFinalBill(
-        orderData: billData,
-        orderId: existingOrderId ?? '',
-        subtotal: subtotal,
-        total: total,
-        paymentMode: paymentMode,
-        hotelName: _restaurantName ?? auth.restaurantName ?? "YUG POS",
-        address: _restaurantAddress ?? "",
-        receiptNum: receiptNo.toString(),
-        serviceCharge: serviceCharge,
-        discount: discount,
-        cgst: gst / 2,
-        sgst: gst / 2,
-        gstPercentage: gstPercentage,
-        printerService: isAndroid ? bt : usb,
-      );
+      if (sharePdf) {
+        await ReportService.shareBillAsPdf(
+          orderData: billData,
+          orderId: existingOrderId ?? "NEW",
+          total: total,
+          paymentMode: paymentMode,
+          receiptNum: receiptNo.toString(),
+        );
+      } else {
+        await ReportService.printFinalBill(
+          orderData: billData,
+          orderId: existingOrderId ?? '',
+          subtotal: subtotal,
+          total: total,
+          paymentMode: paymentMode,
+          hotelName: _restaurantName ?? auth.restaurantName ?? "YUG POS",
+          address: _restaurantAddress ?? "",
+          receiptNum: receiptNo.toString(),
+          serviceCharge: serviceCharge,
+          discount: discount,
+          cgst: gst / 2,
+          sgst: gst / 2,
+          gstPercentage: gstPercentage,
+          printerService: isAndroid ? bt : usb,
+        );
+      }
+      
       if (mounted) {
-        Navigator.pop(context);
-        if (onComplete != null) onComplete();
+        setState(() => _isProcessingBilling = false); // Successfully completed
+        safePop(context);
+        // Defer onComplete and snacking to avoid race conditions with navigation
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            if (onComplete != null) onComplete();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Billing Processed Successfully"), backgroundColor: V2Colors.green),
+            );
+          }
+        });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Billing Error: $e"), backgroundColor: V2Colors.red));
+      if (mounted) {
+        setState(() => _isProcessingBilling = false); // Ensure flag is reset on error
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Billing Error: $e"), backgroundColor: V2Colors.red),
+        );
+      }
     }
   }
 
@@ -2456,7 +2652,7 @@ class _POSViewContentState extends State<POSViewContent> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            if (context.read<AuthService>().role != UserRole.waiter) _buildMobileNavIcon(0, Icons.history, "History"),
+            if (context.read<AuthService>().role != UserRole.waiter) _buildMobileNavIcon(0, Icons.home, "Home"),
             _buildMobileNavIcon(1, Icons.table_restaurant, "Tables"),
             _buildMobileCenterCartIcon(),
             if (context.read<AuthService>().role != UserRole.waiter) _buildMobileNavIcon(3, Icons.bar_chart, "Reports"),
@@ -2528,7 +2724,7 @@ class _POSViewContentState extends State<POSViewContent> {
 
   Widget _buildMobileContentView(String? restaurantId, UserRole role) {
     switch (_mobileActiveIndex) {
-      case 0: return _buildMobileHistoryView(restaurantId, role);
+      case 0: return _buildMobileHomeView(restaurantId, role);
       case 1: 
         final cart = context.watch<CartProvider>();
         if (cart.tableId != null || cart.orderType != OrderType.dineIn) {
@@ -2652,7 +2848,42 @@ class _POSViewContentState extends State<POSViewContent> {
     );
   }
 
-  Widget _buildMobileHistoryView(String? restaurantId, UserRole role) {
+  Widget _buildMobileHomeView(String? restaurantId, UserRole role) {
+    if (_showMobileHistoryList) {
+      return Column(
+        children: [
+          Container(
+            color: V2Colors.s1,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                IconButton(icon: const Icon(Icons.arrow_back, color: V2Colors.yellow), onPressed: () => setState(() => _showMobileHistoryList = false)),
+                const Text("Order History", style: TextStyle(color: V2Colors.yellow, fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+          ),
+          Container(
+            height: 48,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  _hChip("all", "All"),
+                  _hChip("dineIn", "Dine In"),
+                  _hChip("takeaway", "Takeaway"),
+                  _hChip("delivery", "Delivery"),
+                  _hFilterChip("billed", "Billed"),
+                  _hFilterChip("active", "Pending"),
+                ],
+              ),
+            ),
+          ),
+          Expanded(child: _buildHistoryList(restaurantId)),
+        ],
+      );
+    }
+
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final docId = "${restaurantId}_$today";
     
@@ -2724,28 +2955,24 @@ class _POSViewContentState extends State<POSViewContent> {
             );
           },
         ),
-        
-        // Filter Scroll
-        Container(
-          height: 48,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                _hChip("all", "All"),
-                _hChip("dineIn", "Dine In"),
-                _hChip("takeaway", "Takeaway"),
-                _hChip("delivery", "Delivery"),
-                _hFilterChip("billed", "Billed"),
-                _hFilterChip("active", "Pending"),
-              ],
+        // History Navigation Button
+        const Spacer(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: ElevatedButton(
+            onPressed: () {
+               setState(() => _showMobileHistoryList = true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: V2Colors.yellow,
+              foregroundColor: Colors.black,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
+            child: const Text("View Order History", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ),
         ),
-        
-        // Order List
-        Expanded(child: _buildHistoryList(restaurantId)),
+        const Spacer(),
       ],
     );
   }
@@ -2957,7 +3184,7 @@ class _POSViewContentState extends State<POSViewContent> {
                         width: 110,
                         height: 42,
                         child: Image.asset(
-                          'lib/assets/img/yug-poslogo.png',
+                          'assets/images/yug-poslogo.png',
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -3114,10 +3341,10 @@ class _POSViewContentState extends State<POSViewContent> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+            TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
             ElevatedButton(
               onPressed: () async {
-                Navigator.pop(context);
+                safePop(context);
                 final dateId = "${restaurantId}_${DateFormat('yyyy-MM-dd').format(selectedDate)}";
                 final doc = await FirebaseFirestore.instance.collection('daily_collections').doc(dateId).get();
                 
@@ -3354,7 +3581,7 @@ class _POSViewContentState extends State<POSViewContent> {
       appBar: AppBar(
         backgroundColor: V2Colors.s1,
         title: const Text("Order History", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => safePop(context)),
         actions: [
           IconButton(
             icon: const Icon(Icons.download, color: V2Colors.yellow),
@@ -3363,7 +3590,28 @@ class _POSViewContentState extends State<POSViewContent> {
           ),
         ],
       ),
-      body: _buildMobileHistoryView(restaurantId, role),
+      body: Column(
+        children: [
+          Container(
+            height: 48,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  _hChip("all", "All"),
+                  _hChip("dineIn", "Dine In"),
+                  _hChip("takeaway", "Takeaway"),
+                  _hChip("delivery", "Delivery"),
+                  _hFilterChip("billed", "Billed"),
+                  _hFilterChip("active", "Pending"),
+                ],
+              ),
+            ),
+          ),
+          Expanded(child: _buildHistoryList(restaurantId)),
+        ],
+      ),
     );
   }
 

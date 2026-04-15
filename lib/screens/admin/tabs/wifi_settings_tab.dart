@@ -1,7 +1,10 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wifi_iot/wifi_iot.dart';
 import '../../../services/wifi_service.dart';
+import '../../../utils/navigator_utils.dart';
 
 class WifiSettingsTab extends StatefulWidget {
   const WifiSettingsTab({super.key});
@@ -55,13 +58,13 @@ class _WifiSettingsTabState extends State<WifiSettingsTab> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => safePop(context),
             child: const Text("CANCEL", style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () async {
               final password = passwordController.text;
-              Navigator.pop(context);
+              safePop(context);
               
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text("Connecting to ${network.ssid}...")),
@@ -92,6 +95,68 @@ class _WifiSettingsTabState extends State<WifiSettingsTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+      return Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "WiFi Settings",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            const SizedBox(height: 32),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFCDD22).withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.wifi, size: 64, color: Color(0xFFFCDD22)),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text("Wi-Fi Managed by System", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 64),
+                      child: Text(
+                        "On Desktop, network connections are managed directly by your operating system's built-in network menu.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.5),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        if (Platform.isWindows) {
+                          Process.run('cmd', ['/c', 'start', 'ms-settings:network-wifi']);
+                        } else if (Platform.isMacOS) {
+                          Process.run('open', ['/System/Library/PreferencePanes/Network.prefPane']);
+                        }
+                      },
+                      icon: const Icon(Icons.settings),
+                      label: const Text("Open OS Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFCDD22),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Consumer<WifiService>(
       builder: (context, wifi, child) {
         return Padding(

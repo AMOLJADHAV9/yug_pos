@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import './v2_styles.dart';
+import '../../utils/navigator_utils.dart';
 
 class CashierReportsScreen extends StatefulWidget {
   const CashierReportsScreen({super.key});
@@ -135,7 +136,7 @@ class _CashierReportsScreenState extends State<CashierReportsScreen> {
                 if (createdAt != null) Text("Placed at ${DateFormat('dd MMM, hh:mm a').format(createdAt)}", style: const TextStyle(color: V2Colors.muted, fontSize: 10)),
               ],
             ),
-            IconButton(icon: const Icon(Icons.close, color: V2Colors.muted, size: 20), onPressed: () => Navigator.pop(context)),
+            IconButton(icon: const Icon(Icons.close, color: V2Colors.muted, size: 20), onPressed: () => safePop(context)),
           ],
         ),
         content: SizedBox(

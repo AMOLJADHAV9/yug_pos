@@ -39,9 +39,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   // Theme Colors - Premium Palette
   final Color _primaryYellow = const Color(0xFFFCDD22);
-  final Color _bgBlack = const Color(0xFF0F1110); // Deeper black
-  final Color _glassColor = Colors.white.withOpacity(0.04);
-  final Color _glassBorder = Colors.white.withOpacity(0.1);
+  final Color _bgBlack = const Color(0xFF0F1110); 
+  final Color _glassColor = Colors.black.withOpacity(0.8); // Much darker glass for maximum contrast
+  final Color _glassBorder = Colors.white.withOpacity(0.25);
 
   @override
   void initState() {
@@ -167,6 +167,33 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Widget _buildBackgroundVisuals() {
     return Stack(
       children: [
+        // Background Image - Visible
+        Positioned.fill(
+          child: Image.asset(
+            'lib/assets/img/yugposbg.png',
+            fit: BoxFit.cover,
+            opacity: const AlwaysStoppedAnimation(0.35), // Slightly more visible
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: Colors.black,
+              child: const Center(child: Icon(Icons.error_outline, color: Colors.white24, size: 40)),
+            ),
+          ),
+        ),
+        // Adding back the Dark Overlay for better text contrast
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.2),
+                  Colors.black.withOpacity(0.8),
+                ],
+              ),
+            ),
+          ),
+        ),
         // Top-right glowing orb
         Positioned(
           top: -100, right: -100,
@@ -214,7 +241,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ],
           ),
           child: Image.asset(
-            'lib/assets/img/yug-poslogo.png', 
+            'assets/images/yug-poslogo.png', 
             width: isMobile ? 180 : 380,
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) => Icon(Icons.storefront, size: 80, color: _primaryYellow),
@@ -228,11 +255,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 64.0),
       decoration: const BoxDecoration(
-        image: DecorationImage(
-          image: AssetImage('lib/assets/img/poswelimg.jpg'),
-          fit: BoxFit.cover,
-          opacity: 0.15,
-        ),
+        color: Colors.transparent, // Background now handled globally
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -330,7 +353,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   const SizedBox(height: 8),
                   Text(
                     usePinMode ? "Enter security PIN to continue" : "Please sign in to your dashboard", 
-                    style: GoogleFonts.inter(fontSize: 15, color: Colors.white38), 
+                    style: GoogleFonts.inter(fontSize: 15, color: Colors.white70), 
                     textAlign: isMobile ? TextAlign.center : TextAlign.left,
                   ),
                   const SizedBox(height: 48),
@@ -393,30 +416,49 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(label, style: GoogleFonts.inter(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(
+            label, 
+            style: GoogleFonts.inter(
+              color: Colors.white, // Increased from white54 for better visibility
+              fontSize: 14, // Slightly larger
+              fontWeight: FontWeight.w600, // Slightly bolder
+            )
+          ),
         ),
         TextField(
           controller: controller,
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          style: const TextStyle(color: Colors.white, fontSize: 16), // Slightly larger font
           obscureText: isPassword && _obscurePassword,
           keyboardType: keyboardType,
           onSubmitted: onSubmitted,
+          cursorColor: _primaryYellow,
           decoration: InputDecoration(
-            prefixIcon: Icon(icon, color: Colors.white24, size: 20),
+            prefixIcon: Icon(icon, color: Colors.white70, size: 22), // Much brighter than white24
             suffixIcon: isPassword ? IconButton(
               icon: Icon(
                 _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                color: Colors.white24,
-                size: 20,
+                color: Colors.white70,
+                size: 22,
               ),
               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
             ) : null,
+            hintText: "Enter your $label",
+            hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
             filled: true, 
-            fillColor: Colors.white.withOpacity(0.03),
-            contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withOpacity(0.05))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: _primaryYellow.withOpacity(0.5), width: 1.5)),
+            fillColor: Colors.black.withOpacity(0.6), // Darker background for more depth
+            contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16), 
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16), 
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.2)), // More visible border
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16), 
+              borderSide: BorderSide(color: _primaryYellow.withOpacity(0.8), width: 2.0), // Bolder focus
+            ),
           ),
         ),
       ],

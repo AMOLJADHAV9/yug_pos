@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import '../../services/bluetooth_printer_service.dart';
+import '../../utils/navigator_utils.dart';
 
 class BluetoothPrinterSettingsScreen extends StatefulWidget {
   const BluetoothPrinterSettingsScreen({super.key});
@@ -213,12 +214,12 @@ class _BluetoothPrinterSettingsScreenState extends State<BluetoothPrinterSetting
               title: const Text("Disconnect & Forget", style: TextStyle(color: Colors.redAccent)),
               onTap: () {
                 service.disconnect();
-                Navigator.pop(context);
+                safePop(context);
               },
             ),
             const SizedBox(height: 12),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => safePop(context),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
                 backgroundColor: Colors.white.withOpacity(0.05),

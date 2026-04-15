@@ -63,8 +63,7 @@ class WaiterPosApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => WifiService()),
       ],
       child: MaterialApp(
-        // Removed navigatorKey temporarily to fix "Empty History" crash
-        // navigatorKey: rootNavigatorKey, 
+        navigatorKey: rootNavigatorKey, 
         title: 'YUG POS',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(

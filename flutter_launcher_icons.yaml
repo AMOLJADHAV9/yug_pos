@@ -1,9 +1,15 @@
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  windows: true
+  image_path: "assets/images/yug-poslogo.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/images/yug-poslogo.png"
   web:
     generate: true
     image_path: "assets/images/yug-poslogo.png"
-  image_path: "assets/images/yug-poslogo.png"
+    background_color: "#000000"
+    theme_color: "#000000"
+  windows:
+    generate: true
+    image_path: "assets/images/yug-poslogo.png"
   min_sdk_android: 21

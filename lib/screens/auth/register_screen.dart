@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../utils/navigator_utils.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -16,6 +17,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _resNameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController(); // Added address
   final _gstCtrl = TextEditingController(); // Added GST Controller
+  final _cgstCtrl = TextEditingController(text: "2.5"); 
+  final _sgstCtrl = TextEditingController(text: "2.5");
   bool _loading = false;
   bool _obscurePassword = true;
   // List of Indian States & UTs
@@ -43,6 +46,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       address: _addressCtrl.text.trim(),
       state: _selectedState, // Pass State
       gstNumber: _gstCtrl.text.trim(),
+      cgst: double.tryParse(_cgstCtrl.text.trim()) ?? 2.5,
+      sgst: double.tryParse(_sgstCtrl.text.trim()) ?? 2.5,
       role: 'admin',
     );
     
@@ -58,7 +63,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           content: Text('Registration successful!'),
           backgroundColor: Colors.green,
         ));
-        Navigator.pop(context);
+        safePop(context);
       }
     }
   }
@@ -91,7 +96,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Image.asset(
-                    'lib/assets/img/yug-poslogo.png',
+                    'assets/images/yug-poslogo.png',
                     height: 120,
                     fit: BoxFit.contain,
                   ),
@@ -133,6 +138,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   _buildTextField(_emailCtrl, 'Email', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
                   const SizedBox(height: 16),
                   _buildTextField(_gstCtrl, 'GST Number (Optional)', Icons.receipt_long_outlined),
+                  const SizedBox(height: 16),
+                  
+                  // CGST & SGST Percentages
+                  Row(
+                    children: [
+                      Expanded(child: _buildTextField(_cgstCtrl, 'CGST (%)', Icons.percent, keyboardType: TextInputType.number)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildTextField(_sgstCtrl, 'SGST (%)', Icons.percent, keyboardType: TextInputType.number)),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   
                   TextField(

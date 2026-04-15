@@ -16,6 +16,7 @@ import '../../services/report_service.dart';
 import '../../utils/navigator_utils.dart';
 import '../../models/menu_item.dart';
 import '../../widgets/cart_view_content.dart';
+import '../../widgets/connectivity_indicators.dart';
 
 class TablesScreen extends StatefulWidget {
   final bool isTab;
@@ -76,7 +77,13 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
         _isMenuLoading = false;
       });
     } catch (e) {
-      if (mounted) setState(() => _isMenuLoading = false);
+      debugPrint("Error fetching menu data: $e");
+      if (mounted) {
+        setState(() => _isMenuLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error loading menu: $e"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -264,7 +271,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                       width: 140,
                       height: 52,
                       child: Image.asset(
-                        'lib/assets/img/yug-poslogo.png',
+                        'assets/images/yug-poslogo.png',
                         fit: BoxFit.cover,
                       ),
                     ),
@@ -280,7 +287,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
             leading: const Icon(Icons.receipt, color: Colors.white70),
             title: const Text("KOT Tracking", style: TextStyle(color: Colors.white)),
             onTap: () {
-              Navigator.pop(context);
+              safePop(context);
               Navigator.push(context, MaterialPageRoute(builder: (_) => const KotTrackingScreen()));
             },
           ),
@@ -288,11 +295,15 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
             leading: const Icon(Icons.shopping_bag, color: Colors.white70),
             title: const Text("Takeaway / Delivery", style: TextStyle(color: Colors.white)),
             onTap: () {
-              Navigator.pop(context);
+              safePop(context);
               Navigator.push(context, MaterialPageRoute(builder: (_) => const TakeawayListScreen()));
             },
           ),
           const Spacer(),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ConnectivityIndicators(),
+          ),
           const Divider(color: Colors.white10),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
@@ -373,6 +384,30 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
             child: StreamBuilder<QuerySnapshot>(
               stream: _firestore.collection('tables').where('restaurantId', isEqualTo: restaurantId).snapshots(),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                          const SizedBox(height: 16),
+                          Text("Display Error: ${snapshot.error}", 
+                            style: const TextStyle(color: Colors.white, fontSize: 14),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: () => setState(() {}),
+                            child: const Text("Retry"),
+                          )
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                 
                 final tables = snapshot.data!.docs
@@ -689,10 +724,10 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+          TextButton(onPressed: () => safePop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
+              safePop(context);
               final cart = context.read<CartProvider>();
               cart.setOrderType(OrderType.takeaway);
               cart.setCustomerName("Takeaway");
@@ -736,7 +771,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+          TextButton(onPressed: () => safePop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
           ElevatedButton(
             onPressed: () {
               final address = addressController.text.trim();
@@ -744,7 +779,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Address is required"), backgroundColor: Colors.red));
                 return;
               }
-              Navigator.pop(context);
+              safePop(context);
               final cart = context.read<CartProvider>();
               cart.setOrderType(OrderType.delivery);
               cart.setCustomerName("Delivery Customer");

@@ -6,6 +6,7 @@ import '../../../services/auth_service.dart';
 import '../bluetooth_printer_settings_screen.dart';
 import '../../../services/bluetooth_printer_service.dart';
 import 'dart:io';
+import '../../../utils/navigator_utils.dart';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
@@ -586,7 +587,7 @@ class _LegalCenterOverlay extends StatelessWidget {
       pinned: true,
       leading: IconButton(
         icon: const Icon(Icons.close, color: Colors.white),
-        onPressed: () => Navigator.pop(context),
+        onPressed: () => safePop(context),
       ),
       flexibleSpace: FlexibleSpaceBar(
         centerTitle: true,

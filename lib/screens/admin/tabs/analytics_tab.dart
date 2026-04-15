@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/report_service.dart';
 import 'package:provider/provider.dart';
+import '../../../utils/navigator_utils.dart';
 
 class AnalyticsTab extends StatefulWidget {
   const AnalyticsTab({super.key});
@@ -615,7 +616,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
+            IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => safePop(context)),
           ],
         ),
         content: SizedBox(
@@ -684,7 +685,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     final maxCount = topItems.isNotEmpty ? topItems.first.value : 1;
 
     return Container(
-      height: 350,
+      height: 400,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF141615),
@@ -713,13 +714,20 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                 itemBuilder: (context, index) {
                   final item = topItems[index];
                   final progress = item.value / maxCount;
+                  
+                  // Auto-capitalize for clean Title Case look
+                  final formattedName = item.key.split(' ')
+                      .where((word) => word.isNotEmpty)
+                      .map((word) => "${word[0].toUpperCase()}${word.substring(1).toLowerCase()}")
+                      .join(' ');
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(item.key, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                          Text(formattedName, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
                           Text("${item.value} Sold", style: const TextStyle(color: Color(0xFFFCDD22), fontSize: 12, fontWeight: FontWeight.bold)),
                         ],
                       ),
@@ -764,7 +772,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     final maxRevenue = displayCats.isNotEmpty ? displayCats.first.value : 100;
 
     return Container(
-      height: 350,
+      height: 400,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF141615),

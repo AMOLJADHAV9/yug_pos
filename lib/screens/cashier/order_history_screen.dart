@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
+import '../../utils/navigator_utils.dart';
 
 class OrderHistoryScreen extends StatefulWidget {
   const OrderHistoryScreen({super.key});
@@ -154,6 +155,13 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                                         Text("${data['orderType']?.toString().toUpperCase()} | ${data['customerName'] ?? 'Walk-in'}", style: const TextStyle(color: Colors.white60, fontSize: 10)),
                                       ],
                                     ),
+                                    trailing: (auth.role == UserRole.admin || auth.role == UserRole.cashier)
+                                      ? IconButton(
+                                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                          onPressed: () => _confirmDeleteBill(doc.id, data),
+                                          tooltip: "Delete Bill",
+                                        )
+                                      : null,
                                   ),
                                 );
                               },
@@ -296,5 +304,110 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
         },
       ),
     );
+  }
+  void _confirmDeleteBill(String orderId, Map<String, dynamic> data) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF141615),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("DELETE BILL?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+          "This will permanently delete the bill and subtract the amount from the daily revenue report. This action cannot be undone.",
+          style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => safePop(context),
+            child: const Text("CANCEL", style: TextStyle(color: Colors.white38)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              safePop(context);
+              _deleteBill(orderId, data);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("CONFIRM DELETE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteBill(String orderId, Map<String, dynamic> data) async {
+    try {
+      final auth = context.read<AuthService>();
+      final restaurantId = auth.restaurantId;
+      if (restaurantId == null) return;
+
+      final billedAt = (data['billedAt'] as Timestamp?)?.toDate() ?? 
+                       (data['completedAt'] as Timestamp?)?.toDate() ?? 
+                       (data['createdAt'] as Timestamp?)?.toDate() ?? 
+                       DateTime.now();
+      final dateStr = DateFormat('yyyy-MM-dd').format(billedAt);
+      final collectionId = "${restaurantId}_$dateStr";
+      final total = ((data['totalAmount'] ?? data['grandTotal'] ?? 0) as num).toDouble();
+
+      final orderTypeStr = (data['orderType'] as String?)?.toLowerCase() ?? '';
+      final orderSource = (data['orderSource'] as String?)?.toLowerCase() ?? '';
+      final bool isTakeaway = orderTypeStr == 'takeaway' || data['tableName'] == 'Takeaway';
+      final bool isDelivery = orderTypeStr == 'delivery' || orderSource == 'delivery';
+      final bool isOnline = orderTypeStr == 'online' || orderSource == 'zomato' || orderSource == 'swiggy';
+
+      final batch = _firestore.batch();
+      
+      // 1. Delete Order Document
+      batch.delete(_firestore.collection('orders').doc(orderId));
+
+      // 2. Adjust Revenue in Daily Collections
+      final revUpdate = <String, dynamic>{
+        'netCollection': FieldValue.increment(-total),
+        'grossCollection': FieldValue.increment(-total),
+        'billCount': FieldValue.increment(-1),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (isOnline) {
+        revUpdate['onlineCollection'] = FieldValue.increment(-total);
+        revUpdate['onlineCount'] = FieldValue.increment(-1);
+      } else if (isTakeaway) {
+        revUpdate['takeawayCollection'] = FieldValue.increment(-total);
+        revUpdate['takeawayCount'] = FieldValue.increment(-1);
+      } else if (isDelivery) {
+        revUpdate['deliveryCollection'] = FieldValue.increment(-total);
+        revUpdate['deliveryCount'] = FieldValue.increment(-1);
+      } else {
+        revUpdate['tableCollection'] = FieldValue.increment(-total);
+        revUpdate['tableCount'] = FieldValue.increment(-1);
+      }
+
+      // 3. Adjust Payment Method Totals
+      final String paymentMode = (data['paymentMode'] ?? '').toString().toLowerCase();
+      if (paymentMode == 'upi') {
+        revUpdate['upiCollection'] = FieldValue.increment(-total);
+      } else if (paymentMode == 'cash') {
+        revUpdate['cashCollection'] = FieldValue.increment(-total);
+      }
+
+      batch.update(_firestore.collection('daily_collections').doc(collectionId), revUpdate);
+
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Bill deleted successfully. Daily totals updated."), backgroundColor: Colors.redAccent)
+        );
+      }
+    } catch (e) {
+      debugPrint("Delete error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error deleting bill: $e"), backgroundColor: Colors.red)
+        );
+      }
+    }
   }
 }

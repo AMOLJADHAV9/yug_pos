@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../utils/navigator_utils.dart';
 
 class AdminRegisterScreen extends StatefulWidget {
   const AdminRegisterScreen({super.key});
@@ -40,7 +41,7 @@ class _AdminRegisterScreenState extends State<AdminRegisterScreen> {
           content: Text('Admin Account & Restaurant Created!'),
           backgroundColor: Colors.green,
         ));
-        Navigator.pop(context); 
+        safePop(context); 
       }
     }
   }

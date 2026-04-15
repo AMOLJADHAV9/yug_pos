@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/debouncer.dart';
+import '../../utils/navigator_utils.dart';
 import '../../widgets/pos_view_content.dart';
 import 'tabs/revenue_tab.dart';
 import 'tabs/users_tab.dart';
@@ -15,6 +18,7 @@ import 'tabs/analytics_tab.dart';
 import 'tabs/takeaway_tab.dart';
 import 'tabs/settings_tab.dart';
 import 'tabs/wifi_settings_tab.dart';
+import 'tabs/bluetooth_settings_tab.dart';
 import '../order/online_orders_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -91,7 +95,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
+            TextButton(onPressed: () => safePop(context), child: const Text("Cancel", style: TextStyle(color: Colors.white54))),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFCDD22),
@@ -99,7 +103,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () {
-                Navigator.pop(context);
+                safePop(context);
                 _generateMonthlyReport(selectedYear, selectedMonth);
               },
               child: const Text("Download PDF", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -129,7 +133,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .limit(1000)
           .get();
       
-      if (mounted) Navigator.pop(context);
+      if (mounted) safePop(context);
       
       var orders = snapshot.docs.where((doc) {
         final data = doc.data();
@@ -163,7 +167,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       await ReportService.generatePeriodReport("Daily Revenue Report", "Date: $dateStr", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
     } catch (e) {
       if (mounted) {
-        if (Navigator.canPop(context)) Navigator.pop(context);
+        safePop(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error fetching records: $e")));
       }
     }
@@ -201,7 +205,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                orderDate.isBefore(endOfMonth.add(const Duration(seconds: 1)));
       }).toList();
       
-      if (mounted) Navigator.pop(context);
+      if (mounted) safePop(context);
       
       if (orders.isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No records available for $monthName")));
@@ -211,7 +215,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       await ReportService.generatePeriodReport("Monthly Revenue Report", "Period: $monthName", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
     } catch (e) {
       if (mounted) {
-        if (Navigator.canPop(context)) Navigator.pop(context);
+        safePop(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error fetching records: $e")));
       }
     }
@@ -228,6 +232,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     {'icon': Icons.cloud_download, 'label': 'Online'},
     {'icon': Icons.settings, 'label': 'Settings'},
     {'icon': Icons.wifi, 'label': 'WiFi'},
+    {'icon': Icons.bluetooth, 'label': 'Bluetooth'},
   ];
 
   // Specific indices for the Bottom Navbar
@@ -267,7 +272,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               width: 150,
                               height: 56,
                               child: Image.asset(
-                                'lib/assets/img/yug-poslogo.png',
+                                'assets/images/yug-poslogo.png',
                                 fit: BoxFit.cover,
                               ),
                             ),
@@ -283,6 +288,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       children: [
                         ...List.generate(_navData.length, (index) {
                           final item = _navData[index];
+                          final label = item['label'] as String;
+
+                          // Hide WiFi and Bluetooth on Desktop Sidebar
+                          bool isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+                          if (isDesktop && (label == 'WiFi' || label == 'Bluetooth')) {
+                            return const SizedBox.shrink();
+                          }
+
                           final isSelected = _selectedIndex == index;
                           return ListTile(
                             leading: Icon(item['icon'] as IconData, color: isSelected ? const Color(0xFFFCDD22) : Colors.grey),
@@ -290,7 +303,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             selected: isSelected,
                             onTap: () {
                               setState(() => _selectedIndex = index);
-                              Navigator.pop(context);
+                              safePop(context);
                             },
                           );
                         }),
@@ -303,7 +316,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           leading: const Icon(Icons.today, color: Color(0xFFFCDD22)),
                           title: const Text("Daily Report", style: TextStyle(color: Colors.white70)),
                           onTap: () {
-                            Navigator.pop(context);
+                            safePop(context);
                             _generateDailyReport();
                           },
                         ),
@@ -311,7 +324,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           leading: const Icon(Icons.summarize, color: Color(0xFFFCDD22)),
                           title: const Text("Monthly Report", style: TextStyle(color: Colors.white70)),
                           onTap: () {
-                            Navigator.pop(context);
+                            safePop(context);
                             _showMonthSelectionDialog();
                           },
                         ),
@@ -340,6 +353,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 const OnlineOrdersScreen(isTab: true),
                 const SettingsTab(),
                 const WifiSettingsTab(),
+                const BluetoothSettingsTab(),
               ],
             ),
             bottomNavigationBar: (isMobile && _selectedIndex == 1) 
@@ -406,6 +420,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         children: [
                           ...List.generate(_navData.length, (index) {
                             final item = _navData[index];
+                            final label = item['label'] as String;
+                            
+                            // Hide WiFi and Bluetooth on Desktop Sidebar
+                            bool isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+                            if (isDesktop && (label == 'WiFi' || label == 'Bluetooth')) {
+                              return const SizedBox.shrink();
+                            }
+
                             final isSelected = _selectedIndex == index;
                             return Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -552,6 +574,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       const OnlineOrdersScreen(isTab: true),
                       const SettingsTab(),
                       const WifiSettingsTab(),
+                      const BluetoothSettingsTab(),
                     ],
                   ),
                 ),
