@@ -3,8 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import 'dart:math';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
+import '../../services/usb_printer_service.dart';
+import '../../services/bluetooth_printer_service.dart';
+import '../../services/lan_printer_service.dart';
 import '../../utils/navigator_utils.dart';
 
 class RecentBillsScreen extends StatefulWidget {
@@ -140,7 +144,7 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
         builder: (context, snapshot) {
           final data = snapshot.data?.data() as Map<String, dynamic>?;
           final totalBills = data?['billCount'] ?? 0;
-          final netRevenue = data?['netCollection'] ?? 0.0;
+          final netRevenue = max(0.0, (data?['netCollection'] ?? 0.0).toDouble());
 
           return Container(
             padding: const EdgeInsets.all(20),
@@ -163,7 +167,7 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
       builder: (context, snapshot) {
         final data = snapshot.data?.data() as Map<String, dynamic>?;
         final totalBills = data?['billCount'] ?? 0;
-        final netRevenue = data?['netCollection'] ?? 0.0;
+        final netRevenue = max(0.0, (data?['netCollection'] ?? 0.0).toDouble());
 
         return Container(
           padding: const EdgeInsets.all(20),
@@ -524,7 +528,6 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
         setState(() {}); // Refresh the list
       }
     } catch (e) {
-      debugPrint("Delete error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error deleting bill: $e"), backgroundColor: Colors.red)
@@ -537,13 +540,13 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
     try {
       final auth = context.read<AuthService>();
       await ReportService.printFinalBill(
-        orderData: data,
+        data: data,
         orderId: orderId,
-        subtotal: (data['totalAmount'] as num).toDouble(),
-        cgst: 0, sgst: 0,
         total: (data['totalAmount'] as num).toDouble(),
         paymentMode: data['paymentMode'] ?? 'Cash',
-        hotelName: auth.restaurantName ?? "YUG POS",
+        bt: context.read<BluetoothPrinterService>(),
+        usb: context.read<UsbPrinterService>(),
+        lan: context.read<LanPrinterService>(),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Reprinting Bill..."), backgroundColor: Colors.blueAccent));
@@ -615,7 +618,6 @@ class _RecentBillsScreenState extends State<RecentBillsScreen> {
         endDate: end,
       );
     } catch (e) {
-      debugPrint("PDF Export Error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Export Failed: $e"), backgroundColor: Colors.red));
       }

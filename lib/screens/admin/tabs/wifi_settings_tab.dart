@@ -167,22 +167,26 @@ class _WifiSettingsTabState extends State<WifiSettingsTab> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "WiFi Settings",
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        wifi.isConnected && wifi.currentSsid != null
-                            ? "Connected to: ${wifi.currentSsid}"
-                            : "Not connected to any network",
-                        style: TextStyle(color: wifi.isConnected ? const Color(0xFFFCDD22) : Colors.white54),
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "WiFi Settings",
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          wifi.isConnected && wifi.currentSsid != null
+                              ? "Connected to: ${wifi.currentSsid}"
+                              : "Not connected to any network",
+                          style: TextStyle(color: wifi.isConnected ? const Color(0xFFFCDD22) : Colors.white54),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Row(
                     children: [
                       if (wifi.isConnected)

@@ -58,12 +58,10 @@ class WifiService extends ChangeNotifier {
 
     final hasPermission = await checkPermissions();
     if (!hasPermission) {
-      debugPrint("[WifiService] Permissions not granted for scanning.");
       return;
     }
 
     if (kIsWeb || !Platform.isAndroid && !Platform.isIOS) {
-      debugPrint("[WifiService] Scanning not supported on this platform.");
       return;
     }
 
@@ -72,25 +70,16 @@ class WifiService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint("[WifiService] Checking if WiFi is enabled...");
       bool isEnabled = await WiFiForIoTPlugin.isEnabled();
       if (!isEnabled) {
-        debugPrint("[WifiService] WiFi is disabled. Attempting to enable...");
         await WiFiForIoTPlugin.setEnabled(true);
         // Wait a bit for WiFi to turn on
         await Future.delayed(const Duration(seconds: 2));
       }
 
-      debugPrint("[WifiService] Starting scan (loadWifiList)...");
       final list = await WiFiForIoTPlugin.loadWifiList();
       _networks = list ?? [];
-      
-      if (_networks.isEmpty) {
-        debugPrint("[WifiService] No networks found. This could be due to Android scan throttling or Location being OFF.");
-      }
-      debugPrint("[WifiService] Found ${_networks.length} networks.");
     } catch (e) {
-      debugPrint("[WifiService] Scan error: $e");
     } finally {
       _isScanning = false;
       notifyListeners();
@@ -98,9 +87,7 @@ class WifiService extends ChangeNotifier {
   }
 
   Future<bool> connect(String ssid, String password) async {
-    debugPrint("[WifiService] Attempting to connect to $ssid...");
     if (kIsWeb || !Platform.isAndroid && !Platform.isIOS) {
-      debugPrint("[WifiService] Connection not supported on this platform.");
       return false;
     }
     
@@ -121,7 +108,6 @@ class WifiService extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      debugPrint("[WifiService] Connection error: $e");
       return false;
     }
   }
@@ -136,7 +122,6 @@ class WifiService extends ChangeNotifier {
       _isConnected = false;
       notifyListeners();
     } catch (e) {
-      debugPrint("[WifiService] Disconnect error: $e");
     }
   }
 
@@ -147,7 +132,6 @@ class WifiService extends ChangeNotifier {
       _isConnected = await WiFiForIoTPlugin.isConnected();
       notifyListeners();
     } catch (e) {
-      debugPrint("[WifiService] Refresh status error: $e");
     }
   }
 }

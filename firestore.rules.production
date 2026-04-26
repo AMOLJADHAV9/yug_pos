@@ -1,0 +1,99 @@
+rules_version = '2';
+
+// ─── Multi-tenant POS Security Rules (PRODUCTION) ─────────────────────────────
+// Deploy this when firebase_auth Windows threading bug is resolved.
+// Usage: copy contents to firestore.rules and run: firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() { return request.auth != null; }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function belongsToRestaurant(restaurantId) {
+      return isAuth() && userDoc().restaurantId == restaurantId;
+    }
+
+    function isAdminOf(restaurantId) {
+      return belongsToRestaurant(restaurantId) && userDoc().role == 'admin';
+    }
+
+    match /restaurants/{restaurantId} {
+      allow read:   if belongsToRestaurant(restaurantId);
+      allow create: if isAuth();
+      allow update: if isAdminOf(restaurantId);
+      allow delete: if isAdminOf(restaurantId);
+    }
+
+    match /users/{uid} {
+      allow read:   if isAuth() && (request.auth.uid == uid || belongsToRestaurant(resource.data.restaurantId));
+      allow create: if isAuth();
+      allow update: if isAuth() && (request.auth.uid == uid || isAdminOf(resource.data.restaurantId));
+      allow delete: if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /orders/{orderId} {
+      allow read:         if belongsToRestaurant(resource.data.restaurantId);
+      allow create:       if isAuth() && belongsToRestaurant(request.resource.data.restaurantId);
+      allow update:       if belongsToRestaurant(resource.data.restaurantId);
+      allow delete:       if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /kots/{kotId} {
+      allow read:         if belongsToRestaurant(resource.data.restaurantId);
+      allow create:       if isAuth() && belongsToRestaurant(request.resource.data.restaurantId);
+      allow update:       if belongsToRestaurant(resource.data.restaurantId);
+      allow delete:       if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /tables/{tableId} {
+      allow read:         if belongsToRestaurant(resource.data.restaurantId);
+      allow create:       if isAdminOf(request.resource.data.restaurantId);
+      allow update:       if belongsToRestaurant(resource.data.restaurantId);
+      allow delete:       if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /sections/{sectionId} {
+      allow read:         if belongsToRestaurant(resource.data.restaurantId);
+      allow create:       if isAdminOf(request.resource.data.restaurantId);
+      allow update, delete: if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /menu_categories/{catId} {
+      allow read:         if belongsToRestaurant(resource.data.restaurantId);
+      allow create:       if isAdminOf(request.resource.data.restaurantId);
+      allow update, delete: if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /menu_items/{itemId} {
+      allow read:         if belongsToRestaurant(resource.data.restaurantId);
+      allow create:       if isAdminOf(request.resource.data.restaurantId);
+      allow update, delete: if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /daily_collections/{docId} {
+      allow read:         if isAuth() && belongsToRestaurant(resource.data.restaurantId);
+      allow create:       if isAuth() && belongsToRestaurant(request.resource.data.restaurantId);
+      allow update:       if isAuth() && belongsToRestaurant(resource.data.restaurantId);
+      allow delete:       if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /aggregators/{docId} {
+      allow read:         if belongsToRestaurant(resource.data.restaurantId);
+      allow create:       if isAuth() && belongsToRestaurant(request.resource.data.restaurantId);
+      allow update, delete: if isAdminOf(resource.data.restaurantId);
+    }
+
+    match /settings/{restaurantId} {
+      allow read:   if belongsToRestaurant(restaurantId);
+      allow write:  if isAdminOf(restaurantId);
+    }
+
+    match /printer_settings/{restaurantId} {
+      allow read, write: if belongsToRestaurant(restaurantId);
+    }
+  }
+}

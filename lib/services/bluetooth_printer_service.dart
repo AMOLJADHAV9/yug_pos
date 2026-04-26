@@ -6,6 +6,8 @@ import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platfor
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:intl/intl.dart';
+import '../models/printer_role.dart';
 
 class BluetoothPrinterService extends ChangeNotifier {
   final PrinterManager _printerManager = PrinterManager.instance;
@@ -15,8 +17,22 @@ class BluetoothPrinterService extends ChangeNotifier {
   PrinterDevice? _selectedDevice;
   PrinterDevice? get selectedDevice => _selectedDevice;
 
-  String? _savedName;
-  String? _savedAddress;
+  // Role-specific saved settings
+  String? _kotAddress;
+  String? _kotName;
+  String? _billAddress;
+  String? _billName;
+
+  PrinterConnectionType _kotConnectionType = PrinterConnectionType.bluetooth;
+  PrinterConnectionType _billConnectionType = PrinterConnectionType.bluetooth;
+
+  PrinterConnectionType get kotConnectionType => _kotConnectionType;
+  PrinterConnectionType get billConnectionType => _billConnectionType;
+
+  String? get kotName => _kotName;
+  String? get billName => _billName;
+  String? get kotAddress => _kotAddress;
+  String? get billAddress => _billAddress;
 
   bool _isScanning = false;
   bool get isScanning => _isScanning;
@@ -26,14 +42,19 @@ class BluetoothPrinterService extends ChangeNotifier {
 
   bool _isConnecting = false;
   bool get isConnecting => _isConnecting;
-  
-  bool get hasSavedPrinter => _savedAddress != null;
+
+  String? _lastConnectedName;
+  String? get lastConnectedName => _lastConnectedName ?? (selectedDevice?.name);
+
+  bool get hasSavedPrinter => _billAddress != null || _kotAddress != null;
+  bool get arePrintersConfigured => _kotAddress != null && _billAddress != null;
+  bool hasRolePrinter(PrinterRole role) => role == PrinterRole.kot ? _kotAddress != null : _billAddress != null;
 
   StreamSubscription? _scanSubscription;
   StreamSubscription? _stateSubscription;
 
   BluetoothPrinterService() {
-    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    if (!kIsWeb) {
       _init();
       _listenToState();
     }
@@ -48,7 +69,6 @@ class BluetoothPrinterService extends ChangeNotifier {
 
   void _listenToState() {
     _stateSubscription = _printerManager.stateBluetooth.listen((event) {
-      debugPrint("Bluetooth state changed: $event");
       _isConnected = (event == BTStatus.connected);
       notifyListeners();
     });
@@ -56,16 +76,23 @@ class BluetoothPrinterService extends ChangeNotifier {
 
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
-    _savedAddress = prefs.getString('bt_printer_address');
-    _savedName = prefs.getString('bt_printer_name');
-    _isConnected = false;
+    
+    // Migration: if old single printer exists, move it to Billing role
+    final oldAddress = prefs.getString('bt_printer_address');
+    final oldName = prefs.getString('bt_printer_name');
 
-    // We no longer auto-connect in the constructor to avoid 
-    // permission-request race conditions during app boot.
-    // Connection will be established when needed or through Settings.
-    if (_savedAddress != null) {
-      debugPrint('[BT] Found saved printer: $_savedName');
-    }
+    _kotAddress = prefs.getString('bt_kot_address');
+    _kotName = prefs.getString('bt_kot_name');
+    _billAddress = prefs.getString('bt_bill_address') ?? oldAddress;
+    _billName = prefs.getString('bt_bill_name') ?? oldName;
+    
+    // Load connection types
+    final kotTypeStr = prefs.getString('kot_connection_type') ?? 'bluetooth';
+    final billTypeStr = prefs.getString('bill_connection_type') ?? 'bluetooth';
+    _kotConnectionType = PrinterConnectionType.values.firstWhere((e) => e.toString().split('.').last == kotTypeStr, orElse: () => PrinterConnectionType.bluetooth);
+    _billConnectionType = PrinterConnectionType.values.firstWhere((e) => e.toString().split('.').last == billTypeStr, orElse: () => PrinterConnectionType.bluetooth);
+    
+    _isConnected = false;
   }
 
   Future<bool> _checkPermissions() async {
@@ -81,16 +108,11 @@ class BluetoothPrinterService extends ChangeNotifier {
     bool granted = statuses[Permission.bluetoothScan]?.isGranted == true &&
                    statuses[Permission.bluetoothConnect]?.isGranted == true;
     
-    if (!granted) {
-      debugPrint("[BT] Permissions Denied: $statuses");
-    }
     return granted;
   }
 
   void scan() async {
     if (_isScanning) return;
-    
-    // Check permissions first
     if (!await _checkPermissions()) return;
 
     _devices.clear();
@@ -108,10 +130,7 @@ class BluetoothPrinterService extends ChangeNotifier {
       notifyListeners();
     });
 
-    // Auto-stop scan after 15 seconds
-    Future.delayed(const Duration(seconds: 15), () {
-      stopScan();
-    });
+    Future.delayed(const Duration(seconds: 15), () => stopScan());
   }
 
   void stopScan() {
@@ -121,48 +140,35 @@ class BluetoothPrinterService extends ChangeNotifier {
   }
 
   Future<bool> connect(String address, {String? name}) async {
-    // Check permissions first
     if (!await _checkPermissions()) return false;
+
+    // Avoid redundant connections
+    if (_isConnected && _selectedDevice?.address == address) return true;
 
     _isConnecting = true;
     notifyListeners();
     
     try {
-      debugPrint("[BT] Connecting to $address (isBle: false)...");
       bool connected = await _printerManager.connect(
         type: PrinterType.bluetooth,
         model: BluetoothPrinterInput(
-          name: name ?? _savedName ?? 'Printer',
+          name: name ?? 'Printer',
           address: address,
           isBle: false, 
         ),
       );
 
-      // FALLBACK: If standard BT fails, try BLE
       if (!connected) {
-        debugPrint("[BT] Standard connection failed. Retrying with BLE...");
         connected = await _printerManager.connect(
           type: PrinterType.bluetooth,
-          model: BluetoothPrinterInput(
-            name: name ?? _savedName ?? 'Printer',
-            address: address,
-            isBle: true, 
-          ),
+          model: BluetoothPrinterInput(name: name ?? 'Printer', address: address, isBle: true),
         );
       }
+
       _isConnected = connected;
       if (connected) {
-        _savedAddress = address;
-        _savedName = name ?? _savedName;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('bt_printer_address', address);
-        if (_savedName != null) await prefs.setString('bt_printer_name', _savedName!);
-        
-        // Find printer in discovered list to update internal object if needed
-        _selectedDevice = _devices.firstWhere(
-          (d) => d.address == address, 
-          orElse: () => PrinterDevice(name: _savedName ?? 'Printer', address: address)
-        );
+        _selectedDevice = PrinterDevice(name: name ?? 'Printer', address: address);
+        _lastConnectedName = name ?? 'Printer';
       }
       _isConnecting = false;
       notifyListeners();
@@ -170,14 +176,31 @@ class BluetoothPrinterService extends ChangeNotifier {
     } catch (e) {
       _isConnected = false;
       _isConnecting = false;
-      debugPrint("BT Connection error: $e");
       notifyListeners();
       return false;
     }
   }
 
-  Future<void> selectDevice(PrinterDevice device) async {
-    await connect(device.address!, name: device.name);
+  Future<void> saveRolePrinter(PrinterDevice device, PrinterRole role) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (role == PrinterRole.kot) {
+      _kotAddress = device.address;
+      _kotName = device.name;
+      await prefs.setString('bt_kot_address', _kotAddress!);
+      await prefs.setString('bt_kot_name', _kotName!);
+    } else {
+      _billAddress = device.address;
+      _billName = device.name;
+      await prefs.setString('bt_bill_address', _billAddress!);
+      await prefs.setString('bt_bill_name', _billName!);
+    }
+    
+    // Set this service as the handler for this role
+    await prefs.setString(role == PrinterRole.kot ? 'kot_connection_type' : 'bill_connection_type', 'bluetooth');
+    if (role == PrinterRole.kot) _kotConnectionType = PrinterConnectionType.bluetooth;
+    else _billConnectionType = PrinterConnectionType.bluetooth;
+
+    notifyListeners();
   }
 
   Future<void> disconnect() async {
@@ -185,64 +208,67 @@ class BluetoothPrinterService extends ChangeNotifier {
       await _printerManager.disconnect(type: PrinterType.bluetooth);
       _selectedDevice = null;
       _isConnected = false;
-      
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('bt_printer_address');
-      await prefs.remove('bt_printer_name');
-      _savedAddress = null;
-      _savedName = null;
-      
       notifyListeners();
     } catch (e) {
-      debugPrint("BT Disconnect error: $e");
     }
   }
 
-  Future<bool> printRawBytes(List<int> bytes) async {
-    debugPrint('[BT] printRawBytes called. bytes=${bytes.length}, isConnected=$_isConnected, savedAddress=$_savedAddress');
+  Future<bool> printRoleBytes(List<int> bytes, PrinterRole role) async {
+    final address = role == PrinterRole.kot ? _kotAddress : _billAddress;
+    final name = role == PrinterRole.kot ? _kotName : _billName;
 
-    if (!_isConnected && _savedAddress != null) {
-      debugPrint('[BT] Not connected — attempting auto-connect to $_savedAddress...');
-      await connect(_savedAddress!);
-      debugPrint('[BT] Auto-connect result: isConnected=$_isConnected');
-    }
-
-    if (!_isConnected) {
-      debugPrint('[BT] ❌ Print aborted: Not connected and auto-connect failed.');
+    if (address == null) {
       return false;
     }
 
     try {
-      debugPrint('[BT] Sending ${bytes.length} bytes to printer...');
+      _lastConnectedName = name; // Update for status bar during printing
+      notifyListeners();
+
+      final connected = await connect(address, name: name);
+      if (!connected) return false;
+
       final success = await _printerManager.send(type: PrinterType.bluetooth, bytes: bytes);
-      debugPrint('[BT] send() result: $success');
+      
+      // Delay slightly before disconnect to ensure buffer is sent
+      await Future.delayed(const Duration(milliseconds: 500));
+      await disconnect();
+      
       return success;
     } catch (e) {
-      debugPrint('[BT] ❌ Send error: $e');
-      _isConnected = false;
-      notifyListeners();
       return false;
     }
   }
 
-  Future<bool> testPrint() async {
+  Future<bool> testPrintRole(PrinterRole role) async {
     try {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm58, profile);
       List<int> bytes = [];
 
-      bytes += generator.setStyles(PosStyles(align: PosAlign.center, bold: true));
-      bytes += generator.text("YUG POS", styles: PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
-      bytes += generator.text("PRINTER TEST PAGE", styles: PosStyles(bold: true));
-      bytes += generator.text("Status: Connected Successfully", styles: PosStyles(bold: true));
-      bytes += generator.text("Date: ${DateTime.now()}");
+      bytes += generator.setStyles(const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.text("YUG POS - TEST", styles: const PosStyles(height: PosTextSize.size2, width: PosTextSize.size2));
+      bytes += generator.text("ROLE: ${role.toString().split('.').last.toUpperCase()}");
+      bytes += generator.text("Status: Connected Successfully");
+      bytes += generator.text("Date: ${DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now())}");
       bytes += generator.feed(2);
       bytes += generator.cut();
 
-      return await printRawBytes(bytes);
+      return await printRoleBytes(bytes, role);
     } catch (e) {
-      debugPrint("Test print generation error: $e");
       return false;
     }
   }
+
+  // --- COMPATIBILITY WRAPPERS (LEGACY) ---
+  @Deprecated('Use saveRolePrinter instead')
+  Future<void> selectDevice(PrinterDevice device) async {
+    await saveRolePrinter(device, PrinterRole.bill);
+  }
+
+  @Deprecated('Use testPrintRole instead')
+  Future<bool> testPrint() async {
+    return testPrintRole(PrinterRole.bill);
+  }
 }
+

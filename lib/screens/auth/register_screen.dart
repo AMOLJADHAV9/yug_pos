@@ -96,7 +96,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Image.asset(
-                    'assets/images/yug-poslogo.png',
+                    'assets/images/yugposlogo.png',
                     height: 120,
                     fit: BoxFit.contain,
                   ),

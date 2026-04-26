@@ -1,15 +1,15 @@
 import 'dart:io';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
+import '../../services/report_service.dart';
 import '../../services/bluetooth_printer_service.dart';
 import '../../services/usb_printer_service.dart';
-import '../../models/table_model.dart';
-import '../../utils/navigator_utils.dart';
-import '../../services/report_service.dart';
+import '../../services/lan_printer_service.dart';
 import '../../models/menu_item.dart';
 import '../../providers/cart_provider.dart';
 import '../../utils/debouncer.dart';
@@ -22,6 +22,10 @@ import 'revenue_dashboard.dart';
 import 'order_history_screen.dart';
 import 'recent_bills_screen.dart';
 import '../../widgets/connectivity_indicators.dart';
+import '../../widgets/printer_settings_dialog.dart';
+import '../../models/table_model.dart';
+import '../../utils/navigator_utils.dart';
+import '../../models/printer_role.dart';
 
 class CashierDashboard extends StatefulWidget {
   const CashierDashboard({super.key});
@@ -47,7 +51,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
   String? _selectedTableSection;
   bool _showMidnightResetBanner = false;
   bool _isNavigating = false;
-
+  bool _isSubmitting = false;
+  
   int _getTotalCartQuantity() {
     if (_selectedOrderData == null) return 0;
     final items = _selectedOrderData!['items'] as List<dynamic>? ?? [];
@@ -99,7 +104,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                         width: 150,
                         height: 58,
                         child: Image.asset(
-                          'assets/images/yug-poslogo.png',
+                          'assets/images/yugposlogo.png',
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -129,10 +134,26 @@ class _CashierDashboardState extends State<CashierDashboard> {
             ),
             ListTile(
               leading: const Icon(Icons.print, color: Colors.blueAccent),
-              title: const Text('Daily Collection Print'),
+              title: const Text('Daily Summary (PDF)'),
               onTap: () {
                 safePop(context);
                 _downloadDailyCollection(restaurantId, restaurantName);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.receipt_long, color: Color(0xFFFCDD22)),
+              title: const Text('Daily Summary (Thermal)'),
+              onTap: () {
+                safePop(context);
+                _printThermalDailySummary(restaurantId, restaurantName);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.print_disabled, color: Colors.greenAccent),
+              title: const Text('Printer Configuration'),
+              onTap: () {
+                safePop(context);
+                _showPrinterSettings(context);
               },
             ),
             ListTile(
@@ -738,14 +759,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
               _showAddTableDialog();
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.receipt_long, color: Colors.green),
-            title: const Text("Order Oversight (History)"),
-            onTap: () {
-              safePop(context);
-              _showOrderOversightDialog();
-            },
-          ),
           const SizedBox(height: 20),
         ],
       ),
@@ -843,14 +856,18 @@ class _CashierDashboardState extends State<CashierDashboard> {
       data['receiptNumber'] = data['receiptNumber']; // Ensure it's available in data for the template if needed
     }
 
+    final bt = context.read<BluetoothPrinterService>();
+    final usb = context.read<UsbPrinterService>();
+    final lan = context.read<LanPrinterService>();
+
     ReportService.printFinalBill(
-      orderData: data,
+      data: data,
       orderId: billNo,
-      subtotal: (data['subtotal'] ?? 0.0).toDouble(),
-      cgst: (data['cgst'] ?? 0.0).toDouble(),
-      sgst: (data['sgst'] ?? 0.0).toDouble(),
       total: (data['grandTotal'] ?? 0.0).toDouble(),
       paymentMode: data['paymentMode'] ?? 'Cash',
+      bt: bt,
+      usb: usb,
+      lan: lan,
     );
   }
 
@@ -1237,9 +1254,18 @@ class _CashierDashboardState extends State<CashierDashboard> {
         }],
       };
       try {
-        await ReportService.printKOTReceipt(kotData, orderId);
+        final bt = context.read<BluetoothPrinterService>();
+        final usb = context.read<UsbPrinterService>();
+        final lan = context.read<LanPrinterService>();
+
+        await ReportService.printKOTReceipt(
+          kotData, 
+          orderId,
+          bt: bt,
+          usb: usb,
+          lan: lan,
+        );
       } catch (e) {
-        debugPrint("KOT Print Error: $e");
       }
 
       await _firestore.collection('kots').add({
@@ -1403,7 +1429,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Table cleared successfully.")));
       }
     } catch (e) {
-      debugPrint("Clear Table Error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error clearing table: $e"), backgroundColor: Colors.red));
       }
@@ -1446,9 +1471,39 @@ class _CashierDashboardState extends State<CashierDashboard> {
           actions: [
             TextButton(onPressed: () => safePop(context), child: const Text("Close")),
             ElevatedButton(
-              onPressed: () => _processBilling(table, orderData, subtotal, cgst, sgst, grandTotal, selectedPaymentMode),
+              onPressed: _isSubmitting ? null : () async {
+                final bt = context.read<BluetoothPrinterService>();
+                if (!bt.arePrintersConfigured && Platform.isAndroid) {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF141615),
+                      title: const Text("Printers Not Configured", style: TextStyle(color: Color(0xFFFCDD22))),
+                      content: const Text("Please configure both KOT and Bill printers in Settings before billing.", style: TextStyle(color: Colors.white70)),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showPrinterSettings(context);
+                          },
+                          child: const Text("SETTINGS", style: TextStyle(color: Color(0xFFFCDD22))),
+                        ),
+                      ],
+                    ),
+                  );
+                  return;
+                }
+                
+                setState(() => _isSubmitting = true);
+                try {
+                  await _processBilling(table, orderData, subtotal, cgst, sgst, grandTotal, selectedPaymentMode);
+                } finally {
+                  if (mounted) setState(() => _isSubmitting = false);
+                }
+              },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-              child: const Text("CONFIRM & PRINT"),
+              child: _isSubmitting ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text("CONFIRM & PRINT"),
             ),
           ],
         ),
@@ -1535,6 +1590,17 @@ class _CashierDashboardState extends State<CashierDashboard> {
         updates['tableCount'] = FieldValue.increment(1);
       }
 
+      // Add payment mode collection updates
+      final pm = paymentMode.toLowerCase();
+      if (pm == 'cash') {
+        updates['cashCollection'] = FieldValue.increment(total);
+      } else if (pm == 'upi') {
+        updates['upiCollection'] = FieldValue.increment(total);
+      } else if (pm == 'card') {
+        updates['cardCollection'] = FieldValue.increment(total);
+      }
+
+
       if (Platform.isWindows) {
         // Windows workaround: avoid Firestore `runTransaction` due to
         // `firebase_firestore/transaction/...` non-platform thread crashes.
@@ -1598,18 +1664,21 @@ class _CashierDashboardState extends State<CashierDashboard> {
       orderData['receiptNumber'] = assignedReceiptNo;
 
       try {
+        final usb = context.read<UsbPrinterService>();
+        final bt = context.read<BluetoothPrinterService>();
+        final lan = context.read<LanPrinterService>();
+
         await ReportService.printFinalBill(
-          orderData: orderData,
+          data: orderData,
           orderId: strReceiptNo,
-          subtotal: subtotal,
-          cgst: cgst,
-          sgst: sgst,
           total: total,
           paymentMode: paymentMode,
-          hotelName: restaurantName,
+          receiptNum: strReceiptNo,
+          bt: bt,
+          usb: usb,
+          lan: lan,
         );
       } catch (e) {
-        debugPrint("Final Bill Printing failed: $e");
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error printing bill: $e"), backgroundColor: Colors.orange));
         }
@@ -1625,7 +1694,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
         });
       }
     } catch (e) {
-      debugPrint("Process Billing Error: $e");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
     }
   }
@@ -1729,7 +1797,22 @@ class _CashierDashboardState extends State<CashierDashboard> {
                                   'tableName': orderData['tableName'],
                                   'items': [{'name': data['name'], 'quantity': 1, 'price': (data['price'] as num).toDouble()}],
                                 };
-                                await ReportService.printKOTReceipt(kotData, orderId);
+                                final bt = context.read<BluetoothPrinterService>();
+                                final usb = context.read<UsbPrinterService>();
+                                final lan = context.read<LanPrinterService>();
+                                final isAndroid = !kIsWeb && Platform.isAndroid;
+
+                                if (isAndroid && !bt.arePrintersConfigured) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Printers not configured in Settings!")));
+                                } else {
+                                  await ReportService.printKOTReceipt(
+                                    kotData, 
+                                    orderId,
+                                    bt: bt,
+                                    usb: usb,
+                                    lan: lan,
+                                  );
+                                }
 
                                 await _firestore.collection('kots').add({
                                   'tableId': orderData['tableId'],
@@ -2486,7 +2569,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
         }
       } catch (e) {
         // Security rules denial should not hard-crash the UI.
-        debugPrint('Table select failed (order read): $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -2753,14 +2835,87 @@ class _CashierDashboardState extends State<CashierDashboard> {
     final doc = await _firestore.collection('orders').doc(orderId).get();
     if (doc.exists) {
       final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
-      data['kotNumber'] = orderId.substring(0, 4).toUpperCase();
+      final bt = context.read<BluetoothPrinterService>();
+      final usb = context.read<UsbPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final printerService = isAndroid ? bt : usb;
+
+      if (isAndroid && !bt.arePrintersConfigured) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF141615),
+            title: const Text("Printers Not Configured", style: TextStyle(color: Color(0xFFFCDD22))),
+            content: const Text("Please configure both KOT and Bill printers in Settings.", style: TextStyle(color: Colors.white70)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showPrinterSettings(context);
+                },
+                child: const Text("SETTINGS", style: TextStyle(color: Color(0xFFFCDD22))),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      final lan = context.read<LanPrinterService>();
       try {
-        await ReportService.printKOTReceipt(data, orderId);
+        await ReportService.printKOTReceipt(
+          data, 
+          orderId,
+          bt: bt,
+          usb: usb,
+          lan: lan,
+        );
       } catch (e) {
-        debugPrint("KOT Printing failed: $e");
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("KOT Printed!")));
+    }
+  }
+  
+  void _showPrinterSettings(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const PrinterSettingsDialog(),
+    );
+  }
+
+  void _printThermalDailySummary(String? restaurantId, String restaurantName) async {
+    if (restaurantId == null) return;
+    
+    try {
+      final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final docId = "${restaurantId}_$todayStr";
+      final doc = await _firestore.collection('daily_collections').doc(docId).get();
+      
+      if (!doc.exists) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records for today yet."), backgroundColor: Colors.orange));
+        return;
+      }
+
+      final data = doc.data()!;
+      final usb = context.read<UsbPrinterService>();
+      final bt = context.read<BluetoothPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final dynamic printerService = isAndroid ? bt : usb;
+
+      if (printerService.hasSavedPrinter || printerService.isConnected) {
+        final bytes = await ReportService.generateDailyCollectionBytes(
+          data: data,
+          hotelName: restaurantName,
+          paperSize: PaperSize.mm80,
+        );
+        await ReportService.printBytesIsolated(printerService, bytes);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sending to Thermal Printer..."), backgroundColor: Colors.green));
+      } else {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No printer connected. Open Settings to connect."), backgroundColor: Colors.red));
+      }
+    } catch (e) {
     }
   }
 
@@ -2769,43 +2924,21 @@ class _CashierDashboardState extends State<CashierDashboard> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: Missing Restaurant ID")));
       return;
     }
-    
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Generating Order History Report... Please wait."), duration: Duration(seconds: 2)));
-
     try {
-      final startOfToday = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-
-      // Fetch recent orders, matching the order history dialog's view.
-      // We pull the last 50 orders to ensure orders placed late at night or in UTC boundaries aren't incorrectly hidden from daily test downloads.
-      final orderSnap = await _firestore.collection('orders')
-          .where('restaurantId', isEqualTo: restaurantId)
-          .orderBy('createdAt', descending: true)
-          .limit(50)
-          .get();
-
-      final ordersList = orderSnap.docs
-          .map((doc) {
-             final data = doc.data() as Map<String, dynamic>;
-             data['id'] = doc.id; // Inject ID for the report
-             return data;
-          })
-          .toList();
-
-      if (ordersList.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No recent orders found."), backgroundColor: Colors.orange));
+      final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final docId = "${restaurantId}_$todayStr";
+      final doc = await _firestore.collection('daily_collections').doc(docId).get();
+      
+      if (!doc.exists) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No collections recorded for today yet."), backgroundColor: Colors.orange));
         return;
       }
 
-      await ReportService.printOrderHistoryReport(
+      await ReportService.printDailyCollection(
+        data: doc.data()!,
         restaurantName: restaurantName,
-        orders: ordersList,
-        startDate: ordersList.isNotEmpty 
-            ? (ordersList.last['createdAt'] as Timestamp?)?.toDate() ?? startOfToday 
-            : startOfToday,
-        endDate: DateTime.now(),
+        dateStr: todayStr,
       );
-
-      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Report Generation Failed: $e"), backgroundColor: Colors.red));
     }
@@ -2943,6 +3076,30 @@ class _CashierDashboardState extends State<CashierDashboard> {
       }
       
       final orderData = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
+      final bt = context.read<BluetoothPrinterService>();
+      final usb = context.read<UsbPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      if (Platform.isAndroid && !bt.arePrintersConfigured) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF141615),
+            title: const Text("Printers Not Configured", style: TextStyle(color: Color(0xFFFCDD22))),
+            content: const Text("Please configure both KOT and Bill printers in Settings.", style: TextStyle(color: Colors.white70)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showPrinterSettings(context);
+                },
+                child: const Text("SETTINGS", style: TextStyle(color: Color(0xFFFCDD22))),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
       final restaurantId = orderData['restaurantId'];
       if (restaurantId == null) throw "Restaurant ID is missing in order data!";
 
@@ -3014,28 +3171,24 @@ class _CashierDashboardState extends State<CashierDashboard> {
       
       final String pMode = customPaymentMode ?? orderData['paymentMode'] as String? ?? "Cash/Unpaid";
       
-      final bt = context.read<BluetoothPrinterService>();
-      final usb = context.read<UsbPrinterService>();
-      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final lan = context.read<LanPrinterService>();
 
       // Print the Premium Final Bill
       await ReportService.printFinalBill(
-        orderData: orderData,
+        data: orderData,
         orderId: strReceiptNo,
-        subtotal: subtotal,
-        cgst: cgst,
-        sgst: sgst,
         total: total,
         paymentMode: pMode,
-        hotelName: restaurantName,
-        printerService: isAndroid ? bt : usb,
+        receiptNum: strReceiptNo,
+        bt: bt,
+        usb: usb,
+        lan: lan,
       );
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bill #$strReceiptNo Printed!"), backgroundColor: Colors.blue));
       }
-    } catch (e, stack) {
-      debugPrint("Billing Error: $e\n$stack");
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Billing Failed: $e"), backgroundColor: Colors.red));
       }

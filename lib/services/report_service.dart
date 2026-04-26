@@ -11,7 +11,10 @@ import 'package:flutter/foundation.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'usb_printer_service.dart';
 import 'bluetooth_printer_service.dart';
+import 'lan_printer_service.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import '../models/printer_role.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:share_plus/share_plus.dart'; // No longer needed for PDF
 // import 'package:path_provider/path_provider.dart';
 
@@ -32,7 +35,6 @@ class ReportService {
         // If we have a direct BT connection, ideally we'd print directly.
         // For now, since _safePrint is PDF-focused, we'll keep it as is
         // but the caller should ideally use ESC/POS instead.
-        debugPrint("Direct BT printing available. Bypassing system print?");
       }
     }
     if (!kIsWeb && Platform.isWindows) {
@@ -62,10 +64,9 @@ class ReportService {
 
   static Future<pw.ImageProvider> _loadLogo() async {
     try {
-      final logoData = await rootBundle.load('assets/images/yug-poslogo.png');
+      final logoData = await rootBundle.load('assets/images/yugposlogo.png');
       return pw.MemoryImage(logoData.buffer.asUint8List());
     } catch (e) {
-      debugPrint("Logo loading failed: $e");
       return pw.MemoryImage(Uint8List.fromList([
         137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
       ]));
@@ -366,6 +367,83 @@ class ReportService {
         name: '${title.replaceAll(' ', '_')}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf');
   }
 
+  /// REST-Compatible 80mm Thermal Report
+  static Future<void> generateThermalPeriodReport(
+      String title, String periodInfo, List<QueryDocumentSnapshot> orders, {String restaurantName = "YUG POS"}) async {
+    final total = orders.fold<double>(0, (sum, doc) => sum + (doc['totalAmount'] ?? 0));
+    final logo = await _loadLogo();
+
+    await _safePrint(
+      name: '${title.replaceAll(' ', '_')}.pdf',
+      onLayout: (PdfPageFormat format) async {
+        final pdf = pw.Document();
+        pdf.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.roll80,
+            margin: const pw.EdgeInsets.all(5),
+            build: (pw.Context context) => [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Image(logo, width: 60, height: 60),
+                  pw.SizedBox(height: 5),
+                  pw.Text(restaurantName.toUpperCase(),
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                  pw.Text(title.toUpperCase(),
+                      style: const pw.TextStyle(fontSize: 10)),
+                  pw.SizedBox(height: 5),
+                  pw.Text(periodInfo, style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text("Total Orders: ${orders.length}", 
+                      style: const pw.TextStyle(fontSize: 9)),
+                  pw.SizedBox(height: 5),
+                  pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+                  pw.SizedBox(height: 10),
+
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text("NET COLLECTION:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                      pw.Text("INR ${total.toStringAsFixed(0)}", 
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                    ],
+                  ),
+                  pw.SizedBox(height: 10),
+                  pw.Divider(thickness: 0.5),
+                  
+                  pw.SizedBox(height: 10),
+                  pw.TableHelper.fromTextArray(
+                    context: context,
+                    border: null,
+                    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+                    cellStyle: const pw.TextStyle(fontSize: 7),
+                    headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                    data: <List<String>>[
+                      <String>['Date', 'Type', 'Amt', 'St'],
+                      ...orders.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+                        final isCancelled = data['status'] == 'cancelled';
+                        return [
+                          DateFormat('dd/MM').format(createdAt),
+                          data['orderType'] == 'takeaway' ? 'TK' : (data['orderType'] == 'dineIn' ? 'DI' : 'DEL'),
+                          "${((data['totalAmount'] ?? 0) as num).toStringAsFixed(0)}",
+                          isCancelled ? 'CAN' : 'OK',
+                        ];
+                      })
+                    ],
+                  ),
+                  pw.SizedBox(height: 20),
+                  pw.Text("Generated by YUG POS", style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey)),
+                ],
+              ),
+            ],
+          ),
+        );
+        return pdf.save();
+      },
+    );
+  }
+
   // â”€â”€ DAILY COLLECTION REPORT (A4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static Future<void> printDailyCollection({
     required Map<String, dynamic> data,
@@ -394,9 +472,9 @@ class ReportService {
 
         pdf.addPage(
           pw.Page(
-            pageFormat: PdfPageFormat.a4,
+            pageFormat: PdfPageFormat.roll80,
             theme: theme,
-            margin: const pw.EdgeInsets.all(32),
+            margin: const pw.EdgeInsets.all(10),
             build: (pw.Context context) {
               return pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -408,11 +486,11 @@ class ReportService {
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text(restaurantName.toUpperCase(), style: pw.TextStyle(font: boldFont, fontSize: 22, color: PdfColors.blue900)),
-                          pw.Text("DAILY REVENUE SUMMARY", style: pw.TextStyle(font: font, fontSize: 13, color: PdfColors.grey700, letterSpacing: 1)),
+                          pw.Text(restaurantName.toUpperCase(), style: pw.TextStyle(font: boldFont, fontSize: 14, color: PdfColors.blue900)),
+                          pw.Text("DAILY REVENUE SUMMARY", style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey700, letterSpacing: 1)),
                         ],
                       ),
-                      if (logo != null) pw.Image(logo, width: 70),
+                      if (logo != null) pw.Image(logo, width: 40),
                     ],
                   ),
                   pw.SizedBox(height: 10),
@@ -426,15 +504,15 @@ class ReportService {
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text("Reporting Period", style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
-                          pw.Text(dateStr, style: pw.TextStyle(font: boldFont, fontSize: 14)),
+                          pw.Text("Reporting Period", style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+                          pw.Text(dateStr, style: pw.TextStyle(font: boldFont, fontSize: 11)),
                         ],
                       ),
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.end,
                         children: [
-                          pw.Text("Status", style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
-                          pw.Text("Finalized", style: pw.TextStyle(font: boldFont, fontSize: 14, color: PdfColors.green700)),
+                          pw.Text("Status", style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+                          pw.Text("Finalized", style: pw.TextStyle(font: boldFont, fontSize: 11, color: PdfColors.green700)),
                         ],
                       ),
                     ],
@@ -444,12 +522,12 @@ class ReportService {
                   // Key Highlights
                   pw.Row(
                     children: [
-                      _buildHighlightCard("Total Transactions", "$bCount", PdfColors.blue700),
-                      pw.SizedBox(width: 20),
-                      _buildHighlightCard("Net Collection", "INR ${netCol.toStringAsFixed(0)}", PdfColors.blueGrey900),
+                      _buildHighlightCard("Total Bills", "$bCount", PdfColors.blue700),
+                      pw.SizedBox(width: 10),
+                      _buildHighlightCard("Net Revenue", "INR ${netCol.toStringAsFixed(0)}", PdfColors.blueGrey900),
                     ],
                   ),
-                  pw.SizedBox(height: 40),
+                  pw.SizedBox(height: 15),
 
                   // Detailed Breakdown Section
                   pw.Text("PAYMENT MODE BREAKDOWN", style: pw.TextStyle(font: boldFont, fontSize: 11, color: PdfColors.blueGrey900)),
@@ -475,7 +553,7 @@ class ReportService {
                     ],
                   ),
 
-                  pw.Spacer(),
+                  pw.SizedBox(height: 20),
                   
                   // Footer
                   pw.Divider(thickness: 0.5, color: PdfColors.grey400),
@@ -534,19 +612,24 @@ class ReportService {
 
   // â”€â”€ KOT RECEIPT (Professional Layout) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static Future<void> printKOTReceipt(
-      Map<String, dynamic> data, String orderId, {dynamic printerService, bool forcePdf = false}) async {
+      Map<String, dynamic> data, String orderId, {
+      BluetoothPrinterService? bt,
+      UsbPrinterService? usb,
+      LanPrinterService? lan,
+      bool forcePdf = false}) async {
     final isAndroid = !kIsWeb && Platform.isAndroid;
     final isWindows = !kIsWeb && Platform.isWindows;
 
+    final service = await getServiceForRole(PrinterRole.kot, bt: bt, usb: usb, lan: lan);
+
     // ── Bluetooth / USB Silent Print (Android & Windows) ──
-    if ((isAndroid || isWindows) && !forcePdf && printerService != null &&
-        (printerService.hasSavedPrinter || printerService.isConnected)) {
+    if ((isAndroid || isWindows) && !forcePdf && service != null &&
+        (service.hasSavedPrinter || service.isConnected)) {
       try {
         final bytes = await generateKOTBytes(data, paperSize: _defaultReceiptPaperSize);
-        await printBytesIsolated(printerService, bytes);
+        await printBytesIsolated(service, bytes, role: PrinterRole.kot);
         return;
       } catch (e) {
-        debugPrint("BT KOT print error, falling back to PDF: $e");
         // fall through to PDF below
       }
     }
@@ -624,7 +707,12 @@ class ReportService {
 
   // â”€â”€ ORDER RECEIPT (waiter copy) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static Future<void> printOrderReceipt(
-      Map<String, dynamic> data, String orderId, {String restaurantName = "YUG POS", dynamic printerService, bool forcePdf = false}) async {
+      Map<String, dynamic> data, String orderId, {
+      String restaurantName = "YUG POS",
+      BluetoothPrinterService? bt,
+      UsbPrinterService? usb,
+      LanPrinterService? lan,
+      bool forcePdf = false}) async {
     final items = _groupItems(data['items'] as List? ?? []);
     final date = _getDateTime(data['createdAt']);
 
@@ -643,9 +731,11 @@ class ReportService {
     final isAndroid = !kIsWeb && Platform.isAndroid;
     final isWindows = !kIsWeb && Platform.isWindows;
 
+    final service = await getServiceForRole(PrinterRole.bill, bt: bt, usb: usb, lan: lan);
+
     // ── Bluetooth / USB Silent Print (Android & Windows) ──
-    if ((isAndroid || isWindows) && !forcePdf && printerService != null &&
-        (printerService.hasSavedPrinter || printerService.isConnected)) {
+    if ((isAndroid || isWindows) && !forcePdf && service != null &&
+        (service.hasSavedPrinter || service.isConnected)) {
       try {
         final bytes = await generateFinalBillBytes(
           data: data,
@@ -657,10 +747,9 @@ class ReportService {
           gstNumber: actualGst,
           paperSize: _defaultReceiptPaperSize,
         );
-        await printBytesIsolated(printerService, bytes);
+        await printBytesIsolated(service, bytes, role: PrinterRole.bill);
         return;
       } catch (e) {
-        debugPrint("Silent Order Receipt print error, falling back to PDF: $e");
       }
     }
 
@@ -754,221 +843,6 @@ class ReportService {
     );
   }
 
-  // â”€â”€ FINAL BILL (Professional Layout) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  static Future<void> printFinalBill({
-    required Map<String, dynamic> orderData,
-    required String orderId,
-    required double subtotal,
-    double serviceCharge = 0,
-    double discount = 0,
-    double? cgst,
-    double? sgst,
-    required double total,
-    required String paymentMode,
-    double gstPercentage = 0,
-    String hotelName = "YUG POS",
-    String address = "Market Road, City",
-    String? receiptNum,
-    dynamic printerService,
-    bool forcePdf = false,
-  }) async {
-    final resDetails = await _getRestaurantDetails(orderData, hotelName, address);
-    final actualHotelName = resDetails['name'] ?? hotelName;
-    final actualAddress = resDetails['address'] ?? address;
-    final actualState = resDetails['state'] ?? '';
-    final actualGst = resDetails['gstNumber'] ?? '';
-
-    final isAndroid = !kIsWeb && Platform.isAndroid;
-    final isWindows = !kIsWeb && Platform.isWindows;
-
-    // ── Bluetooth / USB Silent Print (Android & Windows) ──
-    if ((isAndroid || isWindows) && !forcePdf && printerService != null &&
-        (printerService.hasSavedPrinter || printerService.isConnected)) {
-      try {
-        final bytes = await generateFinalBillBytes(
-          data: {
-            ...orderData,
-            if (receiptNum != null) 'receiptNumber': receiptNum,
-          },
-          total: total,
-          paymentMode: paymentMode,
-          hotelName: actualHotelName,
-          address: actualAddress,
-          state: actualState, // Pass state
-          gstNumber: actualGst,
-          paperSize: _defaultReceiptPaperSize,
-        );
-        await printBytesIsolated(printerService, bytes);
-        return;
-      } catch (e) {
-        debugPrint("BT Bill print error, falling back to PDF: $e");
-        // fall through to PDF below
-      }
-    }
-
-    final items = _groupItems(orderData['items'] as List? ?? []);
-    final date = _getDateTime(orderData['billedAt']);
-    final dateStr = DateFormat('dd-MM-yyyy').format(date);
-    final timeStr = DateFormat('hh:mm a').format(date);
-
-    final roboto = await PdfGoogleFonts.robotoRegular();
-    final robotoBold = await PdfGoogleFonts.robotoBold();
-    final robotoItalic = await PdfGoogleFonts.robotoItalic();
-    final theme = pw.ThemeData.withFont(base: roboto, bold: robotoBold, italic: robotoItalic);
-
-    final billNum = receiptNum ?? orderData['receiptNumber']?.toString() ?? orderId.substring(0, 6);
-    final logo = await _loadLogo();
-
-    await _safePrint(
-      name: 'Invoice_$billNum.pdf',
-      onLayout: (PdfPageFormat format) async {
-        final pdf = pw.Document();
-        pdf.addPage(
-          pw.Page(
-            pageFormat: _getThermalFormat(format.width),
-            theme: theme,
-          build: (pw.Context context) {
-            final printType = (orderData['orderType'] ?? '').toString().toLowerCase();
-            return _receiptWrapper(format.width, [
-              
-              // â”€â”€ Header â”€â”€
-              pw.Center(child: pw.Image(logo, width: 35, height: 35)),
-              pw.SizedBox(height: 2),
-              pw.Center(child: pw.Text(actualHotelName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-              pw.Center(child: pw.Text(actualAddress, style: const pw.TextStyle(fontSize: 10), textAlign: pw.TextAlign.center)),
-              if (actualGst.isNotEmpty) pw.Center(child: pw.Text("GSTIN: $actualGst", style: const pw.TextStyle(fontSize: 8))),
-              pw.SizedBox(height: 2),
-              
-              pw.Center(child: pw.Container(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.grey200,
-                  borderRadius: pw.BorderRadius.circular(4),
-                ),
-                child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-              )),
-              pw.SizedBox(height: 6),
-              
-              // â”€â”€ Meta Data Grid â”€â”€
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text("Bill No: $billNum", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
-                  pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 6)),
-                ]
-              ),
-              pw.SizedBox(height: 2),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(_formatOrderTypeDisplay(orderData, isFinalBill: true), style: const pw.TextStyle(fontSize: 11)),
-                  pw.Text("Time: $timeStr", style: const pw.TextStyle(fontSize: 11)),
-                ]
-              ),
-              pw.SizedBox(height: 2),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text("Waiter: ${orderData['waiterName'] ?? 'Counter'}", style: const pw.TextStyle(fontSize: 6)),
-                  pw.Text("Cashier: ${orderData['cashierName'] ?? 'Staff'}", style: const pw.TextStyle(fontSize: 6)),
-                ]
-              ),
-              
-              // â”€â”€ Customer Info (Delivery/Takeaway Only) â”€â”€
-              if (printType == 'delivery' || printType == 'takeaway') ...[
-                pw.SizedBox(height: 2),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("CUSTOMER: ${(orderData['customerName'] ?? 'Walk-in').toUpperCase()}", 
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
-                    if (orderData['customerContact'] != null && orderData['customerContact'].toString().isNotEmpty)
-                      pw.Text("PHONE: ${orderData['customerContact']}", style: const pw.TextStyle(fontSize: 6)),
-                    if (printType == 'delivery' && orderData['deliveryAddress'] != null && 
-                        orderData['deliveryAddress'].toString().isNotEmpty)
-                      pw.Text("ADDRESS: ${orderData['deliveryAddress']}", style: const pw.TextStyle(fontSize: 6)),
-                  ],
-                ),
-                pw.SizedBox(height: 2),
-              ],
-              
-              _thickDash(),
-
-              // â”€â”€ Column headers â”€â”€
-              pw.Row(children: [
-                pw.Expanded(flex: 4, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6))),
-                pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6), textAlign: pw.TextAlign.center)),
-                pw.Expanded(flex: 2, child: pw.Text("RATE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6), textAlign: pw.TextAlign.right)),
-                pw.Expanded(flex: 2, child: pw.Text("AMT", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6), textAlign: pw.TextAlign.right)),
-              ]),
-              _dash(),
-
-              // â”€â”€ Items â”€â”€                 
-              ...items.map((rawItem) {
-                final item = Map<String, dynamic>.from(rawItem as Map);
-                final itemName = item['name']?.toString() ?? '';
-                final itemQty = (item['quantity'] as num?)?.toInt() ?? 1;
-                final itemPrice = (item['price'] as num?)?.toDouble() ?? 0.0;
-                
-                return pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
-                      child: pw.Row(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                        pw.Expanded(flex: 4, child: pw.Text(itemName.toUpperCase(), style: const pw.TextStyle(fontSize: 6))),
-                        pw.Expanded(flex: 1, child: pw.Text("$itemQty", style: const pw.TextStyle(fontSize: 6), textAlign: pw.TextAlign.center)),
-                        pw.Expanded(flex: 2, child: pw.Text(itemPrice.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 6), textAlign: pw.TextAlign.right)),
-                        pw.Expanded(flex: 2, child: pw.Text("${(itemPrice * itemQty).toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
-                      ]),
-                    );
-              }),
-              _dash(),
-
-              // â”€â”€ Totals â”€â”€
-              pw.SizedBox(height: 4),
-              _amountRow("SUBTOTAL", "â‚¹${subtotal.toStringAsFixed(2)}"),
-              if (serviceCharge > 0) _amountRow("SERVICE CHARGE", "â‚¹${serviceCharge.toStringAsFixed(2)}"),
-              if (discount > 0) _amountRow("DISCOUNT", "-â‚¹${discount.toStringAsFixed(2)}"),
-              if (cgst != null && cgst > 0) _amountRow("CGST (${(gstPercentage/2).toStringAsFixed(1)}%)", "â‚¹${cgst.toStringAsFixed(2)}"),
-              if (sgst != null && sgst > 0) _amountRow("SGST (${(gstPercentage/2).toStringAsFixed(1)}%)", "â‚¹${sgst.toStringAsFixed(2)}"),
-              _thickDash(),
-              
-              // â”€â”€ Grand Total â”€â”€
-              pw.Container(
-                color: PdfColors.grey100,
-                padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text("GRAND TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
-                    pw.Text("₹${total.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
-                  ]
-                )
-              ),
-              _thickDash(),
-
-              // â”€â”€ Footer â”€â”€
-              pw.SizedBox(height: 12),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text("PAYMENT: ${paymentMode.toUpperCase()}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6)),
-                  pw.Text("STATUS: PAID", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold)),
-                ]
-              ),
-              pw.SizedBox(height: 4),
-              pw.Center(child: pw.Text("Thank you! Visit Again", style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 6))),
-              pw.SizedBox(height: 2),
-              pw.Center(child: pw.Text("Powered by YUG POS", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600))),
-              pw.SizedBox(height: 2),
-            ]);
-          },
-        ),
-      );
-      return pdf.save();
-    },
-  );
-}
 
   // â”€â”€ Helper: amount row (Updated for better proportions) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static pw.Widget _amountRow(String label, String value) => pw.Padding(
@@ -990,6 +864,7 @@ class ReportService {
     required Map<String, double> revenueBySource,
     required Map<String, int> orderStatuses,
     required Map<String, double> categories,
+    Map<String, double>? revenueByPayment,
   }) async {
     final dateStr = DateFormat('dd-MM-yyyy').format(DateTime.now());
 
@@ -998,16 +873,16 @@ class ReportService {
           final pdf = pw.Document();
           pdf.addPage(
             pw.Page(
-              pageFormat: PdfPageFormat.a4,
+              pageFormat: PdfPageFormat.roll80,
               build: (pw.Context context) => pw.Padding(
-                padding: const pw.EdgeInsets.all(40),
+                padding: const pw.EdgeInsets.all(10),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Center(child: pw.Text(restaurantName.toUpperCase(), style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
-                    pw.Center(child: pw.Text("DAILY REVENUE SUMMARY", style: const pw.TextStyle(fontSize: 16))),
-                    pw.Center(child: pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 12))),
-                    pw.SizedBox(height: 30),
+                    pw.Center(child: pw.Text(restaurantName.toUpperCase(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
+                    pw.Center(child: pw.Text("DAILY REVENUE SUMMARY", style: const pw.TextStyle(fontSize: 10))),
+                    pw.Center(child: pw.Text("Date: $dateStr", style: const pw.TextStyle(fontSize: 8))),
+                    pw.SizedBox(height: 15),
 
                     pw.Text("OVERALL PERFORMANCE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
                     pw.Divider(),
@@ -1029,6 +904,16 @@ class ReportService {
                         ])),
                     pw.SizedBox(height: 20),
 
+                    if (revenueByPayment != null && revenueByPayment.isNotEmpty) ...[
+                      pw.Text("REVENUE BY PAYMENT MODE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                      pw.Divider(),
+                      ...revenueByPayment.entries.map((e) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                            pw.Text(e.key),
+                            pw.Text("INR ${e.value.toStringAsFixed(2)}"),
+                          ])),
+                      pw.SizedBox(height: 20),
+                    ],
+
                     pw.Text("ORDER STATUS SUMMARY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
                     pw.Divider(),
                     ...orderStatuses.entries.map((e) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
@@ -1036,6 +921,7 @@ class ReportService {
                           pw.Text("${e.value}"),
                         ])),
                     pw.SizedBox(height: 20),
+
 
                     if (categories.isNotEmpty) ...[
                       pw.Text("REVENUE BY CATEGORY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
@@ -1046,7 +932,7 @@ class ReportService {
                           ])),
                     ],
 
-                    pw.Spacer(),
+                    pw.SizedBox(height: 20),
                     pw.Divider(),
                     pw.Center(child: pw.Text("Generated by YUG POS Solution", style: const pw.TextStyle(fontSize: 10))),
                   ],
@@ -1425,24 +1311,39 @@ class ReportService {
   /// Helper to isolate native printing from the main thread.
   /// Supports both UsbPrinterService (Windows) and BluetoothPrinterService (Android).
   static Future<void> printBytesIsolated(
-      dynamic printerService, List<int> bytes) async {
+      dynamic printerService, List<int> bytes, {PrinterRole role = PrinterRole.bill}) async {
+    final roleName = role == PrinterRole.kot ? "KOT" : "Bill";
+    try {
+      Fluttertoast.showToast(
+        msg: "Connecting to saved $roleName Printer...", 
+        backgroundColor: Colors.black87,
+        textColor: Colors.white,
+        toastLength: Toast.LENGTH_SHORT,
+      );
+    } catch (_) {}
+
     try {
       bool success = false;
       if (printerService is UsbPrinterService) {
-        success = await printerService.printRawBytes(bytes);
+        success = await printerService.printRawBytes(bytes, role: role);
       } else if (printerService is BluetoothPrinterService) {
-        success = await printerService.printRawBytes(bytes);
+        success = await printerService.printRoleBytes(bytes, role);
+      } else if (printerService is LanPrinterService) {
+        success = await printerService.printRawBytes(bytes, role: role);
       } else {
-        debugPrint('[Printer] Unknown printer service type.');
         return;
       }
+
       if (!success) {
-        debugPrint('[Printer] printRawBytes returned false — printer may be disconnected.');
-        throw Exception('Printer returned failure. Check Bluetooth connection.');
+        Fluttertoast.showToast(msg: "Bluetooth connection error", backgroundColor: Colors.red);
+        throw Exception('Printer returned failure. Check connection for $role.');
       }
-      debugPrint('[Printer] ✅ Print sent successfully.');
+      
+      Fluttertoast.showToast(msg: "$roleName Printed Successfully", backgroundColor: Colors.green);
     } catch (e) {
-      debugPrint('[Printer] ❌ Error: $e');
+      if (e is! Exception) {
+         Fluttertoast.showToast(msg: "Bluetooth connection error", backgroundColor: Colors.red);
+      }
       rethrow; // let caller handle it (e.g., fall back to PDF)
     }
   }
@@ -1580,7 +1481,6 @@ class ReportService {
         'billedAt': Timestamp.now(),
       });
     } catch (e) {
-      debugPrint("Error settling order: $e");
       rethrow;
     }
   }
@@ -1588,7 +1488,7 @@ class ReportService {
   static Future<List<int>> generateDailyCollectionBytes({
     required Map<String, dynamic> data,
     String hotelName = "YUG POS",
-    PaperSize paperSize = PaperSize.mm58,
+    PaperSize paperSize = PaperSize.mm80,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(paperSize, profile);
@@ -1885,6 +1785,96 @@ class ReportService {
     );
   }
 
+  static Future<void> printFinalBill({
+    required Map<String, dynamic> data,
+    required String orderId,
+    required double total,
+    required String paymentMode,
+    String? receiptNum,
+    BluetoothPrinterService? bt,
+    UsbPrinterService? usb,
+    LanPrinterService? lan,
+    bool forcePdf = false,
+  }) async {
+    final resId = data['restaurantId'];
+    String hotelName = "YUG POS";
+    String address = "Market Road, City";
+    String state = "";
+    String gstNumber = "";
+
+    if (resId != null) {
+      final doc = await _firestore.collection('restaurants').doc(resId).get();
+      if (doc.exists) {
+        final resData = doc.data();
+        hotelName = resData?['name'] ?? hotelName;
+        address = resData?['address'] ?? address;
+        state = resData?['state'] ?? "";
+        gstNumber = resData?['gstNumber'] ?? "";
+      }
+    }
+
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    final isWindows = !kIsWeb && Platform.isWindows;
+
+    final service = await getServiceForRole(PrinterRole.bill, bt: bt, usb: usb, lan: lan);
+
+    // ── Silent Print (Android & Windows) ──
+    if ((isAndroid || isWindows) && !forcePdf && service != null &&
+        (service.hasSavedPrinter || service.isConnected)) {
+      try {
+        final bytes = await generateFinalBillBytes(
+          data: {
+            ...data,
+            if (receiptNum != null) 'receiptNumber': receiptNum,
+          },
+          total: total,
+          paymentMode: paymentMode,
+          hotelName: hotelName,
+          address: address,
+          state: state,
+          gstNumber: gstNumber,
+          paperSize: _defaultReceiptPaperSize,
+        );
+
+        await printBytesIsolated(service, bytes, role: PrinterRole.bill);
+        return;
+      } catch (e) {
+      }
+    }
+
+    await _safePrint(
+      name: 'Bill_${receiptNum ?? orderId.substring(0, 4)}.pdf',
+      onLayout: (PdfPageFormat format) async {
+        return generateFinalBillPdfBytes(
+          data: {
+            ...data,
+            if (receiptNum != null) 'receiptNumber': receiptNum,
+          },
+          total: total,
+          paymentMode: paymentMode,
+          hotelName: hotelName,
+          address: address,
+          state: state,
+          gstNumber: gstNumber,
+        );
+      },
+    );
+  }
+
+  static Future<dynamic> getServiceForRole(PrinterRole role, {
+    BluetoothPrinterService? bt,
+    UsbPrinterService? usb,
+    LanPrinterService? lan,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final typeStr = prefs.getString(role == PrinterRole.kot ? 'kot_connection_type' : 'bill_connection_type') ?? 'bluetooth';
+    
+    if (typeStr == 'bluetooth') return bt;
+    if (typeStr == 'usb') return usb;
+    if (typeStr == 'lan') return lan;
+    return bt; // fallback
+  }
+
   static Future<void> shareBillAsPdf({
     required Map<String, dynamic> orderData,
     required String orderId,
@@ -1928,7 +1918,6 @@ class ReportService {
         filename: "Bill_${receiptNum ?? orderId.substring(0, 4)}.pdf",
       );
     } catch (e) {
-      debugPrint("Sharing ERROR: $e");
       Fluttertoast.showToast(msg: "Share Error: $e", backgroundColor: Colors.red);
     }
   }

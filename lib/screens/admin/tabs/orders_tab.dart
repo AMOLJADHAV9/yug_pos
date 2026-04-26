@@ -11,6 +11,7 @@ import '../../../providers/cart_provider.dart';
 import '../../../services/report_service.dart';
 import '../../../services/bluetooth_printer_service.dart';
 import '../../../services/usb_printer_service.dart';
+import '../../../services/lan_printer_service.dart';
 import '../../../utils/navigator_utils.dart';
 
 class OrdersTab extends StatefulWidget {
@@ -248,7 +249,32 @@ class _OrdersTabState extends State<OrdersTab> {
                             icon: const Icon(Icons.more_vert, size: 20),
                             onSelected: (value) async {
                                if (value == 'print') {
-                                 final printerService = context.read<UsbPrinterService>();
+                                 final bt = context.read<BluetoothPrinterService>();
+                                 final usb = context.read<UsbPrinterService>();
+                                 final lan = context.read<LanPrinterService>();
+                                 final isAndroid = !kIsWeb && Platform.isAndroid;
+                                 
+                                 // Shared Precondition Check
+                                 if (isAndroid && !bt.arePrintersConfigured) {
+                                   if (mounted) {
+                                     showDialog(
+                                       context: context,
+                                       builder: (c) => AlertDialog(
+                                         backgroundColor: const Color(0xFF141615),
+                                         title: const Text("Printers Not Configured", style: TextStyle(color: Colors.white)),
+                                         content: const Text(
+                                           "Please configure both KOT and Bill printers in Settings to continue balancing orders.",
+                                           style: TextStyle(color: Colors.white70),
+                                         ),
+                                         actions: [
+                                           TextButton(onPressed: () => safePop(c), child: const Text("OK")),
+                                         ],
+                                       ),
+                                     );
+                                   }
+                                   return;
+                                 }
+
                                  final hotelName = context.read<AuthService>().restaurantName ?? "YUG POS";
                                  final paymentMode = data['status'] == 'billed'
                                      ? (data['paymentMode'] ?? 'Cash')
@@ -268,7 +294,7 @@ class _OrdersTabState extends State<OrdersTab> {
                                        paymentMode: paymentMode,
                                      );
                                    } catch (e) {
-                                     debugPrint('Firestore settle error: $e');
+                                   } catch (e) {
                                      if (mounted) {
                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                          content: Text('Failed to save bill: $e'),
@@ -279,20 +305,17 @@ class _OrdersTabState extends State<OrdersTab> {
                                    }
                                  }
 
-                                 // ── STEP 2: Smart Print (Silent Thermal or PDF Fallback) ──
-                                 final bt = context.read<BluetoothPrinterService>();
-                                 final usb = context.read<UsbPrinterService>();
-                                 final isAndroid = !kIsWeb && Platform.isAndroid;
 
+                                 // ── STEP 2: Smart Print ──
                                  await ReportService.printFinalBill(
-                                   orderData: data,
+                                   data: data,
                                    orderId: docId,
-                                   subtotal: (data['totalAmount'] ?? 0).toDouble(),
                                    total: (data['totalAmount'] ?? 0).toDouble(),
                                    paymentMode: paymentMode,
-                                   hotelName: hotelName,
                                    receiptNum: receiptNo?.toString() ?? data['receiptNumber']?.toString(),
-                                   printerService: isAndroid ? bt : usb,
+                                   bt: bt,
+                                   usb: usb,
+                                   lan: lan,
                                  );
 
                                  if (mounted) {
@@ -461,18 +484,16 @@ class _OrdersTabState extends State<OrdersTab> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () async {
-                    final printerService = context.read<UsbPrinterService>();
-                    if (printerService.hasSavedPrinter) {
-                      final bytes = await ReportService.generateFinalBillBytes(
-                        data: data, 
-                        total: (data['totalAmount'] ?? 0).toDouble(), 
-                        paymentMode: data['paymentMode'] ?? (data['status'] == 'billed' ? 'Paid' : 'Unpaid'),
-                        hotelName: context.read<AuthService>().restaurantName ?? "YUG POS"
-                      );
-                      await printerService.printRawBytes(bytes);
-                    } else {
-                      ReportService.printOrderReceipt(data, orderId);
-                    }
+                    final bt = context.read<BluetoothPrinterService>();
+                    final usb = context.read<UsbPrinterService>();
+                    final lan = context.read<LanPrinterService>();
+                    ReportService.printOrderReceipt(
+                      data, 
+                      orderId,
+                      bt: bt,
+                      usb: usb,
+                      lan: lan,
+                    );
                   },
                   icon: const Icon(Icons.print),
                   label: const Text("PRINT RECEIPT"),
@@ -559,6 +580,7 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
   String _searchQuery = "";
   final List<CartItem> _selectedItems = [];
   final TextEditingController _phoneController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -912,8 +934,35 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
   }
 
   void _submitOrder() async {
-     final auth = context.read<AuthService>();
-     final adminName = auth.role == UserRole.admin ? "Admin (${auth.currentUser?.email ?? 'Unknown'})" : "Admin";
+    if (_isSubmitting) return;
+
+    final btService = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    
+    // Shared Precondition Check
+    if (isAndroid && !btService.arePrintersConfigured) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: const Color(0xFF141615),
+            title: const Text("Printers Not Configured", style: TextStyle(color: Colors.white)),
+            content: const Text(
+              "Please configure both KOT and Bill printers in Settings to continue balancing orders.",
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(onPressed: () => safePop(c), child: const Text("OK")),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    final auth = context.read<AuthService>();
+     final adminName = auth.role == UserRole.admin ? "Admin (${auth.currentEmail ?? 'Unknown'})" : "Admin";
      final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
 
      const customerName = "Walk-in";
@@ -996,7 +1045,17 @@ class _AdminOrderDialogState extends State<AdminOrderDialog> {
      };
      
      // Trigger Auto-Print
-     await ReportService.printKOTReceipt(kotData, orderRef.id);
+     final usb = context.read<UsbPrinterService>();
+     final bt = context.read<BluetoothPrinterService>();
+     final lan = context.read<LanPrinterService>();
+
+     await ReportService.printKOTReceipt(
+       kotData, 
+       orderRef.id,
+       bt: bt,
+       usb: usb,
+       lan: lan,
+     );
 
      if (mounted) {
        safePop(context);

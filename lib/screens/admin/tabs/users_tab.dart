@@ -3,11 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/usb_printer_service.dart';
 import '../../../services/bluetooth_printer_service.dart';
 import '../../../services/report_service.dart';
+import '../../../widgets/printer_settings_dialog.dart';
 import '../../../utils/navigator_utils.dart';
 
 class UsersTab extends StatefulWidget {
@@ -408,6 +410,25 @@ class _AddUserDialogState extends State<AddUserDialog> {
                 onChanged: (v) => setState(() => _selectedRole = v!),
                 decoration: const InputDecoration(labelText: "Assign Role"),
               ),
+              if (_selectedRole == 'waiter')
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: FutureBuilder<QuerySnapshot>(
+                    future: FirebaseFirestore.instance.collection('users')
+                        .where('restaurantId', isEqualTo: context.read<AuthService>().restaurantId)
+                        .where('role', isEqualTo: 'waiter')
+                        .get(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData && snapshot.data!.docs.length >= 2) {
+                        return const Text(
+                          "Max 2 Waiters limit reached for this restaurant.",
+                          style: TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
             ],
           ),
         ),
@@ -424,257 +445,3 @@ class _AddUserDialogState extends State<AddUserDialog> {
   }
 }
 
-class PrinterSettingsDialog extends StatefulWidget {
-  const PrinterSettingsDialog({super.key});
-
-  @override
-  State<PrinterSettingsDialog> createState() => _PrinterSettingsDialogState();
-}
-
-class _PrinterSettingsDialogState extends State<PrinterSettingsDialog> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  late int _tabCount;
-
-  @override
-  void initState() {
-    super.initState();
-    final bool showBluetooth = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-    _tabCount = showBluetooth ? 2 : 1;
-    _tabController = TabController(length: _tabCount, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF141615),
-      titlePadding: EdgeInsets.zero,
-      title: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-            child: Row(
-              children: [
-                const Icon(Icons.print, color: Color(0xFFFCDD22)),
-                const SizedBox(width: 10),
-                const Text("Printer Configuration", style: TextStyle(color: Colors.white, fontSize: 18)),
-              ],
-            ),
-          ),
-          TabBar(
-            controller: _tabController,
-            indicatorColor: const Color(0xFFFCDD22),
-            labelColor: const Color(0xFFFCDD22),
-            unselectedLabelColor: Colors.white54,
-            tabs: [
-              const Tab(text: "USB (Windows)", icon: Icon(Icons.usb, size: 20)),
-              if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) 
-                const Tab(text: "Bluetooth (Android)", icon: Icon(Icons.bluetooth, size: 20)),
-            ],
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 500,
-        height: 400,
-        child: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildUsbTab(),
-            if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) 
-              _buildBluetoothTab(),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => safePop(context),
-          child: const Text("CLOSE", style: TextStyle(color: Colors.white54)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUsbTab() {
-    return Consumer<UsbPrinterService>(
-      builder: (context, service, _) {
-        return Column(
-          children: [
-            const SizedBox(height: 16),
-            if (service.selectedDevice != null) ...[
-              _buildConnectedSourceCard(
-                name: service.selectedDevice!.name ?? "USB Printer",
-                address: service.selectedDevice!.address ?? "USB",
-                isConnected: service.isConnected,
-                onForget: () => service.disconnect(),
-                onTest: () async {
-                  final bytes = await ReportService.generateKOTBytes({
-                    'tableName': 'TEST-USB', 
-                    'items': [{'name': 'USB TEST PRINT', 'quantity': 1}]
-                  });
-                  await service.printRawBytes(bytes);
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
-            Expanded(
-              child: _buildDeviceList(
-                devices: service.devices,
-                isScanning: service.isScanning,
-                onScan: () => service.scan(),
-                onSelect: (d) => service.selectDevice(d),
-                emptyTitle: "No USB printers found",
-                helpText: "Select a USB printer below:",
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildBluetoothTab() {
-    return Consumer<BluetoothPrinterService>(
-      builder: (context, service, _) {
-        return Column(
-          children: [
-            const SizedBox(height: 16),
-            if (service.selectedDevice != null || service.hasSavedPrinter) ...[
-              _buildConnectedSourceCard(
-                name: service.selectedDevice?.name ?? "Saved Printer",
-                address: service.selectedDevice?.address ?? "",
-                isConnected: service.isConnected,
-                onForget: () => service.disconnect(),
-                onTest: () async {
-                  final bytes = await ReportService.generateKOTBytes({
-                    'tableName': 'TEST-BT', 
-                    'items': [{'name': 'BLUETOOTH TEST', 'quantity': 1}]
-                  }, paperSize: PaperSize.mm58);
-                  final success = await service.printRawBytes(bytes);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(success ? "Test Page Sent!" : "Failed to print"),
-                      backgroundColor: success ? Colors.green : Colors.red,
-                    ));
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
-            Expanded(
-              child: _buildDeviceList(
-                devices: service.devices,
-                isScanning: service.isScanning,
-                onScan: () => service.scan(),
-                onSelect: (d) => service.selectDevice(d),
-                emptyTitle: "No Bluetooth printers found",
-                helpText: "Select a paired Bluetooth printer:",
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildConnectedSourceCard({
-    required String name,
-    required String address,
-    required bool isConnected,
-    required VoidCallback onForget,
-    required VoidCallback onTest,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFCDD22).withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFCDD22).withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(isConnected ? Icons.check_circle : Icons.error_outline, 
-                   color: isConnected ? Colors.greenAccent : Colors.redAccent, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(isConnected ? "CONNECTED" : "DISCONNECTED", 
-                         style: TextStyle(color: isConnected ? Colors.greenAccent : Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    if (address.isNotEmpty) Text(address, style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 20, color: Colors.white10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(onPressed: onForget, child: const Text("FORGET", style: TextStyle(color: Colors.redAccent, fontSize: 11))),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: onTest, 
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFCDD22), minimumSize: const Size(80, 32)),
-                child: const Text("TEST PRINT", style: TextStyle(color: Color(0xFF141615), fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDeviceList({
-    required List<dynamic> devices,
-    required bool isScanning,
-    required VoidCallback onScan,
-    required Function(dynamic) onSelect,
-    required String emptyTitle,
-    required String helpText,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(helpText, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-            if (isScanning)
-              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCDD22)))
-            else
-              IconButton(onPressed: onScan, icon: const Icon(Icons.refresh, size: 18, color: Color(0xFFFCDD22))),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (!isScanning && devices.isEmpty)
-          Expanded(child: Center(child: Text(emptyTitle, style: const TextStyle(color: Colors.white38))))
-        else
-          Expanded(
-            child: ListView.builder(
-              itemCount: devices.length,
-              itemBuilder: (context, index) {
-                final d = devices[index];
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(d.name ?? "Unknown Device", style: const TextStyle(color: Colors.white, fontSize: 14)),
-                  subtitle: Text(d.address ?? "", style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                  trailing: const Icon(Icons.chevron_right, color: Colors.white24),
-                  onTap: () => onSelect(d),
-                );
-              },
-            ),
-          ),
-      ],
-    );
-  }
-}

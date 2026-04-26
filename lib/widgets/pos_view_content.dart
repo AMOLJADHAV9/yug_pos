@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
@@ -12,10 +13,18 @@ import '../models/menu_item.dart';
 import '../providers/cart_provider.dart';
 import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
+import '../services/lan_printer_service.dart';
 import '../services/bluetooth_printer_service.dart';
+import '../models/printer_role.dart';
 import '../screens/cashier/v2_styles.dart';
 import '../utils/navigator_utils.dart';
 import 'menu_item_card.dart';
+import '../screens/admin/tabs/wifi_settings_tab.dart';
+import '../screens/admin/tabs/bluetooth_settings_tab.dart';
+import '../widgets/connectivity_indicators.dart';
+import '../screens/admin/usb_printer_settings_screen.dart';
+import '../screens/admin/lan_printer_settings_screen.dart';
+import '../screens/admin/bluetooth_printer_settings_screen.dart';
 
 class POSViewContent extends StatefulWidget {
   final bool isAdminTab;
@@ -79,7 +88,6 @@ class _POSViewContentState extends State<POSViewContent> {
           });
         }
       } catch (e) {
-        debugPrint("Error fetching Restaurant Settings: $e");
       }
     }
   }
@@ -158,7 +166,7 @@ class _POSViewContentState extends State<POSViewContent> {
             Builder(
               builder: (context) => IconButton(
                 icon: const Icon(Icons.menu, size: 20, color: V2Colors.yellow),
-                onPressed: () => Scaffold.of(context).openDrawer(),
+                onPressed: () => _openDrawer(context),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -251,60 +259,63 @@ class _POSViewContentState extends State<POSViewContent> {
   }
 
   Widget _buildPrinterStatus() {
+    final usb = context.watch<UsbPrinterService>();
+    final lan = context.watch<LanPrinterService>();
+    final bt = context.watch<BluetoothPrinterService>();
     final isAndroid = !kIsWeb && Platform.isAndroid;
+
+    Color statusColor = V2Colors.muted;
+    String statusText = "No Printer";
+    IconData statusIcon = Icons.print_disabled;
+
     if (isAndroid) {
-      final bt = context.watch<BluetoothPrinterService>();
-      final isConnected = bt.isConnected;
-      final hasSaved = bt.hasSavedPrinter;
-      return InkWell(
-        onTap: () => _showPrinterSelectionDialog(),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: isConnected ? V2Colors.green.withOpacity(0.1) : (hasSaved ? Colors.orange.withOpacity(0.1) : V2Colors.s3),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: isConnected ? V2Colors.green.withOpacity(0.5) : (hasSaved ? Colors.orange.withOpacity(0.5) : V2Colors.border)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.bluetooth, size: 14, color: isConnected ? V2Colors.green : (hasSaved ? Colors.orange : V2Colors.muted)),
-              const SizedBox(width: 4),
-              Text(
-                isConnected ? "BT Connected" : (hasSaved ? "BT Saved" : "No Printer"),
-                style: TextStyle(
-                  color: isConnected ? V2Colors.green : (hasSaved ? Colors.orange : V2Colors.muted),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      if (bt.arePrintersConfigured) {
+        statusColor = V2Colors.green;
+        statusText = "BT Ready";
+        statusIcon = Icons.bluetooth_audio;
+      } else if (lan.arePrintersConfigured) {
+        statusColor = const Color(0xFFA78BFA);
+        statusText = "LAN Ready";
+        statusIcon = Icons.lan;
+      } else if (bt.hasSavedPrinter) {
+        statusColor = Colors.orange;
+        statusText = "BT Partial";
+        statusIcon = Icons.bluetooth;
+      }
+    } else {
+      if (usb.arePrintersConfigured) {
+        statusColor = const Color(0xFF3B9EFF);
+        statusText = "USB Ready";
+        statusIcon = Icons.usb;
+      } else if (lan.arePrintersConfigured) {
+        statusColor = const Color(0xFFA78BFA);
+        statusText = "LAN Ready";
+        statusIcon = Icons.lan;
+      } else if (usb.hasSavedPrinter) {
+        statusColor = Colors.orange;
+        statusText = "USB Partial";
+        statusIcon = Icons.usb;
+      }
     }
-    // Non-Android: show USB status
-    final printerService = context.watch<UsbPrinterService>();
-    final isConnected = printerService.isConnected;
-    final device = printerService.selectedDevice;
+
     return InkWell(
       onTap: () => _showPrinterSelectionDialog(),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isConnected ? V2Colors.green.withOpacity(0.1) : V2Colors.s3,
+          color: statusColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: isConnected ? V2Colors.green.withOpacity(0.5) : V2Colors.border),
+          border: Border.all(color: statusColor.withOpacity(0.5)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.print, size: 14, color: isConnected ? V2Colors.green : V2Colors.muted),
+            Icon(statusIcon, size: 14, color: statusColor),
             const SizedBox(width: 4),
             Text(
-              isConnected ? (device?.name ?? "Ready") : "No Printer",
+              statusText,
               style: TextStyle(
-                color: isConnected ? V2Colors.green : V2Colors.muted,
+                color: statusColor,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
@@ -316,178 +327,104 @@ class _POSViewContentState extends State<POSViewContent> {
   }
 
   void _showPrinterSelectionDialog() {
-    final isAndroid = !kIsWeb && Platform.isAndroid;
-    if (isAndroid) {
-      // ── Bluetooth Printer Setup (Android) ──
-      showDialog(
-        context: context,
-        builder: (ctx) => Consumer<BluetoothPrinterService>(
-          builder: (ctx, bt, _) => AlertDialog(
-            backgroundColor: V2Colors.s1,
-            title: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Bluetooth Printer", style: TextStyle(color: Colors.white, fontSize: 16)),
-                if (bt.isScanning)
-                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: V2Colors.yellow))
-                else
-                  IconButton(
-                    icon: const Icon(Icons.bluetooth_searching, color: V2Colors.yellow),
-                    tooltip: "Scan for printers",
-                    onPressed: () => bt.scan(),
-                  ),
-              ],
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141615),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "PRINTER CONFIGURATION",
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
             ),
-            content: SizedBox(
-              width: 300,
+            const SizedBox(height: 16),
+            _buildPrinterTypeOption(
+              icon: Icons.bluetooth,
+              title: "Bluetooth Printers",
+              subtitle: "Standard thermal printers via BT",
+              color: Colors.blue,
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const BluetoothPrinterSettingsScreen()));
+              },
+            ),
+            _buildPrinterTypeOption(
+              icon: Icons.usb,
+              title: "USB Printers",
+              subtitle: "Desktop or USB-OTG connection",
+              color: const Color(0xFF3B9EFF),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => UsbPrinterSettingsScreen()));
+              },
+            ),
+            _buildPrinterTypeOption(
+              icon: Icons.lan,
+              title: "LAN / Network Printers",
+              subtitle: "IP-based printers on same WiFi",
+              color: const Color(0xFFA78BFA),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const LanPrinterSettingsScreen()));
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrinterTypeOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.05),
+          border: Border.all(color: color.withOpacity(0.2)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Status badge
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: bt.isConnected ? V2Colors.green.withOpacity(0.1) : (bt.hasSavedPrinter ? Colors.orange.withOpacity(0.1) : V2Colors.s3),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: bt.isConnected ? V2Colors.green : (bt.hasSavedPrinter ? Colors.orange : V2Colors.border)),
-                    ),
-                    child: Text(
-                      bt.isConnected ? "✅ Connected & Ready to Print" : (bt.hasSavedPrinter ? "🟡 Printer Saved — Tap to reconnect" : "🔴 No printer selected"),
-                      style: TextStyle(
-                        color: bt.isConnected ? V2Colors.green : (bt.hasSavedPrinter ? Colors.orange : V2Colors.muted),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (bt.isConnecting)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: V2Colors.yellow)),
-                        SizedBox(width: 8),
-                        Text("Connecting...", style: TextStyle(color: V2Colors.muted)),
-                      ]),
-                    )
-                  else if (bt.devices.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        "Tap the scan button (🔵) above to discover nearby Bluetooth printers.",
-                        style: TextStyle(color: V2Colors.muted, fontSize: 12),
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  else
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: bt.devices.length,
-                        itemBuilder: (ctx2, i) {
-                          final dev = bt.devices[i];
-                          final isSel = bt.selectedDevice?.address == dev.address;
-                          return ListTile(
-                            onTap: () async {
-                              await bt.selectDevice(dev);
-                              if (mounted) safePop(context);
-                            },
-                            leading: Icon(Icons.bluetooth, color: isSel ? V2Colors.green : Colors.white54),
-                            title: Text(dev.name ?? "Unknown", style: const TextStyle(color: Colors.white, fontSize: 13)),
-                            subtitle: Text(dev.address ?? "", style: const TextStyle(color: V2Colors.muted, fontSize: 10)),
-                            trailing: isSel ? const Icon(Icons.check_circle, color: V2Colors.green) : null,
-                          );
-                        },
-                      ),
-                    ),
-                  const Divider(color: V2Colors.border),
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      TextButton.icon(
-                        onPressed: bt.hasSavedPrinter ? () => bt.testPrint() : null,
-                        icon: const Icon(Icons.print_outlined, size: 16),
-                        label: const Text("Test Print", style: TextStyle(fontSize: 12)),
-                        style: TextButton.styleFrom(foregroundColor: V2Colors.yellow, padding: const EdgeInsets.symmetric(horizontal: 8)),
-                      ),
-                      TextButton.icon(
-                        onPressed: bt.isConnected ? () => bt.disconnect() : null,
-                        icon: const Icon(Icons.bluetooth_disabled, size: 16),
-                        label: const Text("Disconnect", style: TextStyle(fontSize: 12)),
-                        style: TextButton.styleFrom(foregroundColor: V2Colors.red, padding: const EdgeInsets.symmetric(horizontal: 8)),
-                      ),
-                    ],
-                  ),
+                  Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(subtitle, style: TextStyle(color: Colors.grey[600], fontSize: 11)),
                 ],
               ),
             ),
-          ),
-        ),
-      );
-      return;
-    }
-
-    // ── USB Printer Setup (Non-Android) ──
-    showDialog(
-      context: context,
-      builder: (context) => Consumer<UsbPrinterService>(
-        builder: (context, printer, _) => AlertDialog(
-          backgroundColor: V2Colors.s1,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Expanded(child: Text("Select Printer", style: TextStyle(color: Colors.white))),
-              if (printer.isScanning)
-                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              else
-                IconButton(
-                  icon: const Icon(Icons.refresh, color: V2Colors.yellow),
-                  onPressed: () => printer.scan(),
-                ),
-            ],
-          ),
-          content: SizedBox(
-            width: 300,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (printer.devices.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text("No USB printers found", style: TextStyle(color: V2Colors.muted)),
-                  )
-                else
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: printer.devices.length,
-                      itemBuilder: (context, index) {
-                        final device = printer.devices[index];
-                        final isSelected = printer.selectedDevice?.address == device.address;
-                        return ListTile(
-                          onTap: () async {
-                            await printer.selectDevice(device);
-                            if (mounted) safePop(context);
-                          },
-                          leading: Icon(Icons.print, color: isSelected ? V2Colors.green : Colors.white54),
-                          title: Text(device.name ?? "Unknown", style: const TextStyle(color: Colors.white)),
-                          subtitle: Text(device.address ?? "", style: const TextStyle(color: V2Colors.muted, fontSize: 10)),
-                          trailing: isSelected ? const Icon(Icons.check_circle, color: V2Colors.green) : null,
-                        );
-                      },
-                    ),
-                  ),
-                const Divider(color: V2Colors.border),
-                TextButton(
-                  onPressed: () => printer.disconnect(),
-                  child: const Text("Disconnect Current", style: TextStyle(color: V2Colors.red)),
-                ),
-              ],
-            ),
-          ),
+            Icon(Icons.chevron_right, color: Colors.grey[800], size: 18),
+          ],
         ),
       ),
     );
@@ -509,17 +446,19 @@ class _POSViewContentState extends State<POSViewContent> {
       final data = doc.data() as Map<String, dynamic>;
       final usb = context.read<UsbPrinterService>();
       final bt = context.read<BluetoothPrinterService>();
-      final isAndroid = !kIsWeb && Platform.isAndroid;
-      final dynamic printerService = isAndroid ? bt : usb;
+      final lan = context.read<LanPrinterService>();
       final auth = context.read<AuthService>();
 
-      if (printerService.hasSavedPrinter || printerService.isConnected) {
+      // Try to get a service for Bill role (reports usually go to Bill printer)
+      final service = await ReportService.getServiceForRole(PrinterRole.bill, bt: bt, usb: usb, lan: lan);
+
+      if (service != null && (service.hasSavedPrinter || service.isConnected)) {
         final bytes = await ReportService.generateDailyCollectionBytes(
           data: data,
           hotelName: auth.restaurantName ?? "YUG POS",
-          paperSize: isAndroid ? PaperSize.mm58 : PaperSize.mm80,
+          paperSize: PaperSize.mm80,
         );
-        await ReportService.printBytesIsolated(printerService, bytes);
+        await ReportService.printBytesIsolated(service, bytes);
         if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Printing Daily Report (Direct)..."), backgroundColor: V2Colors.green));
         }
@@ -531,7 +470,6 @@ class _POSViewContentState extends State<POSViewContent> {
         );
       }
     } catch (e) {
-      debugPrint("Daily Report Error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Report Error: $e"), backgroundColor: V2Colors.red));
       }
@@ -1237,6 +1175,8 @@ class _POSViewContentState extends State<POSViewContent> {
           if (!isWaiter) ...[
             const SizedBox(height: 8),
             _buildActionBtn("🖨 Bill", V2Colors.yellow, () => _printBill(cart), isFull: true, height: isMobile ? 48 : 36),
+            const SizedBox(height: 8),
+            _buildActionBtn("KOT & Bill", Colors.blueAccent, () => _handleKOTAndBill(cart), isFull: true, height: isMobile ? 48 : 40),
           ],
         ],
       ),
@@ -1861,7 +1801,31 @@ class _POSViewContentState extends State<POSViewContent> {
     }
   }
 
-  Future<void> _placeOrder(CartProvider cart) async {
+  Future<void> _placeOrder(CartProvider cart, {bool printBill = false, bool printKOT = false, String paymentMode = "Cash", bool skipGuard = false}) async {
+    final btService = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    
+    // Shared Precondition Check
+    if (isAndroid && !btService.arePrintersConfigured) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: V2Colors.s1,
+            title: const Text("Printers Not Configured", style: TextStyle(color: Colors.white)),
+            content: const Text(
+              "Please configure both KOT and Bill printers in Settings to continue balancing orders.",
+              style: TextStyle(color: V2Colors.muted),
+            ),
+            actions: [
+              TextButton(onPressed: () => safePop(c), child: const Text("OK")),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     if (cart.items.isEmpty) return;
     final isDineIn = cart.orderType == OrderType.dineIn;
     if (isDineIn && cart.tableId == null) {
@@ -2018,18 +1982,62 @@ class _POSViewContentState extends State<POSViewContent> {
 
       final usb = context.read<UsbPrinterService>();
       final bt = context.read<BluetoothPrinterService>();
+      final lan = context.read<LanPrinterService>();
       final isAndroid = !kIsWeb && Platform.isAndroid;
 
-      await ReportService.printKOTReceipt(
-        kotData, 
-        orderId, 
-        printerService: isAndroid ? bt : usb,
-      );
+      // Determine if KOT should be printed
+      bool shouldPrintKOT = printKOT || !printBill;
+
+      if (shouldPrintKOT) {
+        await ReportService.printKOTReceipt(
+          kotData, 
+          orderId, 
+          bt: bt,
+          usb: usb,
+          lan: lan,
+        );
+        // Add a slight delay to allow first printer connection to clear
+        await Future.delayed(const Duration(seconds: 1));
+      }
+
+      if (printBill) {
+        final orderDoc = await orderRef.get();
+        final finalTotal = (orderDoc.data()?['totalAmount'] as num).toDouble();
+
+        int newReceiptNumber = await ReportService.recordRevenueAndSettle(
+          orderId: orderId,
+          restaurantId: restaurantId,
+          total: finalTotal,
+          paymentMode: paymentMode,
+        );
+
+        if (isDineIn && cart.tableId != null) {
+          await _firestore.collection('tables').doc(cart.tableId).update({
+            'status': 'available',
+            'currentOrderId': null,
+          });
+        }
+
+        final printData = Map<String, dynamic>.from(orderDoc.data()!);
+        printData['receiptNumber'] = newReceiptNumber;
+        printData['paymentMode'] = paymentMode;
+
+        await ReportService.printFinalBill(
+          data: printData,
+          orderId: orderId,
+          total: finalTotal,
+          paymentMode: paymentMode,
+          receiptNum: newReceiptNumber.toString(),
+          bt: bt,
+          usb: usb,
+          lan: lan,
+        );
+      }
 
       if (mounted) {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Order Placed! $kNoStr'),
+          content: Text(printBill ? 'Order Billed! $kNoStr' : 'Order Placed! $kNoStr'),
           backgroundColor: V2Colors.green,
         ));
         cart.clearCart();
@@ -2060,6 +2068,91 @@ class _POSViewContentState extends State<POSViewContent> {
     }
   }
 
+  Future<void> _handleKOTAndBill(CartProvider cart) async {
+    if (_isSubmitting) return;
+
+    if (cart.items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cart is empty.")));
+      return;
+    }
+
+    // Prompt for payment method
+    String selectedPaymentMode = 'cash';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: V2Colors.s1,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Finalize order with KOT & Bill?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("This will print both receipts and record revenue.", style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  _buildPaymentOption(
+                    title: "CASH", 
+                    icon: Icons.money, 
+                    isSelected: selectedPaymentMode == 'cash', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'cash')
+                  ),
+                  const SizedBox(width: 8),
+                  _buildPaymentOption(
+                    title: "UPI", 
+                    icon: Icons.qr_code, 
+                    isSelected: selectedPaymentMode == 'upi', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'upi')
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
+            ElevatedButton(
+              onPressed: () => safePop(c, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+              child: const Text("PRINT BOTH & BILL"),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await _placeOrder(cart, printBill: true, printKOT: true, paymentMode: selectedPaymentMode);
+  }
+
+  Widget _buildPaymentOption({required String title, required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+    final color = isSelected ? V2Colors.yellow : V2Colors.s3;
+    final textColor = isSelected ? Colors.black : V2Colors.muted;
+
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isSelected ? V2Colors.yellow : V2Colors.border),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isSelected ? textColor : V2Colors.muted, size: 20),
+              const SizedBox(height: 4),
+              Text(title, style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _printBill(CartProvider cart) {
     if (cart.items.isEmpty) return;
     _showBillingDialog(
@@ -2085,12 +2178,36 @@ class _POSViewContentState extends State<POSViewContent> {
     required String orderType,
     String? tableId,
     required String tableName,
-    VoidCallback? onComplete,
-    String? orderId,
     String? customerName,
     String? customerContact,
+    VoidCallback? onComplete,
+    String? orderId,
     String? deliveryAddress,
   }) async {
+    final btService = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    
+    // Shared Precondition Check
+    if (isAndroid && !btService.arePrintersConfigured) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: V2Colors.s1,
+            title: const Text("Printers Not Configured", style: TextStyle(color: Colors.white)),
+            content: const Text(
+              "Please configure both KOT and Bill printers in Settings to continue balancing orders.",
+              style: TextStyle(color: V2Colors.muted),
+            ),
+            actions: [
+              TextButton(onPressed: () => safePop(c), child: const Text("OK")),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     // 1. Fetch GST Setting
     final resId = context.read<AuthService>().restaurantId;
     double gstPercent = 0;
@@ -2380,6 +2497,7 @@ class _POSViewContentState extends State<POSViewContent> {
         'customerName': customerName,
         'customerContact': customerContact,
         'deliveryAddress': deliveryAddress,
+        'cashierName': auth.userName ?? 'Admin',
       };
 
       if (existingOrderId != null) {
@@ -2409,16 +2527,15 @@ class _POSViewContentState extends State<POSViewContent> {
         if (orderType == 'delivery') 'deliveryCount': FieldValue.increment(1),
         
         // Revenue by Payment Mode
-        if (paymentMode == 'Cash') 'cashCollection': FieldValue.increment(total),
-        if (paymentMode == 'UPI') 'upiCollection': FieldValue.increment(total),
-        if (paymentMode == 'Card') 'cardCollection': FieldValue.increment(total),
+        if (paymentMode.toLowerCase() == 'cash') 'cashCollection': FieldValue.increment(total),
+        if (paymentMode.toLowerCase() == 'upi') 'upiCollection': FieldValue.increment(total),
+        if (paymentMode.toLowerCase() == 'card') 'cardCollection': FieldValue.increment(total),
       }, SetOptions(merge: true));
       await batch.commit();
 
       final usb = context.read<UsbPrinterService>();
       final bt = context.read<BluetoothPrinterService>();
-      final isAndroid = !kIsWeb && Platform.isAndroid;
-      final dynamic printerService = isAndroid ? bt : usb;
+      final lan = context.read<LanPrinterService>();
 
       final billData = {
         'items': items, 'tableName': tableName, 'orderType': orderType, 'waiterName': 'POS',
@@ -2429,6 +2546,7 @@ class _POSViewContentState extends State<POSViewContent> {
         'customerContact': customerContact,
         'deliveryAddress': deliveryAddress,
         'restaurantId': restaurantId, // CRITICAL: Added for receipt metadata retrieval
+        'cashierName': auth.userName ?? 'Admin',
       };
 
       // Smart Print (Thermal if configured, else PDF fallback)
@@ -2442,20 +2560,14 @@ class _POSViewContentState extends State<POSViewContent> {
         );
       } else {
         await ReportService.printFinalBill(
-          orderData: billData,
+          data: billData,
           orderId: existingOrderId ?? '',
-          subtotal: subtotal,
           total: total,
           paymentMode: paymentMode,
-          hotelName: _restaurantName ?? auth.restaurantName ?? "YUG POS",
-          address: _restaurantAddress ?? "",
           receiptNum: receiptNo.toString(),
-          serviceCharge: serviceCharge,
-          discount: discount,
-          cgst: gst / 2,
-          sgst: gst / 2,
-          gstPercentage: gstPercentage,
-          printerService: isAndroid ? bt : usb,
+          bt: bt,
+          usb: usb,
+          lan: lan,
         );
       }
       
@@ -2550,7 +2662,7 @@ class _POSViewContentState extends State<POSViewContent> {
                       double net = 0;
                       if (snapshot.hasData && snapshot.data!.exists) {
                         final data = snapshot.data!.data() as Map<String, dynamic>;
-                        net = (data['netCollection'] ?? 0).toDouble();
+                        net = max(0.0, (data['netCollection'] ?? 0).toDouble());
                       }
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -2567,7 +2679,7 @@ class _POSViewContentState extends State<POSViewContent> {
                 const SizedBox(width: 12),
                 Builder(
                   builder: (context) => InkWell(
-                    onTap: () => Scaffold.of(context).openDrawer(),
+                    onTap: () => _openDrawer(context),
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(color: V2Colors.s3, borderRadius: BorderRadius.circular(8)),
@@ -2581,6 +2693,17 @@ class _POSViewContentState extends State<POSViewContent> {
         ),
       ),
     );
+  }
+
+  void _openDrawer(BuildContext context) {
+    if (_scaffoldKey.currentState != null) {
+      _scaffoldKey.currentState!.openDrawer();
+    } else {
+      try {
+        Scaffold.of(context).openDrawer();
+      } catch (e) {
+      }
+    }
   }
 
   Widget _buildMobileStatsCards(String? restaurantId) {
@@ -2925,10 +3048,10 @@ class _POSViewContentState extends State<POSViewContent> {
             double net = 0, dine = 0, tk = 0, del = 0;
             if (snapshot.hasData && snapshot.data!.exists) {
               final data = snapshot.data!.data() as Map<String, dynamic>;
-              net = (data['netCollection'] ?? 0).toDouble();
-              dine = (data['tableCollection'] ?? 0).toDouble();
-              tk = (data['takeawayCollection'] ?? 0).toDouble();
-              del = (data['deliveryCollection'] ?? 0).toDouble();
+              net = max(0.0, (data['netCollection'] ?? 0).toDouble());
+              dine = max(0.0, (data['tableCollection'] ?? 0).toDouble());
+              tk = max(0.0, (data['takeawayCollection'] ?? 0).toDouble());
+              del = max(0.0, (data['deliveryCollection'] ?? 0).toDouble());
             }
             return LayoutBuilder(
               builder: (context, constraints) {
@@ -3091,7 +3214,7 @@ class _POSViewContentState extends State<POSViewContent> {
           Center(
             child: Column(
               children: [
-                const Text("YUG POS v2.0.0", style: TextStyle(color: V2Colors.muted, fontSize: 10)),
+                const Text("YUG POS v01.0", style: TextStyle(color: V2Colors.muted, fontSize: 10)),
                 const SizedBox(height: 4),
                 Text("RESTAURANT ID: ${auth.restaurantId ?? '-'}", style: const TextStyle(color: V2Colors.muted, fontSize: 8)),
               ],
@@ -3184,14 +3307,14 @@ class _POSViewContentState extends State<POSViewContent> {
                         width: 110,
                         height: 42,
                         child: Image.asset(
-                          'assets/images/yug-poslogo.png',
+                          'assets/images/yugposlogo.png',
                           fit: BoxFit.cover,
                         ),
                       ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: V2Colors.muted, size: 20),
-                      onPressed: () => Scaffold.of(context).closeDrawer(),
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
@@ -3256,10 +3379,32 @@ class _POSViewContentState extends State<POSViewContent> {
                   _scaffoldKey.currentState?.closeDrawer();
                   _showDownloadReportsDialog();
                 }),
-                _drawerItem(Icons.print_outlined, "Printer Settings", () {
+                _drawerItem(Icons.print_outlined, "Printer Configuration", () {
                   _scaffoldKey.currentState?.closeDrawer();
                   _showPrinterSelectionDialog();
                 }),
+                // _drawerItem(Icons.bluetooth_audio, "Bluetooth Printer", () {
+                //   _scaffoldKey.currentState?.closeDrawer();
+                //   Navigator.push(context, MaterialPageRoute(builder: (context) => const BluetoothPrinterSettingsScreen()));
+                // }),
+                // _drawerItem(Icons.usb, "USB Printer", () {
+                //   _scaffoldKey.currentState?.closeDrawer();
+                //   Navigator.push(context, MaterialPageRoute(builder: (context) => UsbPrinterSettingsScreen()));
+                // }),
+                // _drawerItem(Icons.wifi, "WiFi Settings", () {
+                //   _scaffoldKey.currentState?.closeDrawer();
+                //   Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
+                //     appBar: AppBar(title: const Text("WiFi Settings")),
+                //     body: WifiSettingsTab(),
+                //   )));
+                // }),
+                // _drawerItem(Icons.bluetooth, "Bluetooth Settings", () {
+                //   _scaffoldKey.currentState?.closeDrawer();
+                //   Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
+                //     appBar: AppBar(title: const Text("Bluetooth Settings")),
+                //     body: BluetoothSettingsTab(),
+                //   )));
+                // }),
                 _drawerItem(Icons.logout, "Logout Session", () {
                   _scaffoldKey.currentState?.closeDrawer();
                   auth.logout();
@@ -3272,7 +3417,7 @@ class _POSViewContentState extends State<POSViewContent> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                const Text("v1.0.0 Stable", style: TextStyle(color: V2Colors.muted, fontSize: 10)),
+                const Text("v01.0 Stable", style: TextStyle(color: V2Colors.muted, fontSize: 10)),
                 Text("RES ID: ${auth.restaurantId?.substring(0, 8) ?? '...'}", style: const TextStyle(color: V2Colors.muted, fontSize: 8)),
               ],
             ),
@@ -3496,49 +3641,6 @@ class _POSViewContentState extends State<POSViewContent> {
             },
           ),
           
-          const SizedBox(height: 16),
-          
-          _buildReportActionCard(
-            title: "Detailed Order List",
-            description: "A granular list of all transactions for the day, including item summaries and token IDs.",
-            icon: Icons.list_alt,
-            onTap: () async {
-              final auth = context.read<AuthService>();
-              if (restaurantId == null) return;
-              
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fetching order list..."), backgroundColor: V2Colors.yellow));
-              
-              final start = DateTime(_selectedReportsDate.year, _selectedReportsDate.month, _selectedReportsDate.day);
-              final end = start.add(const Duration(days: 1));
-
-              try {
-                final snapshot = await _firestore.collection('orders')
-                    .where('restaurantId', isEqualTo: restaurantId)
-                    .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-                    .where('createdAt', isLessThan: Timestamp.fromDate(end))
-                    .get();
-                
-                final orders = snapshot.docs.map((doc) {
-                  final d = doc.data() as Map<String, dynamic>;
-                  d['id'] = doc.id;
-                  return d;
-                }).toList();
-
-                if (orders.isEmpty) {
-                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No orders found for this date."), backgroundColor: V2Colors.orange));
-                  return;
-                }
-
-                await ReportService.printOrderHistoryList(
-                  orders: orders,
-                  restaurantName: auth.restaurantName ?? "YUG POS",
-                  date: _selectedReportsDate,
-                );
-              } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Export failed: $e"), backgroundColor: V2Colors.red));
-              }
-            },
-          ),
         ],
       ),
     );

@@ -241,7 +241,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ],
           ),
           child: Image.asset(
-            'assets/images/yug-poslogo.png', 
+            'assets/images/yugposlogo.png', 
             width: isMobile ? 180 : 380,
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) => Icon(Icons.storefront, size: 80, color: _primaryYellow),
@@ -281,7 +281,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           ),
           const SizedBox(height: 80),
           Text(
-            "© ${DateTime.now().year} Yug POS. Premium v2.0", 
+            "© ${DateTime.now().year} Yug POS. Premium v01.0", 
             style: GoogleFonts.inter(color: Colors.white12, fontSize: 13, letterSpacing: 1),
           ),
         ],
@@ -523,7 +523,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           child: CircleAvatar(radius: 40, backgroundColor: Colors.white.withOpacity(0.05), child: Icon(Icons.person_outline_rounded, size: 40, color: _primaryYellow)),
         ),
         const SizedBox(height: 16),
-        Text(auth.currentUser?.email ?? 'Authorized User', style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+        Text(auth.currentEmail ?? 'Authorized User', style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
         const SizedBox(height: 48),
         // Interactive PIN dots
         _buildPinDots(),

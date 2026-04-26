@@ -524,7 +524,6 @@ class _MenuTabState extends State<MenuTab> {
         try {
           await FirebaseStorage.instance.refFromURL(imageUrl).delete();
         } catch (e) {
-          debugPrint("Error deleting image from storage: $e");
         }
       }
     }
@@ -615,7 +614,6 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
         }
       }
     } catch (e) {
-      debugPrint("Upload error: $e");
       if (mounted) {
         setState(() => loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -726,7 +724,6 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
                 try {
                   await FirebaseStorage.instance.refFromURL(oldImageUrl).delete();
                 } catch (e) {
-                  debugPrint("Error deleting old image: $e");
                 }
               }
 

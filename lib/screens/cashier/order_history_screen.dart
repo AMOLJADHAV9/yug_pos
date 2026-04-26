@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'dart:math';
 import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../utils/navigator_utils.dart';
@@ -82,7 +83,6 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                         return const Center(child: CircularProgressIndicator());
                       }
                       if (snapshot.hasError) {
-                        debugPrint("Orders Error: ${snapshot.error}");
                         return Center(child: Text("Error loading orders: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
                       }
 
@@ -95,6 +95,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                       for (var doc in docs) {
                         totalRevenue += (doc.data() as Map<String, dynamic>)['totalAmount'] ?? 0;
                       }
+                      totalRevenue = max(0.0, totalRevenue);
 
                       return Column(
                         children: [
@@ -297,7 +298,6 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
               endDate: _endDate,
             );
           } catch (e) {
-            debugPrint("Print Error: $e");
           } finally {
             if (mounted) setState(() => _isPrinting = false);
           }
@@ -402,7 +402,6 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
         );
       }
     } catch (e) {
-      debugPrint("Delete error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error deleting bill: $e"), backgroundColor: Colors.red)

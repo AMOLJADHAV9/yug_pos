@@ -164,7 +164,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       }
 
       final dateStr = DateFormat('dd MMM yyyy').format(today);
-      await ReportService.generatePeriodReport("Daily Revenue Report", "Date: $dateStr", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
+      await ReportService.generateThermalPeriodReport("Daily Revenue Report", "Date: $dateStr", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
     } catch (e) {
       if (mounted) {
         safePop(context);
@@ -212,7 +212,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         return;
       }
 
-      await ReportService.generatePeriodReport("Monthly Revenue Report", "Period: $monthName", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
+      await ReportService.generateThermalPeriodReport("Monthly Revenue Report", "Period: $monthName", orders, restaurantName: context.read<AuthService>().restaurantName ?? "YUG POS");
     } catch (e) {
       if (mounted) {
         safePop(context);
@@ -272,7 +272,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               width: 150,
                               height: 56,
                               child: Image.asset(
-                                'assets/images/yug-poslogo.png',
+                                'assets/images/yugposlogo.png',
                                 fit: BoxFit.cover,
                               ),
                             ),
@@ -291,8 +291,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           final label = item['label'] as String;
 
                           // Hide WiFi and Bluetooth on Desktop Sidebar
-                          bool isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
-                          if (isDesktop && (label == 'WiFi' || label == 'Bluetooth')) {
+                          if (label == 'WiFi' || label == 'Bluetooth') {
                             return const SizedBox.shrink();
                           }
 
@@ -423,8 +422,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             final label = item['label'] as String;
                             
                             // Hide WiFi and Bluetooth on Desktop Sidebar
-                            bool isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
-                            if (isDesktop && (label == 'WiFi' || label == 'Bluetooth')) {
+                            if (label == 'WiFi' || label == 'Bluetooth') {
                               return const SizedBox.shrink();
                             }
 

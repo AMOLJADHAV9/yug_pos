@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../services/wifi_service.dart';
+import '../models/printer_role.dart';
+import '../screens/cashier/v2_styles.dart';
 
 class ConnectivityIndicators extends StatelessWidget {
   const ConnectivityIndicators({super.key});
@@ -19,7 +21,9 @@ class ConnectivityIndicators extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildBluetoothStatus(context),
+          Consumer<BluetoothPrinterService>(
+            builder: (context, bt, _) => _buildBluetoothIndicator(context, bt),
+          ),
           const SizedBox(height: 8),
           _buildWifiStatus(context),
         ],
@@ -27,45 +31,49 @@ class ConnectivityIndicators extends StatelessWidget {
     );
   }
 
-  Widget _buildBluetoothStatus(BuildContext context) {
-    return Consumer<BluetoothPrinterService>(
-      builder: (context, bt, _) {
-        final isConnected = bt.isConnected;
-        final isConnecting = bt.isConnecting;
-        
-        return Row(
-          children: [
-            Icon(
-              isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-              size: 16,
-              color: isConnected ? Colors.green : (isConnecting ? Colors.orange : Colors.grey),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isConnecting ? "Connecting..." : (isConnected ? "Printer Connected" : "Printer Disconnected"),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isConnected ? Colors.white : Colors.white60,
-                  fontWeight: isConnected ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-            ),
-            if (isConnected)
-              Container(
-                width: 6, height: 6,
-                decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.green),
-              ),
-          ],
-        );
-      },
+  Widget _buildBluetoothIndicator(BuildContext context, BluetoothPrinterService bt) {
+    final hasKot = bt.hasRolePrinter(PrinterRole.kot);
+    final hasBill = bt.hasRolePrinter(PrinterRole.bill);
+    final isConnected = bt.isConnected;
+
+    String statusText = "No Printer";
+    Color statusColor = V2Colors.muted;
+    IconData icon = Icons.bluetooth_disabled;
+
+    if (hasKot && hasBill) {
+      statusText = "KOT & Bill OK";
+      statusColor = isConnected ? V2Colors.green : V2Colors.yellow;
+      icon = Icons.bluetooth_connected;
+    } else if (hasKot || hasBill) {
+      statusText = hasKot ? "KOT Only" : "Bill Only";
+      statusColor = V2Colors.orange;
+      icon = Icons.bluetooth;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: statusColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: statusColor),
+          const SizedBox(width: 6),
+          Text(
+            statusText,
+            style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildWifiStatus(BuildContext context) {
     return Consumer<WifiService>(
       builder: (context, wifi, _) {
-        // Platform check: WifiService is primarily for Android
         final isSupported = !kIsWeb && Platform.isAndroid;
         final isConnected = wifi.isConnected;
         final ssid = wifi.currentSsid;

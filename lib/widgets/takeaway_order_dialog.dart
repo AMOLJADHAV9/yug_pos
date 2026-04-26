@@ -11,6 +11,7 @@ import '../providers/cart_provider.dart';
 import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
 import '../services/bluetooth_printer_service.dart';
+import '../services/lan_printer_service.dart';
 import '../utils/debouncer.dart';
 import '../utils/navigator_utils.dart';
 import 'menu_item_card.dart';
@@ -511,13 +512,37 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
   }
 
   void _submitOrder() async {
+    final btService = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    
+    // Shared Precondition Check
+    if (isAndroid && !btService.arePrintersConfigured) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: const Color(0xFF141615),
+            title: const Text("Printers Not Configured", style: TextStyle(color: Colors.white)),
+            content: const Text(
+              "Please configure both KOT and Bill printers in Settings to continue balancing orders.",
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(onPressed: () => safePop(c), child: const Text("OK")),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
 
     try {
       final auth = context.read<AuthService>();
       final restaurantId = auth.restaurantId;
-      final waiterName = auth.role == UserRole.admin ? "Admin" : (auth.role == UserRole.cashier ? "Cashier" : "Waiter");
+      final waiterName = auth.userName ?? (auth.role == UserRole.admin ? "Admin" : (auth.role == UserRole.cashier ? "Cashier" : "Waiter"));
       
       final address = _addressController.text.trim();
       final deliveryBoy = _deliveryBoyController.text.trim();
@@ -597,6 +622,7 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
         'tableName': widget.orderType == 'delivery' ? 'Delivery' : 'Takeaway',
         'customerName': customerName,
         'waiterName': waiterName,
+        'cashierName': auth.userName ?? 'Admin',
         'restaurantId': restaurantId, 
         'totalAmount': total,
         'items': _selectedItems.map((i) => {'name': i.item.name, 'quantity': i.quantity, 'price': i.item.price}).toList(),
@@ -604,10 +630,8 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
 
       final usb = context.read<UsbPrinterService>();
       final bt = context.read<BluetoothPrinterService>();
-      final isAndroid = !kIsWeb && Platform.isAndroid;
-      final dynamic printerService = isAndroid ? bt : usb;
+      final lan = context.read<LanPrinterService>();
       final paymentMode = _paymentMethod;
-      final hotelName = context.read<AuthService>().restaurantName ?? "YUG POS";
 
       // STEP 1: Settle Firestore (main thread)
       final receiptNo = await ReportService.recordRevenueAndSettle(
@@ -619,14 +643,14 @@ class _TakeawayOrderDialogState extends State<TakeawayOrderDialog> {
 
       // STEP 2: Smart Print (Thermal if configured, else PDF fallback)
       await ReportService.printFinalBill(
-        orderData: kotData,
+        data: kotData,
         orderId: orderRef.id,
-        subtotal: total,
         total: total,
         paymentMode: paymentMode,
-        hotelName: hotelName,
         receiptNum: receiptNo.toString(),
-        printerService: printerService,
+        bt: bt,
+        usb: usb,
+        lan: lan,
       );
 
       if (mounted) {

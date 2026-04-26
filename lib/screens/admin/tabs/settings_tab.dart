@@ -5,8 +5,13 @@ import 'dart:ui';
 import '../../../services/auth_service.dart';
 import '../bluetooth_printer_settings_screen.dart';
 import '../../../services/bluetooth_printer_service.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../../../utils/navigator_utils.dart';
+import '../../../services/usb_printer_service.dart';
+import '../../../services/lan_printer_service.dart';
+import '../usb_printer_settings_screen.dart';
+import '../lan_printer_settings_screen.dart';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
@@ -349,6 +354,16 @@ We strive to respond to all support requests within 24–48 business hours. Resp
           const SizedBox(height: 40),
           _buildPrinterSection(context),
           const SizedBox(height: 48),
+          Center(
+            child: Column(
+              children: [
+                const Text("App Version: 01.0", style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const SizedBox(height: 4),
+                Text("REST ID: ${auth.restaurantId?.substring(0, 8).toUpperCase() ?? '-'}", style: const TextStyle(color: Colors.white10, fontSize: 8)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 48),
         ],
       ),
     );
@@ -378,7 +393,7 @@ We strive to respond to all support requests within 24–48 business hours. Resp
                 const SizedBox(height: 4),
                 Text(auth.role.name.toUpperCase(), style: const TextStyle(color: Color(0xFFFCDD22), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
                 const SizedBox(height: 4),
-                Text(auth.currentUser?.email ?? "No Email", style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                Text(auth.currentEmail ?? "No Email", style: const TextStyle(color: Colors.white54, fontSize: 13)),
               ],
             ),
           ),
@@ -463,63 +478,233 @@ We strive to respond to all support requests within 24–48 business hours. Resp
   }
 
   Widget _buildPrinterSection(BuildContext context) {
-    if (Platform.isWindows) return const SizedBox.shrink();
-
-    final printerService = context.watch<BluetoothPrinterService>();
-    final isConnected = printerService.isConnected;
-    final printerName = printerService.selectedDevice?.name ?? "No Printer Connected";
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader("Hardware & Printing", Icons.print_rounded, Colors.orange),
+        const Text("Hardware & Printing", style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        const SizedBox(height: 12),
+        _buildBluetoothPrinterCard(context),
         const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF141615),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: (isConnected ? Colors.green : Colors.red).withOpacity(0.1), shape: BoxShape.circle),
-                    child: Icon(isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled, color: isConnected ? Colors.green : Colors.red, size: 20),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(printerName.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                        Text(isConnected ? "Active & Ready" : "Disconnected", style: TextStyle(color: isConnected ? Colors.green : Colors.red, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BluetoothPrinterSettingsScreen())),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFFCDD22),
-                    side: const BorderSide(color: Color(0xFFFCDD22)),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text("CONFIGURE PRINTER", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-                ),
-              ),
-            ],
-          ),
-        ),
+        _buildUsbPrinterCard(context),
+        const SizedBox(height: 16),
+        _buildLanPrinterContent(context),
       ],
+    );
+  }
+
+  Widget _buildBluetoothPrinterCard(BuildContext context) {
+    final btService = context.watch<BluetoothPrinterService>();
+    final hasKOT = btService.kotAddress != null;
+    final hasBill = btService.billAddress != null;
+    final isConfigured = hasKOT && hasBill;
+
+    String statusTitle;
+    String statusSubtitle;
+    Color statusColor;
+    IconData statusIcon;
+
+    if (isConfigured) {
+      statusTitle = "BLUETOOTH READY";
+      statusSubtitle = "KOT: ${btService.kotName}\nBill: ${btService.billName}";
+      statusColor = Colors.blue;
+      statusIcon = Icons.bluetooth_audio;
+    } else if (hasKOT || hasBill) {
+      statusTitle = "PARTIAL BT CONFIG";
+      statusSubtitle = hasKOT 
+          ? "KOT: ${btService.kotName} (Bill Missing)" 
+          : "Bill: ${btService.billName} (KOT Missing)";
+      statusColor = Colors.orange;
+      statusIcon = Icons.bluetooth;
+    } else {
+      statusTitle = "NO BT PRINTER";
+      statusSubtitle = "Tap to configure dual Bluetooth printers";
+      statusColor = Colors.grey[600]!;
+      statusIcon = Icons.bluetooth_disabled;
+    }
+
+    return _buildPrinterBaseCard(
+      title: statusTitle,
+      subtitle: statusSubtitle,
+      color: statusColor,
+      icon: statusIcon,
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BluetoothPrinterSettingsScreen())),
+    );
+  }
+
+  Widget _buildUsbPrinterCard(BuildContext context) {
+    final usbService = context.watch<UsbPrinterService>();
+    final hasKOT = usbService.kotName != null;
+    final hasBill = usbService.billName != null;
+    final isConfigured = hasKOT && hasBill;
+
+    String statusTitle;
+    String statusSubtitle;
+    Color statusColor;
+    IconData statusIcon;
+
+    if (isConfigured) {
+      statusTitle = "USB PRINTERS READY";
+      statusSubtitle = "KOT: ${usbService.kotName}\nBill: ${usbService.billName}";
+      statusColor = const Color(0xFF3B9EFF);
+      statusIcon = Icons.usb;
+    } else if (hasKOT || hasBill) {
+      statusTitle = "PARTIAL USB CONFIG";
+      statusSubtitle = hasKOT 
+          ? "KOT: ${usbService.kotName} (Bill Missing)" 
+          : "Bill: ${usbService.billName} (KOT Missing)";
+      statusColor = Colors.orange;
+      statusIcon = Icons.usb;
+    } else {
+      statusTitle = "NO USB PRINTER";
+      statusSubtitle = "Tap to configure dual USB printers";
+      statusColor = Colors.grey[600]!;
+      statusIcon = Icons.usb_off;
+    }
+
+    return _buildPrinterBaseCard(
+      title: statusTitle,
+      subtitle: statusSubtitle,
+      color: statusColor,
+      icon: statusIcon,
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => UsbPrinterSettingsScreen())),
+    );
+  }
+
+  Widget _buildPrinterBaseCard({
+    required String title,
+    required String subtitle,
+    required Color color,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF141615),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text(subtitle, style: TextStyle(color: color.withOpacity(0.8), fontSize: 11, height: 1.4)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onTap,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: color,
+                  side: BorderSide(color: color.withOpacity(0.5)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text("CONFIGURE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLanPrinterContent(BuildContext context) {
+    final lanService = context.watch<LanPrinterService>();
+    final hasKOT = lanService.kotIp != null;
+    final hasBill = lanService.billIp != null;
+    final isConfigured = hasKOT && hasBill;
+
+    String statusTitle;
+    String statusSubtitle;
+    Color statusColor;
+    IconData statusIcon;
+
+    if (isConfigured) {
+      statusTitle = "LAN PRINTERS READY";
+      statusSubtitle = "KOT: ${lanService.kotIp}\nBill: ${lanService.billIp}";
+      statusColor = const Color(0xFFA78BFA); // Theme Purple
+      statusIcon = Icons.lan;
+    } else if (hasKOT || hasBill) {
+      statusTitle = "PARTIAL LAN CONFIG";
+      statusSubtitle = hasKOT 
+          ? "KOT: ${lanService.kotIp} (Bill Missing)" 
+          : "Bill: ${lanService.billIp} (KOT Missing)";
+      statusColor = Colors.orange;
+      statusIcon = Icons.lan_outlined;
+    } else {
+      statusTitle = "NO LAN PRINTER";
+      statusSubtitle = "Tap to configure network printers";
+      statusColor = Colors.grey[600]!;
+      statusIcon = Icons.lan_outlined;
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(statusIcon, color: statusColor, size: 20),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(statusTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text(statusSubtitle, style: TextStyle(color: statusColor.withOpacity(0.8), fontSize: 12, height: 1.4)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LanPrinterSettingsScreen())),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: statusColor,
+                  side: BorderSide(color: statusColor),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text("CONFIGURE LAN PRINTERS", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

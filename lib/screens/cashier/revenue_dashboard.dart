@@ -1,9 +1,15 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import '../../services/auth_service.dart';
+import '../../services/bluetooth_printer_service.dart';
+import '../../services/usb_printer_service.dart';
 import '../../services/report_service.dart';
 
 class RevenueDashboard extends StatefulWidget {
@@ -93,6 +99,11 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
             const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCDD22))))
           else
             IconButton(
+              icon: const Icon(Icons.print, color: Color(0xFFFCDD22)),
+              onPressed: () => _handleThermalPrint(auth.restaurantName ?? "YUG POS", restaurantId, docId),
+              tooltip: "Print Thermal Summary",
+            ),
+            IconButton(
               icon: const Icon(Icons.download_for_offline, color: Color(0xFFFCDD22)),
               onPressed: () => _handleExport(auth.restaurantName ?? "YUG POS", restaurantId, docId, startOfToday),
               tooltip: "Download PDF Report",
@@ -118,10 +129,10 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
 
                     if (colSnap.hasData && colSnap.data!.exists) {
                       final data = colSnap.data!.data() as Map<String, dynamic>;
-                      net = (data['netCollection'] ?? 0).toDouble();
-                      table = (data['tableCollection'] ?? 0).toDouble();
-                      takeaway = (data['takeawayCollection'] ?? 0).toDouble();
-                      delivery = (data['deliveryCollection'] ?? 0).toDouble();
+                      net = max(0.0, (data['netCollection'] ?? 0).toDouble());
+                      table = max(0.0, (data['tableCollection'] ?? 0).toDouble());
+                      takeaway = max(0.0, (data['takeawayCollection'] ?? 0).toDouble());
+                      delivery = max(0.0, (data['deliveryCollection'] ?? 0).toDouble());
                       billCount = (data['billCount'] ?? 0).toInt();
                     }
 
@@ -378,6 +389,36 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
     );
   }
 
+  Future<void> _handleThermalPrint(String hotelName, String? restaurantId, String docId) async {
+    if (restaurantId == null) return;
+    try {
+      final doc = await _firestore.collection('daily_collections').doc(docId).get();
+      if (!doc.exists) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No data found for this date."), backgroundColor: Colors.orange));
+        return;
+      }
+
+      final data = doc.data()!;
+      final usb = context.read<UsbPrinterService>();
+      final bt = context.read<BluetoothPrinterService>();
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final dynamic printerService = isAndroid ? bt : usb;
+
+      if (printerService.hasSavedPrinter || printerService.isConnected) {
+        final bytes = await ReportService.generateDailyCollectionBytes(
+          data: data,
+          hotelName: hotelName,
+          paperSize: PaperSize.mm80,
+        );
+        await ReportService.printBytesIsolated(printerService, bytes);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Printing Thermal Summary..."), backgroundColor: Colors.green));
+      } else {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No printer connected. Please check settings."), backgroundColor: Colors.red));
+      }
+    } catch (e) {
+    }
+  }
+
   Future<void> _handleExport(String hotelName, String? restaurantId, String docId, DateTime startOfToday) async {
     if (restaurantId == null) return;
     setState(() => _isExporting = true);
@@ -389,6 +430,7 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
 
       double net = 0, table = 0, takeaway = 0, delivery = 0;
       int billCount = 0;
+      Map<String, double> revenueByPayment = {};
       if (colDoc.exists) {
         final data = colDoc.data()!;
         net = (data['netCollection'] ?? 0).toDouble();
@@ -396,6 +438,13 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
         takeaway = (data['takeawayCollection'] ?? 0).toDouble();
         delivery = (data['deliveryCollection'] ?? 0).toDouble();
         billCount = (data['billCount'] ?? 0).toInt();
+        
+        // Payment breakdown
+        revenueByPayment = {
+          "Cash": (data['cashCollection'] ?? 0).toDouble(),
+          "UPI": (data['upiCollection'] ?? 0).toDouble(),
+          "Card": (data['cardCollection'] ?? 0).toDouble(),
+        };
       }
 
       int pending = 0, billed = 0, cancelled = 0;
@@ -432,9 +481,9 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
         revenueBySource: {"Dine-In": table, "Takeaway": takeaway, "Delivery": delivery},
         orderStatuses: {"Pending": pending, "Billed": billed, "Cancelled": cancelled},
         categories: categorySales,
+        revenueByPayment: revenueByPayment,
       );
     } catch (e) {
-      debugPrint("Export Error: $e");
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }

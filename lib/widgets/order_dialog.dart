@@ -13,6 +13,7 @@ import '../providers/cart_provider.dart';
 import '../services/report_service.dart';
 import '../services/usb_printer_service.dart';
 import '../services/bluetooth_printer_service.dart';
+import '../services/lan_printer_service.dart';
 import '../utils/debouncer.dart';
 import 'menu_item_card.dart';
 
@@ -557,14 +558,36 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
   }
 
   void _submitOrder() async {
+    final btService = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    
+    // Shared Precondition Check
+    if (isAndroid && !btService.arePrintersConfigured) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: const Color(0xFF141615),
+            title: const Text("Printers Not Configured", style: TextStyle(color: Colors.white)),
+            content: const Text(
+              "Please configure both KOT and Bill printers in Settings to continue balancing orders.",
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(onPressed: () => safePop(c), child: const Text("OK")),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
 
     try {
       final auth = context.read<AuthService>();
-      final waiterDisplayName = auth.role == UserRole.admin 
-          ? "Admin (${auth.currentUser?.email?.split('@')[0] ?? 'Admin'})" 
-          : "Cashier";
+      final waiterDisplayName = auth.userName ?? (auth.role == UserRole.admin ? "Admin" : "Waiter");
       final total = _selectedItems.fold<double>(0, (sum, i) => sum + (i.item.price * i.quantity));
       const customerName = "Walk-in";
 
@@ -643,15 +666,16 @@ class _CommonOrderDialogState extends State<CommonOrderDialog> {
       
       final usb = context.read<UsbPrinterService>();
       final bt = context.read<BluetoothPrinterService>();
+      final lan = context.read<LanPrinterService>();
       final isAndroid = !kIsWeb && Platform.isAndroid;
-      final dynamic printerService = isAndroid ? bt : usb;
 
-      if (printerService.hasSavedPrinter || printerService.isConnected) {
-        final bytes = await ReportService.generateKOTBytes(kotData, paperSize: isAndroid ? PaperSize.mm58 : PaperSize.mm80);
-        await ReportService.printBytesIsolated(printerService, bytes);
-      } else {
-        await ReportService.printKOTReceipt(kotData, orderRef.id);
-      }
+      await ReportService.printKOTReceipt(
+        kotData, 
+        orderRef.id,
+        bt: bt,
+        usb: usb,
+        lan: lan,
+      );
 
       if (mounted) {
         safePop(context);

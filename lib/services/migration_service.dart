@@ -16,8 +16,6 @@ class DataMigrationService {
       'daily_collections'
     ];
 
-    print('Starting migration for restaurant: $restaurantId');
-
     for (var colName in collections) {
       final snap = await firestore.collection(colName).get();
       final batch = firestore.batch();
@@ -33,12 +31,7 @@ class DataMigrationService {
 
       if (count > 0) {
         await batch.commit();
-        print('Migrated $count documents in $colName');
-      } else {
-        print('No documents to migrate in $colName');
       }
     }
-    
-    print('Migration complete!');
   }
 }

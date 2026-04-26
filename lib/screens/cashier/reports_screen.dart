@@ -75,7 +75,6 @@ class _CashierReportsScreenState extends State<CashierReportsScreen> {
         restaurantName: hotelName
       );
     } catch (e) {
-      debugPrint("Report Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -103,7 +102,6 @@ class _CashierReportsScreenState extends State<CashierReportsScreen> {
         endDate: _endDate,
       );
     } catch (e) {
-      debugPrint("Print Error: $e");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       if (mounted) setState(() => _isLoading = false);

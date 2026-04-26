@@ -7,6 +7,8 @@ import '../../services/auth_service.dart';
 import '../../widgets/takeaway_order_dialog.dart';
 import '../../services/report_service.dart';
 import '../../services/usb_printer_service.dart';
+import '../../services/bluetooth_printer_service.dart';
+import '../../services/lan_printer_service.dart';
 import '../../utils/navigator_utils.dart';
 
 class TakeawayListScreen extends StatefulWidget {
@@ -506,19 +508,17 @@ class _TakeawayListScreenState extends State<TakeawayListScreen> with SingleTick
             try {
               await ReportService.printBytesIsolated(printerService, billBytes);
             } catch (e) {
-              debugPrint('Print error: $e');
             }
           });
         } else {
           await ReportService.printFinalBill(
-            orderData: printData,
+            data: printData,
             orderId: orderId,
-            subtotal: finalTotal!,
-            cgst: 0.0,
-            sgst: 0.0,
             total: finalTotal!,
             paymentMode: paymentMode,
-            hotelName: hotelName,
+            bt: context.read<BluetoothPrinterService>(),
+            usb: printerService,
+            lan: context.read<LanPrinterService>(),
           );
         }
       }

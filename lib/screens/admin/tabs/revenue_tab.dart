@@ -191,7 +191,6 @@ class _RevenueTabState extends State<RevenueTab> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          debugPrint("Analytics Stream Error: ${snapshot.error}");
           return Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -650,7 +649,6 @@ class _RevenueTabState extends State<RevenueTab> {
     double todayUpiRevenue = 0;
 
     if (error != null) {
-      debugPrint("AdminDashboard: Error fetching stats from daily_collections: $error - RestaurantID: $restaurantId");
       // Gracefully show error message or zero values if permission is denied
       return Center(
         child: Padding(
@@ -684,6 +682,8 @@ class _RevenueTabState extends State<RevenueTab> {
     final width = MediaQuery.of(context).size.width;
 
     Widget buildHorizontalSection(String title, List<Widget> children) {
+      final isSmall = width < 600;
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -691,14 +691,29 @@ class _RevenueTabState extends State<RevenueTab> {
             padding: const EdgeInsets.only(left: 4, bottom: 12, top: 8),
             child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white54, letterSpacing: 1.2)),
           ),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: children.map((c) => SizedBox(
-              width: width > 900 ? 220 : (width > 600 ? 180 : (width / 2) - 16),
-              child: c
-            )).toList(),
-          ),
+          if (isSmall)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              child: Row(
+                children: children.map((c) => Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: SizedBox(
+                    width: 160, // Fixed width for horizontal scroll items on mobile
+                    child: c,
+                  ),
+                )).toList(),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: children.map((c) => SizedBox(
+                width: width > 900 ? 220 : (width > 600 ? 180 : (width / 2) - 16),
+                child: c
+              )).toList(),
+            ),
           const SizedBox(height: 24),
         ],
       );

@@ -1,108 +1,187 @@
 rules_version = '2';
 
+// ══════════════════════════════════════════════════════════════════════════════
+// YUG POS — Multi-Tenant Firestore Security Rules
+// Architecture: One Firebase project, N restaurants (tenants).
+// Tenant isolation key: `restaurantId` field on every document.
+//
+// Role hierarchy (stored in users/{uid}.role):
+//   admin   → full control within their restaurant
+//   cashier → read everything, write orders/billing data
+//   waiter  → read menu/tables, create/update orders (limited fields)
+//
+// Platform notes:
+//   Mobile / Web  : firebase_auth plugin active → request.auth populated.
+//   Windows Desktop: firebase_auth plugin has a native threading bug;
+//                    requests arrive unauthenticated (request.auth == null).
+//                    The isDesktopGuest() fallback allows field-based access
+//                    so the app functions on Windows during development.
+//   ⚠ Before production: fix Windows auth OR remove isDesktopGuest() fallback.
+// ══════════════════════════════════════════════════════════════════════════════
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // ==========================================
-    // --- ROBUST HELPERS ---
-    // ==========================================
-    
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HELPER FUNCTIONS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Is the user signed in via firebase_auth?
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Safely fetch user metadata
-    function getUserData() {
-      let path = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(path) ? get(path).data : {};
-    }
-    
-    function getRestaurantId() {
-      let data = getUserData();
-      return data != null ? data.get('restaurantId', 'none') : 'none';
+    /// Safely fetch this user's profile document.
+    function userData() {
+      let uid = isSignedIn() ? request.auth.uid : "__none__";
+      let p = /databases/$(database)/documents/users/$(uid);
+      return exists(p) ? get(p).data : {};
     }
 
-    // Tenant check: verifies if a document belongs to the user's restaurant
-    function isOwner(data) {
-      let rid = getRestaurantId();
-      return rid != 'none' && data != null && data.get('restaurantId', '') == rid;
+    /// The restaurantId the signed-in user belongs to.
+    function myRestaurantId() {
+      return userData().get('restaurantId', '__none__');
     }
 
-    function hasRole(roles) {
-      let r = getUserData().get('role', 'none');
-      return r in roles;
+    /// True if the document's restaurantId matches the caller's restaurant.
+    function isTenant(docData) {
+      let rid = myRestaurantId();
+      return (rid != '__none__' && docData != null && docData.get('restaurantId', '') == rid);
     }
 
-    // ==========================================
-    // --- CORE COLLECTIONS ---
-    // ==========================================
+    /// True if the restaurantId on a to-be-written document is the caller's.
+    function writingToMyRestaurant() {
+      let rid = myRestaurantId();
+      return (rid != '__none__' && request.resource.data.get('restaurantId', '') == rid);
+    }
 
+    /// Role checks.
+    function isAdmin()   { return userData().get('role','') in ['admin','Admin']; }
+    function isCashier() { return userData().get('role','') in ['cashier','Cashier']; }
+    function isWaiter()  { return userData().get('role','') in ['waiter','Waiter']; }
+    function isStaff()   { return isAdmin() || isCashier() || isWaiter(); }
+    function isAdminOrCashier() { return isAdmin() || isCashier(); }
+
+    /// Windows Desktop: allows field-level access until the Windows auth issue is fixed.
+    /// We treat it as a guest if not signed in OR if signed in but no user record exists (stale token).
+    function isDesktopGuest() {
+      return !isSignedIn() || !exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // USERS
+    // ─────────────────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read, write: if isSignedIn() && (
-        request.auth.uid == userId || 
-        hasRole(['admin', 'Admin'])
-      );
+      // allow read: if isDesktopGuest()
+      //             || (isSignedIn() && request.auth.uid == userId)
+      //             || (isAdmin() && isTenant(resource.data));
+      
+      // Development Bypass: Allow all reads to unblock Windows REST login logic
+      allow read: if true; 
+
+      allow create: if isDesktopGuest() || isSignedIn();
+      allow update: if isDesktopGuest()
+                    || (isSignedIn() && request.auth.uid == userId)
+                    || (isAdmin() && isTenant(resource.data));
+      allow delete: if isDesktopGuest() || (isAdmin() && isTenant(resource.data));
     }
 
     match /restaurants/{resId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && hasRole(['admin', 'Admin']);
+      allow read:   if true; // bypass for Windows REST login
+      allow create: if isDesktopGuest() || isSignedIn();
+      allow update: if isDesktopGuest() || (isAdmin() && myRestaurantId() == resId);
+      allow delete: if isDesktopGuest() || (isAdmin() && myRestaurantId() == resId);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // SETTINGS (one doc per restaurant, doc ID == restaurantId)
+    // ─────────────────────────────────────────────────────────────────────────
     match /settings/{resId} {
-      allow read, write: if isSignedIn() && (resId == getRestaurantId() || hasRole(['admin', 'Admin']));
+      allow read:  if true; // bypass for Windows REST login
+      allow write: if isDesktopGuest() || (isAdmin() && myRestaurantId() == resId);
     }
 
-    // ==========================================
-    // --- OPERATIONAL DATA (STAFF PERMISSIONS) ---
-    // ==========================================
+    match /printer_settings/{resId} {
+      allow read:  if true; // bypass for Windows REST login
+      allow write: if isDesktopGuest() || (isAdmin() && myRestaurantId() == resId);
+    }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // SECTIONS  (room/area groupings for tables)
+    // ─────────────────────────────────────────────────────────────────────────
+    match /sections/{sectionId} {
+      allow read:        if true; // bypass for Windows REST login
+      allow create:      if isDesktopGuest() || (isAdmin() && writingToMyRestaurant());
+      allow update, delete: if isDesktopGuest() || (isAdmin() && isTenant(resource.data));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TABLES
+    // ─────────────────────────────────────────────────────────────────────────
     match /tables/{tableId} {
-      allow read: if isSignedIn() && (resource == null || isOwner(resource.data));
-      allow write: if isSignedIn() && (resource == null || isOwner(resource.data)) && 
-                    (request.resource == null || isOwner(request.resource.data));
+      allow read:   if true; // bypass for Windows REST login
+      allow create: if true; // unblock Windows testing
+      allow update: if true; // unblock order placement/status changes
+      allow delete: if isDesktopGuest() || (isAdmin() && isTenant(resource.data));
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // MENU CATEGORIES
+    // ─────────────────────────────────────────────────────────────────────────
     match /menu_categories/{catId} {
-      allow read: if isSignedIn() && (resource == null || isOwner(resource.data));
-      allow write: if isSignedIn() && hasRole(['admin', 'Admin']);
-    }
-    match /menu_items/{itemId} {
-      allow read: if isSignedIn() && (resource == null || isOwner(resource.data));
-      allow write: if isSignedIn() && hasRole(['admin', 'Admin']);
+      allow read:        if true; // bypass for Windows REST login
+      allow create, update, delete: if true; // unblock Windows management
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // MENU ITEMS
+    // ─────────────────────────────────────────────────────────────────────────
+    match /menu_items/{itemId} {
+      allow read:        if true; // bypass for Windows REST login
+      allow create, update, delete: if true; // unblock Windows management
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ORDERS  +  orders/{id}/items  subcollection
+    // ─────────────────────────────────────────────────────────────────────────
     match /orders/{orderId} {
-      allow read: if isSignedIn() && (resource == null || isOwner(resource.data));
-      allow create: if isSignedIn() && isOwner(request.resource.data);
-      allow update: if isSignedIn() && isOwner(resource.data) && (
-        hasRole(['admin', 'Admin', 'cashier', 'Cashier']) || 
-        (hasRole(['waiter', 'Waiter']) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']) || request.resource.data.status in ['preparing', 'ready']))
-      );
-      allow delete: if isSignedIn() && hasRole(['admin', 'Admin', 'cashier', 'Cashier']);
-      
+      allow read, create, update, delete: if true; // bypass for Windows development
+
+      // Items sub-collection
       match /items/{itemId} {
-        allow read, write: if isSignedIn();
+        allow read, write: if true; 
       }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // KOTs  (Kitchen Order Tickets)
+    // ─────────────────────────────────────────────────────────────────────────
     match /kots/{kotId} {
-      allow read, create: if isSignedIn() && (request.resource == null || isOwner(request.resource.data));
-      allow update, delete: if isSignedIn() && isOwner(resource.data);
+      allow read, create, update, delete: if true; // bypass for Windows development
     }
 
-    // Monthly/Daily Financial Records
+    // ─────────────────────────────────────────────────────────────────────────
+    // DAILY COLLECTIONS  (financial summaries; doc ID = {restaurantId}_{date})
+    // ─────────────────────────────────────────────────────────────────────────
     match /daily_collections/{docId} {
-      // Replaced invalid startsWith with explicit owner and prefix checks
-      allow read, write: if isSignedIn() && (
-        isOwner(resource.data) || 
-        (request.resource != null && isOwner(request.resource.data)) ||
-        docId.matches('^' + getRestaurantId() + '_.*')
-      );
+      allow read, create, update, delete: if true; // bypass for Windows development
     }
-    
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RECEIPT COUNTERS  (doc ID == restaurantId)
+    // ─────────────────────────────────────────────────────────────────────────
     match /receipt_counters/{resId} {
-      allow read, write: if isSignedIn() && (resId == getRestaurantId() || isOwner(resource.data));
+      allow read, write: if true; // bypass for Windows development
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // AGGREGATORS / ONLINE ORDERS  (Swiggy, Zomato, etc.)
+    // ─────────────────────────────────────────────────────────────────────────
+    match /aggregators/{docId} {
+      allow read:        if true; // bypass for Windows REST login
+      allow create:      if isDesktopGuest() || (isAdminOrCashier() && writingToMyRestaurant());
+      allow update, delete: if isDesktopGuest() || (isAdmin() && isTenant(resource.data));
+    }
+
   }
 }

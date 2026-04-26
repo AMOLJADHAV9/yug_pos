@@ -77,7 +77,6 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
         _isMenuLoading = false;
       });
     } catch (e) {
-      debugPrint("Error fetching menu data: $e");
       if (mounted) {
         setState(() => _isMenuLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -271,7 +270,7 @@ class _TablesScreenState extends State<TablesScreen> with SingleTickerProviderSt
                       width: 140,
                       height: 52,
                       child: Image.asset(
-                        'assets/images/yug-poslogo.png',
+                        'assets/images/yugposlogo.png',
                         fit: BoxFit.cover,
                       ),
                     ),

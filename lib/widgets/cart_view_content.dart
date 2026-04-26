@@ -9,6 +9,7 @@ import '../../services/auth_service.dart';
 import '../../services/report_service.dart';
 import '../../services/usb_printer_service.dart';
 import '../../services/bluetooth_printer_service.dart';
+import '../../services/lan_printer_service.dart';
 import '../providers/cart_provider.dart';
 import '../utils/navigator_utils.dart';
 
@@ -202,6 +203,30 @@ class _CartViewContentState extends State<CartViewContent> {
                 ),
               ),
 
+              // --- KOT & BILL BUTTON (ADMIN/CASHIER ONLY) ---
+              if (auth.role == UserRole.admin || auth.role == UserRole.cashier)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isSubmitting ? null : () => _handleKOTAndBill(cart, auth),
+                          icon: const Icon(Icons.print_outlined, size: 20),
+                          label: const Text('KOT & BILL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               // --- ADMIN ACTIONS (SETTLE & CLEAR) ---
               if (auth.role == UserRole.admin || auth.role == UserRole.cashier)
                 Padding(
@@ -241,9 +266,31 @@ class _CartViewContentState extends State<CartViewContent> {
     return content;
   }
 
-  Future<void> _placeOrder(CartProvider cart, BuildContext context, {bool printBill = false, String paymentMode = "Cash", bool skipGuard = false}) async {
-    if (!skipGuard && _isSubmitting) return;
+  Future<void> _placeOrder(CartProvider cart, BuildContext context, {bool printBill = false, bool printKOT = false, String paymentMode = "Cash", bool skipGuard = false}) async {
+    final btService = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
     
+    // Shared Precondition Check
+    if (isAndroid && !btService.arePrintersConfigured) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: const Color(0xFF141615),
+            title: const Text("Printers Not Configured", style: TextStyle(color: Colors.white)),
+            content: const Text(
+              "Please configure both KOT and Bill printers in Settings to continue balancing orders.",
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(onPressed: () => safePop(c), child: const Text("OK")),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     final isDineIn = cart.orderType == OrderType.dineIn;
     if (isDineIn && cart.tableId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a table for Dine-In orders")));
@@ -366,7 +413,7 @@ class _CartViewContentState extends State<CartViewContent> {
         'tableName': tableName ?? 'Unknown',
         'orderType': cart.orderType.name,
         'customerName': cart.customerName ?? 'Walk-in',
-        'waiterName': cart.waiterName ?? (auth.role == UserRole.waiter ? auth.userName : 'Waiter') ?? 'Waiter',
+        'waiterName': auth.userName ?? 'Waiter',
         'status': 'Pending',
         'restaurantId': restaurantId,
         'kotNo': kotNo,
@@ -400,14 +447,22 @@ class _CartViewContentState extends State<CartViewContent> {
 
       final usb = context.read<UsbPrinterService>();
       final bt = context.read<BluetoothPrinterService>();
+      final lan = context.read<LanPrinterService>();
       final isAndroid = !kIsWeb && Platform.isAndroid;
 
-      if (!printBill) {
+      // Determine if KOT should be printed
+      bool shouldPrintKOT = printKOT || !printBill;
+
+      if (shouldPrintKOT) {
         await ReportService.printKOTReceipt(
           kotData, 
           orderId, 
-          printerService: isAndroid ? bt : usb,
+          bt: bt,
+          usb: usb,
+          lan: lan,
         );
+        // Add a slight delay to allow first printer connection to clear
+        await Future.delayed(const Duration(seconds: 1));
       }
       
       if (printBill) {
@@ -433,20 +488,20 @@ class _CartViewContentState extends State<CartViewContent> {
         printData['paymentMode'] = paymentMode;
 
         await ReportService.printFinalBill(
-          orderData: printData,
+          data: printData,
           orderId: orderId,
-          subtotal: (orderDoc.data()?['subtotal'] as num?)?.toDouble() ?? finalTotal,
           total: finalTotal,
           paymentMode: paymentMode,
-          hotelName: auth.restaurantName ?? "YUG POS",
           receiptNum: newReceiptNumber.toString(),
-          printerService: isAndroid ? bt : usb,
+          bt: bt,
+          usb: usb,
+          lan: lan,
         );
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Order Placed! $kNoStr'),
+          content: Text(printBill ? 'Order Billed! $kNoStr' : 'Order Placed! $kNoStr'),
           backgroundColor: Colors.green,
         ));
         cart.clearCart();
@@ -468,7 +523,90 @@ class _CartViewContentState extends State<CartViewContent> {
     }
   }
 
+  Future<void> _handleKOTAndBill(CartProvider cart, AuthService auth) async {
+    if (_isSubmitting) return;
+
+    if (cart.items.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cart is empty.")));
+      return;
+    }
+
+    // Prompt for payment method
+    String selectedPaymentMode = 'cash';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF141615),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Finalize order with KOT & Bill?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("This will print both receipts and record revenue.", style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  _buildPaymentOption(
+                    title: "CASH", 
+                    icon: Icons.money, 
+                    isSelected: selectedPaymentMode == 'cash', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'cash')
+                  ),
+                  const SizedBox(width: 8),
+                  _buildPaymentOption(
+                    title: "UPI", 
+                    icon: Icons.qr_code, 
+                    isSelected: selectedPaymentMode == 'upi', 
+                    onTap: () => setDialogState(() => selectedPaymentMode = 'upi')
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => safePop(context), child: const Text("Cancel")),
+            ElevatedButton(
+              onPressed: () => safePop(c, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+              child: const Text("PRINT BOTH & BILL"),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await _placeOrder(cart, context, printBill: true, printKOT: true, paymentMode: selectedPaymentMode);
+  }
+
   Future<void> _handleAdminSettle(CartProvider cart, AuthService auth) async {
+    final btService = context.read<BluetoothPrinterService>();
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    
+    // Shared Precondition Check
+    if (isAndroid && !btService.arePrintersConfigured) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: const Color(0xFF141615),
+            title: const Text("Printers Not Configured", style: TextStyle(color: Colors.white)),
+            content: const Text(
+              "Please configure both KOT and Bill printers in Settings to continue balancing orders.",
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(onPressed: () => safePop(c), child: const Text("OK")),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     if (_isSubmitting) return;
 
     // Determine if there is something to settle
@@ -573,19 +711,19 @@ class _CartViewContentState extends State<CartViewContent> {
 
         final usb = context.read<UsbPrinterService>();
         final bt = context.read<BluetoothPrinterService>();
+        final lan = context.read<LanPrinterService>();
         final isAndroid = !kIsWeb && Platform.isAndroid;
-        final dynamic printerService = isAndroid ? bt : usb;
 
         // Smart Print (Thermal if configured, else PDF fallback)
         await ReportService.printFinalBill(
-          orderData: printData,
+          data: printData,
           orderId: currentOrderId,
-          subtotal: (tableOrderData['totalAmount'] as num).toDouble(),
           total: (tableOrderData['totalAmount'] as num).toDouble(),
           paymentMode: selectedPaymentMode,
-          hotelName: auth.restaurantName ?? "YUG POS",
           receiptNum: newReceiptNumber.toString(),
-          printerService: isAndroid ? bt : usb,
+          bt: bt,
+          usb: usb,
+          lan: lan,
         );
 
         // Clear table

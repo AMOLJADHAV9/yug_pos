@@ -22,7 +22,7 @@ void safePop<T>([BuildContext? context, T? result]) {
     if (state != null && state.mounted && state.canPop()) {
       state.pop(result);
     }
-  } catch (e) {
-    debugPrint("SafePop Handled Error: $e");
+  } catch (_) {
+    // Silent fail to prevent crash during rapid navigation
   }
 }

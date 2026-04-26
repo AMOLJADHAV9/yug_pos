@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -17,6 +18,7 @@ import 'screens/cashier/cashier_dashboard_v2.dart';
 import 'screens/auth/unauthorized_screen.dart';
 import 'services/usb_printer_service.dart';
 import 'services/bluetooth_printer_service.dart';
+import 'services/lan_printer_service.dart';
 import 'services/wifi_service.dart';
 import 'utils/navigator_utils.dart';
 
@@ -35,31 +37,46 @@ class GlobalHttpOverrides extends HttpOverrides {
 }
 
 void main() async {
+  PlatformDispatcher.instance.onError = (error, stack) {
+    return true; 
+  };
+  
   HttpOverrides.global = GlobalHttpOverrides();
   WidgetsFlutterBinding.ensureInitialized();
   
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint("Firebase init error: $e");
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // On Windows, FirebaseAuth.instance triggers a native token-refresh on a 
+  // background C++ thread, which crashes Flutter's platform channel.
+  // We skip the plugin entirely on Windows and use REST API for auth instead.
+  FirebaseAuth? firebaseAuth;
+  if (!kIsWeb && Platform.isWindows) {
+    firebaseAuth = null;
+  } else {
+    firebaseAuth = FirebaseAuth.instance;
   }
-  
-  runApp(const WaiterPosApp());
+
+  final firestore = FirebaseFirestore.instance;
+
+  runApp(WaiterPosApp(auth: firebaseAuth, firestore: firestore));
 }
 
 class WaiterPosApp extends StatelessWidget {
-  const WaiterPosApp({super.key});
+  final FirebaseAuth? auth;
+  final FirebaseFirestore firestore;
+  const WaiterPosApp({super.key, required this.auth, required this.firestore});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => AuthService(auth: auth, firestore: firestore)),
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => UsbPrinterService()),
         ChangeNotifierProvider(create: (_) => BluetoothPrinterService()),
+        ChangeNotifierProvider(create: (_) => LanPrinterService()),
         ChangeNotifierProvider(create: (_) => WifiService()),
       ],
       child: MaterialApp(
@@ -121,7 +138,7 @@ class AuthWrapper extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Image.asset(
-                    'lib/assets/img/Yug pos logo1_page-0001.jpg',
+                    'assets/images/yugposlogo.png',
                     width: 250,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) => 

@@ -77,14 +77,11 @@ class UrbanPiperService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-         debugPrint("UrbanPiper Sync Successful: ${response.body}");
          return true;
       } else {
-         debugPrint("UrbanPiper Sync Failed: ${response.statusCode} - ${response.body}");
          return false;
       }
     } catch (e) {
-      debugPrint("UrbanPiper Sync Error: $e");
       return false;
     }
   }
@@ -92,6 +89,5 @@ class UrbanPiperService {
   /// Formats a single item for real-time stock update.
   Future<void> updateStock(String itemId, bool isAvailable, String apiKey, String username) async {
     // In a real implementation, this would call UrbanPiper's stock update API
-    debugPrint("Syncing stock for $itemId: $isAvailable");
   }
 }

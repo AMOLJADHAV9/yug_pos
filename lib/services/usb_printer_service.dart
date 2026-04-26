@@ -1,21 +1,46 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import '../models/printer_role.dart';
 
 class UsbPrinterService extends ChangeNotifier {
   final PrinterManager _printerManager = PrinterManager.instance;
   List<PrinterDevice> _devices = [];
   List<PrinterDevice> get devices => _devices;
 
-  PrinterDevice? _selectedDevice;
-  PrinterDevice? get selectedDevice => _selectedDevice;
+  // Active role-based devices
+  PrinterDevice? _kotDevice;
+  PrinterDevice? _billDevice;
+  PrinterDevice? get kotDevice => _kotDevice;
+  PrinterDevice? get billDevice => _billDevice;
 
-  String? _savedName;
-  String? _savedAddress;
-  String? _savedVendorId;
-  String? _savedProductId;
+  // KOT Config
+  String? _kotName;
+  String? _kotVendorId;
+  String? _kotProductId;
+  String? _kotAddress;
+
+  // Bill Config
+  String? _billName;
+  String? _billVendorId;
+  String? _billProductId;
+  String? _billAddress;
+
+  PrinterConnectionType _kotConnectionType = PrinterConnectionType.bluetooth;
+  PrinterConnectionType _billConnectionType = PrinterConnectionType.bluetooth;
+
+  PrinterConnectionType get kotConnectionType => _kotConnectionType;
+  PrinterConnectionType get billConnectionType => _billConnectionType;
+
+  // Getters for configuration
+  String? get kotName => _kotName;
+  String? get kotAddress => _kotAddress;
+  String? get billName => _billName;
+  String? get billAddress => _billAddress;
 
   bool _isScanning = false;
   bool get isScanning => _isScanning;
@@ -23,15 +48,22 @@ class UsbPrinterService extends ChangeNotifier {
   bool _isConnected = false;
   bool get isConnected => _isConnected;
   
-  bool get hasSavedPrinter => _savedName != null || _savedVendorId != null;
+  PrinterRole? _lastConnectedRole;
+
+  bool get arePrintersConfigured => _kotName != null && _billName != null;
+  bool isRoleConfigured(PrinterRole role) => role == PrinterRole.kot ? _kotName != null : _billName != null;
+  
+  // Compatibility with existing order/dashboard guards
+  bool get hasSavedPrinter => _kotName != null || _billName != null;
 
   StreamSubscription? _scanSubscription;
   Timer? _heartbeatTimer;
 
   UsbPrinterService() {
-    _init();
-    // Periodic heartbeat to keep device list fresh
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) => scan(silent: true));
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isWindows || Platform.isLinux)) {
+      _init();
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) => scan(silent: true));
+    }
   }
 
   @override
@@ -43,16 +75,29 @@ class UsbPrinterService extends ChangeNotifier {
 
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
-    _savedAddress = prefs.getString('usb_printer_address');
-    _savedName = prefs.getString('usb_printer_name');
-    _savedVendorId = prefs.getString('usb_printer_vendor_id');
-    _savedProductId = prefs.getString('usb_printer_product_id');
     
-    // Ensure we start disconnected in state
-    _isConnected = false;
+    // Load KOT
+    _kotName = prefs.getString('usb_kot_name');
+    _kotAddress = prefs.getString('usb_kot_address');
+    _kotVendorId = prefs.getString('usb_kot_vendor_id');
+    _kotProductId = prefs.getString('usb_kot_product_id');
 
-    if (_savedAddress != null && _savedName != null) {
-      debugPrint("Restored printer setting: $_savedName at $_savedAddress");
+    // Load Bill
+    _billName = prefs.getString('usb_bill_name');
+    _billAddress = prefs.getString('usb_bill_address');
+    _billVendorId = prefs.getString('usb_bill_vendor_id');
+    _billProductId = prefs.getString('usb_bill_product_id');
+    
+    // Load connection types
+    final kotTypeStr = prefs.getString('kot_connection_type') ?? 'bluetooth';
+    final billTypeStr = prefs.getString('bill_connection_type') ?? 'bluetooth';
+    _kotConnectionType = PrinterConnectionType.values.firstWhere((e) => e.toString().split('.').last == kotTypeStr, orElse: () => PrinterConnectionType.bluetooth);
+    _billConnectionType = PrinterConnectionType.values.firstWhere((e) => e.toString().split('.').last == billTypeStr, orElse: () => PrinterConnectionType.bluetooth);
+    
+    _isConnected = false;
+    _lastConnectedRole = null;
+
+    if (_kotName != null || _billName != null) {
       scan(silent: true); 
     }
   }
@@ -75,14 +120,8 @@ class UsbPrinterService extends ChangeNotifier {
         _devices[index] = event;
       }
       
-      // Auto-reconnect if we found our saved device and nothing is selected
-      if (_selectedDevice == null && (_savedName != null || _savedVendorId != null)) {
-        if (event.name == _savedName || event.address == _savedAddress || 
-            (event.vendorId == _savedVendorId && event.productId == _savedProductId)) {
-           debugPrint("Automatically re-discovered printer: ${event.name}");
-           await selectDevice(event);
-        }
-      }
+      // Auto-reconnect/Resolve objects
+      _resolveDevicesFromConfig(event);
       
       notifyListeners();
     });
@@ -94,29 +133,64 @@ class UsbPrinterService extends ChangeNotifier {
     }
   }
 
+  void _resolveDevicesFromConfig(PrinterDevice event) {
+    // Resolve KOT
+    if (_kotDevice == null && _kotName != null) {
+      if (event.name == _kotName || event.address == _kotAddress || 
+          (event.vendorId == _kotVendorId && event.productId == _kotProductId)) {
+           _kotDevice = event;
+      }
+    }
+    // Resolve Bill
+    if (_billDevice == null && _billName != null) {
+      if (event.name == _billName || event.address == _billAddress || 
+          (event.vendorId == _billVendorId && event.productId == _billProductId)) {
+           _billDevice = event;
+      }
+    }
+  }
+
   void stopScan() {
     _isScanning = false;
     _scanSubscription?.cancel();
     notifyListeners();
   }
 
-  Future<void> selectDevice(PrinterDevice device) async {
-    _selectedDevice = device;
-    _savedAddress = device.address;
-    _savedName = device.name;
-    
+  Future<void> saveRolePrinter(PrinterDevice device, PrinterRole role) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('usb_printer_address', device.address ?? '');
-    await prefs.setString('usb_printer_name', device.name ?? '');
-    await prefs.setString('usb_printer_vendor_id', device.vendorId ?? '');
-    await prefs.setString('usb_printer_product_id', device.productId ?? '');
+    final prefix = role == PrinterRole.kot ? 'usb_kot' : 'usb_bill';
+
+    await prefs.setString('${prefix}_name', device.name ?? '');
+    await prefs.setString('${prefix}_address', device.address ?? '');
+    await prefs.setString('${prefix}_vendor_id', device.vendorId ?? '');
+    await prefs.setString('${prefix}_product_id', device.productId ?? '');
+
+    if (role == PrinterRole.kot) {
+      _kotName = device.name;
+      _kotAddress = device.address;
+      _kotVendorId = device.vendorId;
+      _kotProductId = device.productId;
+      _kotDevice = device;
+    } else {
+      _billName = device.name;
+      _billAddress = device.address;
+      _billVendorId = device.vendorId;
+      _billProductId = device.productId;
+      _billDevice = device;
+    }
     
-    _savedAddress = device.address;
-    _savedName = device.name;
-    _savedVendorId = device.vendorId;
-    _savedProductId = device.productId;
+    // Set this service as the handler for this role
+    await prefs.setString(role == PrinterRole.kot ? 'kot_connection_type' : 'bill_connection_type', 'usb');
+    if (role == PrinterRole.kot) _kotConnectionType = PrinterConnectionType.usb;
+    else _billConnectionType = PrinterConnectionType.usb;
+
+    // Test connection
+    await _connectToDevice(device, role);
     
-    // Explicitly connect when selected
+    notifyListeners();
+  }
+
+  Future<bool> _connectToDevice(PrinterDevice device, PrinterRole role) async {
     try {
       final connected = await _printerManager.connect(
           type: PrinterType.usb, 
@@ -127,85 +201,81 @@ class UsbPrinterService extends ChangeNotifier {
           )
       );
       _isConnected = connected;
-      debugPrint("Connection attempt to ${device.name}: $_isConnected");
+      if (connected) _lastConnectedRole = role;
+      return connected;
     } catch (e) {
       _isConnected = false;
-      debugPrint("Initial connection error: $e");
+      return false;
     }
-    
-    notifyListeners();
   }
 
-  /// Disconnect current printer
   Future<void> disconnect() async {
-    if (_selectedDevice != null) {
-      try {
-        await _printerManager.disconnect(type: PrinterType.usb);
-        _selectedDevice = null;
-        _isConnected = false;
-        notifyListeners();
-      } catch (e) {
-        debugPrint("Disconnect error: $e");
-      }
+    try {
+      await _printerManager.disconnect(type: PrinterType.usb);
+      _isConnected = false;
+      _lastConnectedRole = null;
+      notifyListeners();
+    } catch (e) {
     }
   }
 
-  Future<bool> printRawBytes(List<int> bytes, {bool isRetry = false}) async {
-    // 1. Discovery recovery
-    if (_selectedDevice == null && (_savedName != null || _savedVendorId != null)) {
-      debugPrint("No active printer object. Re-scanning...");
+  Future<bool> testPrintRole(PrinterRole role) async {
+    final device = role == PrinterRole.kot ? _kotDevice : _billDevice;
+    if (device == null) return false;
+
+    // Direct test print bytes
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    List<int> bytes = [];
+    bytes += generator.text("YUG POS", styles: PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
+    bytes += generator.text("${role.toString().split('.').last.toUpperCase()} TEST PRINT", styles: PosStyles(align: PosAlign.center));
+    bytes += generator.feed(2);
+    bytes += generator.cut();
+
+    return await printRawBytes(bytes, role: role);
+  }
+
+  Future<bool> printRawBytes(List<int> bytes, {PrinterRole role = PrinterRole.bill, bool isRetry = false}) async {
+    // 1. Resolve targeting
+    PrinterDevice? targetDevice = role == PrinterRole.kot ? _kotDevice : _billDevice;
+    final savedName = role == PrinterRole.kot ? _kotName : _billName;
+    final savedVID = role == PrinterRole.kot ? _kotVendorId : _billVendorId;
+    final savedPID = role == PrinterRole.kot ? _kotProductId : _billProductId;
+
+    // 2. Discovery recovery if device object is lost
+    if (targetDevice == null && (savedName != null || savedVID != null)) {
       scan(silent: true);
-      await Future.delayed(const Duration(seconds: 2));
-      
-      for (final p in _devices) {
-        if (p.name == _savedName || p.address == _savedAddress || 
-            (p.vendorId == _savedVendorId && p.productId == _savedProductId)) {
-          _selectedDevice = p;
-          break;
-        }
-      }
+      await Future.delayed(const Duration(seconds: 1));
+      targetDevice = role == PrinterRole.kot ? _kotDevice : _billDevice;
     }
 
-    final device = _selectedDevice;
-    if (device == null) {
-      debugPrint("Print failed: Printer not found.");
+    if (targetDevice == null) {
       return false;
     }
 
     try {
-      // 2. Aggressive Connection
-      if (!_isConnected) {
-        debugPrint("Printer offline. Attempting reconnection to ${device.name}...");
-        _isConnected = await _printerManager.connect(
-            type: PrinterType.usb, 
-            model: UsbPrinterInput(
-                name: device.name, 
-                productId: device.productId, 
-                vendorId: device.vendorId
-            )
-        );
-        await Future.delayed(const Duration(milliseconds: 500));
+      // 3. Connection Management (Switch if needed)
+      if (!_isConnected || _lastConnectedRole != role) {
+        _isConnected = await _connectToDevice(targetDevice, role);
+        await Future.delayed(const Duration(milliseconds: 300));
       }
       
-      // 3. Print attempt
+      // 4. Print attempt
       if (_isConnected) {
         await _printerManager.send(type: PrinterType.usb, bytes: bytes);
-        debugPrint("SUCCESS: Print data sent.");
         return true;
       }
       return false;
     } catch (e) {
       _isConnected = false;
-      debugPrint("Printing error (isRetry: $isRetry): $e");
+      _lastConnectedRole = null;
+      // debugPrint("USB Printing error (Role: $role, Retry: $isRetry): $e");
       
-      // 4. One-time retry on failure
       if (!isRetry) {
-        debugPrint("Attempting one-time reconnect and retry...");
-        await _printerManager.disconnect(type: PrinterType.usb);
-        await Future.delayed(const Duration(seconds: 1));
-        return await printRawBytes(bytes, isRetry: true);
+        await disconnect();
+        await Future.delayed(const Duration(milliseconds: 500));
+        return await printRawBytes(bytes, role: role, isRetry: true);
       }
-      
       return false;
     }
   }

@@ -6,6 +6,9 @@ import './v2_styles.dart';
 import '../../widgets/connectivity_indicators.dart';
 import './reports_screen.dart';
 import '../../utils/navigator_utils.dart';
+import '../admin/bluetooth_printer_settings_screen.dart';
+import '../admin/usb_printer_settings_screen.dart';
+import '../admin/lan_printer_settings_screen.dart';
 
 class CashierDashboardV2 extends StatefulWidget {
   const CashierDashboardV2({super.key});
@@ -62,7 +65,7 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
                     width: 132,
                     height: 46,
                     child: Image.asset(
-                      'assets/images/yug-poslogo.png',
+                      'assets/images/yugposlogo.png',
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -70,7 +73,7 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
                 const SizedBox(height: 8),
                 Text(auth.restaurantName ?? "YUG POS", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 Text(
-                  auth.currentUser?.email ?? "",
+                  auth.currentEmail ?? "",
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: V2Colors.muted, fontSize: 11),
@@ -82,17 +85,25 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               children: [
-                _buildDrawerItem(Icons.dashboard_outlined, "Dashboard", true, () => Scaffold.of(context).closeDrawer()),
+                _buildDrawerItem(Icons.dashboard_outlined, "Dashboard", true, () => Navigator.pop(context)),
                 _buildDrawerItem(Icons.assessment_outlined, "Reports & History", false, () {
-                  Scaffold.of(context).closeDrawer();
+                  Navigator.pop(context);
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const CashierReportsScreen()));
+                }),
+                _buildDrawerItem(Icons.print, "Printer Configuration", false, () {
+                  Navigator.pop(context);
+                  _showPrinterSelectionDialog();
                 }),
                 _buildDrawerItem(Icons.settings_outlined, "Settings", false, () {}),
                 _buildDrawerItem(Icons.help_outline, "Support", false, () {}),
                 const SizedBox(height: 16),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: ConnectivityIndicators(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: InkWell(
+                    onTap: () => _showPrinterSelectionDialog(),
+                    borderRadius: BorderRadius.circular(8),
+                    child: const ConnectivityIndicators(),
+                  ),
                 ),
               ],
             ),
@@ -134,9 +145,119 @@ class _CashierDashboardV2State extends State<CashierDashboardV2> {
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: Text("v2.1.0-STABLE", style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 9)),
+            child: Text("v01.0-STABLE", style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 9)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPrinterSelectionDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141615),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "PRINTER CONFIGURATION",
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildPrinterTypeOption(
+              icon: Icons.bluetooth,
+              title: "Bluetooth Printers",
+              subtitle: "Standard thermal printers via BT",
+              color: Colors.blue,
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const BluetoothPrinterSettingsScreen()));
+              },
+            ),
+            _buildPrinterTypeOption(
+              icon: Icons.usb,
+              title: "USB Printers",
+              subtitle: "Desktop or USB-OTG connection",
+              color: const Color(0xFF3B9EFF),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const UsbPrinterSettingsScreen()));
+              },
+            ),
+            _buildPrinterTypeOption(
+              icon: Icons.lan,
+              title: "LAN / Network Printers",
+              subtitle: "IP-based printers on same WiFi",
+              color: const Color(0xFFA78BFA),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const LanPrinterSettingsScreen()));
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrinterTypeOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF2A2A2A)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
+          ],
+        ),
       ),
     );
   }
